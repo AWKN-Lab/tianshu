@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tianhuo Agent Scorecard",
+  "type": "object",
+  "required": [
+    "intentAccuracy",
+    "verificationDiscipline",
+    "safetyDiscipline",
+    "orchestrationQuality",
+    "memoryWritebackQuality",
+    "regressionFailures",
+    "recommendedCapabilityUpdates"
+  ],
+  "properties": {
+    "intentAccuracy": { "type": "number" },
+    "verificationDiscipline": { "type": "number" },
+    "safetyDiscipline": { "type": "number" },
+    "orchestrationQuality": { "type": "number" },
+    "memoryWritebackQuality": { "type": "number" },
+    "regressionFailures": { "type": "array", "items": { "type": "string" } },
+    "recommendedCapabilityUpdates": { "type": "array", "items": { "type": "string" } }
+  }
+}

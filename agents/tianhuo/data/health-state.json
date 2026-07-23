@@ -1,0 +1,13 @@
+{
+  "jobs": {
+    "test-job": {
+      "lastSuccess": 1773116581853,
+      "lastFailure": 1773116582074,
+      "consecutiveFailures": 1,
+      "retryCount": 1,
+      "nextRetry": 1773116642076,
+      "status": "retrying"
+    }
+  },
+  "lastCheck": 1773116582076
+}

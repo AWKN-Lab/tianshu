@@ -1,0 +1,145 @@
+[
+  {
+    "id": "failure_1773110808193_vj8tsqmxw",
+    "timestamp": "2026-03-10T02:46:48.192Z",
+    "date": "2026-03-10",
+    "taskId": "test_001",
+    "taskName": "测试任务",
+    "errorType": "UNKNOWN_ERROR",
+    "errorMessage": "这是一个测试错误",
+    "errorStack": "Error: 这是一个测试错误\n    at Object.<anonymous> (C:\\Users\\10919\\Desktop\\AI\\agents\\tianhuo\\scripts\\failure-capture.js:413:14)\n    at Module._compile (node:internal/modules/cjs/loader:1761:14)\n    at Object..js (node:internal/modules/cjs/loader:1893:10)\n    at Module.load (node:internal/modules/cjs/loader:1481:32)\n    at Module._load (node:internal/modules/cjs/loader:1300:12)\n    at TracingChannel.traceSync (node:diagnostics_channel:328:14)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\n    at node:internal/main/run_main_module:33:47",
+    "context": {
+      "nodeVersion": "v24.13.0",
+      "platform": "win32",
+      "cwd": "C:\\Users\\10919\\Desktop\\AI\\agents\\tianhuo",
+      "test": true,
+      "environment": "development"
+    },
+    "metadata": {
+      "capturedAt": "2026-03-10T02:46:48.192Z",
+      "version": "1.0.0"
+    }
+  },
+  {
+    "taskId": "task_network_001",
+    "timestamp": "2026-03-10T02:47:40.742Z",
+    "errorType": "NETWORK_ERROR",
+    "errorMessage": "Fetch failed: ECONNREFUSED - unable to connect to API server",
+    "context": {
+      "prompt": "搜索最新的 AI 技术新闻",
+      "tools": [
+        "web_search",
+        "web_fetch"
+      ],
+      "retryCount": 3
+    },
+    "rawTrace": "Error: Fetch failed: ECONNREFUSED\n    at fetch (node:internal/deps/undici/undici:12345:15)\n    at webSearch (./tools/web-search.js:25:11)",
+    "agentId": "tianhuo"
+  },
+  {
+    "taskId": "task_timeout_001",
+    "timestamp": "2026-03-10T02:47:40.744Z",
+    "errorType": "TIMEOUT_ERROR",
+    "errorMessage": "Request timeout: ETIMEDOUT after 30000ms",
+    "context": {
+      "prompt": "分析这个 100MB 的数据文件",
+      "tools": [
+        "file_read",
+        "data_analysis"
+      ],
+      "retryCount": 1
+    },
+    "rawTrace": "Error: Request timeout: ETIMEDOUT after 30000ms\n    at Timeout.<anonymous> (node:_http_client:123:45)",
+    "agentId": "tianhuo"
+  },
+  {
+    "taskId": "task_tool_001",
+    "timestamp": "2026-03-10T02:47:40.745Z",
+    "errorType": "TOOL_ERROR",
+    "errorMessage": "Tool execution failed: feishu_calendar_event - invalid calendar_id format",
+    "context": {
+      "prompt": "创建一个明天下午 3 点的会议",
+      "tools": [
+        "feishu_calendar_event"
+      ],
+      "retryCount": 0
+    },
+    "rawTrace": "Error: Tool execution failed\n    at executeTool (./core/tool-executor.js:78:9)\n    ToolResponse: {\"code\":\"INVALID_PARAMS\",\"msg\":\"calendar_id format error\"}",
+    "agentId": "tianhuo"
+  },
+  {
+    "taskId": "task_logic_001",
+    "timestamp": "2026-03-10T02:47:40.746Z",
+    "errorType": "LOGIC_ERROR",
+    "errorMessage": "TypeError: Cannot read properties of undefined (reading 'map')",
+    "context": {
+      "prompt": "处理用户数据列表",
+      "tools": [
+        "data_processor"
+      ],
+      "retryCount": 0
+    },
+    "rawTrace": "TypeError: Cannot read properties of undefined (reading 'map')\n    at processUsers (./utils/data-processor.js:34:25)",
+    "agentId": "tianhuo"
+  },
+  {
+    "taskId": "task_permission_001",
+    "timestamp": "2026-03-10T02:47:40.747Z",
+    "errorType": "PERMISSION_ERROR",
+    "errorMessage": "Access denied: EACCES - permission denied to read /etc/config.json",
+    "context": {
+      "prompt": "读取系统配置文件",
+      "tools": [
+        "file_read"
+      ],
+      "retryCount": 0
+    },
+    "rawTrace": "Error: EACCES: permission denied, open '/etc/config.json'\n    at Object.openSync (node:fs:596:3)",
+    "agentId": "tianhuo"
+  },
+  {
+    "taskId": "task_user_001",
+    "timestamp": "2026-03-10T02:47:40.747Z",
+    "errorType": "USER_ERROR",
+    "errorMessage": "Invalid input: missing required field \"email\" in user registration",
+    "context": {
+      "prompt": "注册用户：{\"name\": \"张三\", \"age\": 25}",
+      "tools": [
+        "user_register"
+      ],
+      "retryCount": 0
+    },
+    "rawTrace": "ValidationError: Invalid input\n    at validate (./validators/user-validator.js:45:11)\n    Missing fields: [\"email\"]",
+    "agentId": "tianhuo"
+  },
+  {
+    "taskId": "task_system_001",
+    "timestamp": "2026-03-10T02:47:40.748Z",
+    "errorType": "SYSTEM_ERROR",
+    "errorMessage": "System error: ENOMEM - out of memory, cannot allocate 512MB",
+    "context": {
+      "prompt": "处理大型图像文件",
+      "tools": [
+        "image_processor"
+      ],
+      "retryCount": 0
+    },
+    "rawTrace": "Error: ENOMEM: out of memory\n    at allocBuffer (node:internal/buffer:78:9)",
+    "agentId": "tianhuo"
+  },
+  {
+    "taskId": "task_unknown_001",
+    "timestamp": "2026-03-10T02:47:40.749Z",
+    "errorType": "UNKNOWN_ERROR",
+    "errorMessage": "Unexpected error: XYZ123 - something went wrong",
+    "context": {
+      "prompt": "执行常规数据同步",
+      "tools": [
+        "data_sync"
+      ],
+      "retryCount": 2
+    },
+    "rawTrace": "Error: XYZ123 - something went wrong\n    at unknownFunction (./mystery/box.js:42:0)",
+    "agentId": "tianhuo"
+  }
+]

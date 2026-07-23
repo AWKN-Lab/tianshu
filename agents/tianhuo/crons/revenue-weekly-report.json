@@ -1,0 +1,15 @@
+{
+  "name": "revenue-weekly-report",
+  "description": "生成每周营收报告",
+  "schedule": "0 23 * * 0",
+  "enabled": true,
+  "command": "node",
+  "args": ["scripts/revenue/revenue-tracker.js", "weekly"],
+  "workingDir": ".",
+  "timeout": 30000,
+  "retry": 3,
+  "notify": {
+    "onSuccess": false,
+    "onFailure": true
+  }
+}

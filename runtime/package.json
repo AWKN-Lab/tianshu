@@ -1,0 +1,33 @@
+{
+  "name": "awkn-engine-runtime",
+  "version": "0.1.0",
+  "description": "awkn引擎 自带轻量 Node.js 运行时 — Loop Engineering L1-L4",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "awkn-engine": "bin/awkn-engine.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src/",
+    "test": "node --import tsx --test \"test/*.test.ts\"",
+    "test:vitest": "vitest run",
+    "dev": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "cron-parser": "^5.5.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.7"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,94 @@
+# ===== 敏感与本地配置 =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.secret
+credentials.json
+
+# ===== 损坏的旧 .git 备份（重命名后保留本地，不入仓）=====
+.git.corrupted-backup/
+.git.corrupted-backup/**
+
+# ===== 外部插件缓存（Codex 等，非源码）=====
+plugins/cache/
+plugins/cache/**
+
+# ===== 预编译二进制（应从 GitHub release 下载，不入仓）=====
+# gstack 是外部分发 skill，bin/dist/ 目录含 100MB+ Windows .exe
+skills/gstack/**/*.exe
+skills/gstack/bin/
+skills/gstack/browse/dist/
+skills/gstack/design/dist/
+# 其他常见预编译产物
+*.exe
+*.dll
+*.so
+*.dylib
+# 通用构建产物
+dist/
+build/
+out/
+*.zip
+*.tar.gz
+
+# ===== 技能库（独立管理，不入本仓）=====
+# skills/ 含 100+ 第三方吸收技能（lark/pptx/n8n 等），1.5GB/7万文件，远超单仓合理规模。
+# 引擎核心（runtime/）通过 SKILLS_DIR 加载技能，技能库作为独立资产另行管理。
+# fresh clone 后 `awkn-engine skill list` 返回空属预期；按需放入技能即可。
+skills/
+skills/**
+
+# ===== IDE / 编辑器私有 =====
+.trae/
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ===== 嵌套 git 仓库（吸收的 skill 自带 .git，作为普通目录入仓而非 submodule）=====
+# 排除所有嵌套 .git 目录（含 submodule 检测）
+**/.git
+**/.git/**
+**/.git/objects/**
+**/.git/refs/**
+# 排除所有 node_modules（不论哪个 skill 自带）
+**/node_modules/
+**/node_modules/**
+
+# ===== 运行时依赖与产物 =====
+node_modules/
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# ===== runtime 内部状态（数据库、缓存、上下文快照）=====
+runtime/data/*.db
+runtime/data/*.db-journal
+runtime/data/cron-contexts/
+runtime/data/llm-bridge/
+runtime/data/drafts/
+runtime/data/*.log
+
+# ===== 测试临时产物 =====
+*.test.log
+coverage/
+.nyc_output/
+# runtime 测试残留目录与数据库（test-bridge-*/test-derived-*/test-cron-*/test-corrections-*.db 等）
+runtime/data/test-*/
+runtime/data/verify-*/
+runtime/data/test-*.db
+runtime/data/verify-*.db
+
+# ===== 临时与备份 =====
+*.tmp
+*.bak
+*.backup
+*.orig
+*~
+.cache/
+.tmp/

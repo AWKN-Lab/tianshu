@@ -1,0 +1,182 @@
+[
+  {
+    "memory1_id": "mem_2026-03-10_7a85766f",
+    "memory2_id": "mem_2026-03-10_7a85766f",
+    "scores": {
+      "keyword_match": 1,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.8,
+    "level": "strong"
+  },
+  {
+    "memory1_id": "mem_2026-03-10_1e0918a3",
+    "memory2_id": "mem_2026-03-10_1e0918a3",
+    "scores": {
+      "keyword_match": 1,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.8,
+    "level": "strong"
+  },
+  {
+    "memory1_id": "mem_2026-03-10_2a904372",
+    "memory2_id": "mem_2026-03-10_53e027f3",
+    "scores": {
+      "keyword_match": 1,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.8,
+    "level": "strong"
+  },
+  {
+    "memory1_id": "mem_2026-03-10_cbbc967",
+    "memory2_id": "mem_2026-03-10_377fb9eb",
+    "scores": {
+      "keyword_match": 0.8181818181818182,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.73,
+    "level": "medium"
+  },
+  {
+    "memory1_id": "mem_2026-03-09_6427c73c",
+    "memory2_id": "mem_2026-03-09_30739759",
+    "scores": {
+      "keyword_match": 0.7272727272727273,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.69,
+    "level": "medium"
+  },
+  {
+    "memory1_id": "mem_2026-03-10_6f33d9c4",
+    "memory2_id": "mem_2026-03-10_736247b7",
+    "scores": {
+      "keyword_match": 0.6666666666666666,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.67,
+    "level": "medium"
+  },
+  {
+    "memory1_id": "mem_2026-03-10_6f33d9c4",
+    "memory2_id": "mem_2026-03-10_d9d7304",
+    "scores": {
+      "keyword_match": 0.6666666666666666,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.67,
+    "level": "medium"
+  },
+  {
+    "memory1_id": "mem_2026-03-10_736247b7",
+    "memory2_id": "mem_2026-03-10_d9d7304",
+    "scores": {
+      "keyword_match": 0.6666666666666666,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.67,
+    "level": "medium"
+  },
+  {
+    "memory1_id": "mem_2026-03-09_4deec389",
+    "memory2_id": "mem_2026-03-09_16c273db",
+    "scores": {
+      "keyword_match": 0.3333333333333333,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.53,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-10_2ebd1f39",
+    "memory2_id": "mem_2026-03-10_1e0918a3",
+    "scores": {
+      "keyword_match": 0.3333333333333333,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.53,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-10_2ebd1f39",
+    "memory2_id": "mem_2026-03-10_1e0918a3",
+    "scores": {
+      "keyword_match": 0.3333333333333333,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.53,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-09_4c6724a9",
+    "memory2_id": "mem_2026-03-10_6f33d9c4",
+    "scores": {
+      "keyword_match": 0.25,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.5,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-09_4c6724a9",
+    "memory2_id": "mem_2026-03-10_736247b7",
+    "scores": {
+      "keyword_match": 0.25,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.5,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-09_4c6724a9",
+    "memory2_id": "mem_2026-03-10_d9d7304",
+    "scores": {
+      "keyword_match": 0.25,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.5,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-09_6e239a9e",
+    "memory2_id": "mem_2026-03-09_17476a8d",
+    "scores": {
+      "keyword_match": 0.25,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.5,
+    "level": "weak"
+  }
+]

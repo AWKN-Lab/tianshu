@@ -1,0 +1,13 @@
+[
+  {
+    "type": "task:completed",
+    "payload": {
+      "taskInfo": {
+        "taskId": "test-001",
+        "name": "Test Task"
+      },
+      "criticality": "P0"
+    },
+    "timestamp": 1777213728099
+  }
+]

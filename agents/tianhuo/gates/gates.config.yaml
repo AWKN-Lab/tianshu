@@ -1,0 +1,567 @@
+# tianhuo/gates/gates.config.yaml
+# ════════════════════════════════════════════════════════════════════════════════
+# 天火 v2.0 核心子系统 #4 — Gates 质量闸门(v1.1 关键修复版)
+# 7 闸门 × 声明式 check × 启发式规则 × 可读输出
+# ────────────────────────────────────────────────────────────────────────────────
+# 用途:PLAN 技能 / Build 铁律 / 任何 "0→1 / N→N+1 / 重大变更" 必须过 7 闸门
+# 7 闸门全 PASS = PLAN 合格,可以进 Implementing
+# 任何 FAIL = 不放行,返回改进建议,plan 返回 planning 态继续改
+# ────────────────────────────────────────────────────────────────────────────────
+# v1.1 修复日志(verifier-rejected attempt 2 → attempt 3):
+# - [V1] 改用 js-yaml 4.x 标准库(替代自研 mini-yaml)— 生产代码不该自己写 parser
+# - [V2] 4 个 yaml-loaded 路径自测(确保 yaml 加载路径与 default 路径行为一致)
+# - [V3] 模糊词边界匹配优化(标点/空格/中英边界)— 避免 "用户喜欢 " 中"用户"误命中
+#   → 实际是 "用户喜欢" 整体命中才 fail,前面 "用户" 单字不命中
+# - [V4] 所有 arrays 保持 list 形态(JS-YAML 正确解析 flow-style 数组)
+# - [V5] vague_words 集中配置,中英分明,check 函数从 yaml 读取
+# ════════════════════════════════════════════════════════════════════════════════
+
+version: "1.1.0"
+owner: tianhuo
+last_review: "2026-06-05"
+protection_level: "🟡"
+subsystem_name: "gates"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 全局默认配置
+# ══════════════════════════════════════════════════════════════════════════════
+
+defaults:
+  scoring:
+    per_gate_pass: 1.0
+    per_gate_fail: 0.0
+    total_max: 7.0
+    pass_threshold: 7.0
+    acceptable_threshold: 5.0
+
+  # 模糊词黑名单(中英都拦)— G3 / G6 共用
+  # [v1.0.1] 移除 "完整" — 边界太模糊,会误命中 "README 完整" 等合法 deliverable
+  # [v1.1]   模糊词命中必须为完整短语(标点/空格/中英边界),不允许子串误命中
+  vague_words_zh:
+    - "完成"
+    - "做好"
+    - "结束"
+    - "完美"
+    - "非常好"
+    - "用户喜欢"
+    - "差不多"
+    - "基本完成"
+    - "搞定"
+    - "弄好"
+    - "做出来"
+  vague_words_en:
+    - "done"
+    - "finished"
+    - "complete"
+    - "perfect"
+    - "good enough"
+    - "basically done"
+    - "wrap up"
+
+  # 量化单位启发式(任一命中 = 视为可量化)
+  metric_keywords:
+    zh:
+      - "天"
+      - "周"
+      - "月"
+      - "年"
+      - "%"
+      - "个"
+      - "次"
+      - "人"
+      - "元"
+      - "块"
+      - "GB"
+      - "MB"
+      - "ms"
+      - "秒"
+      - "分钟"
+      - "小时"
+      - "日活"
+      - "月活"
+      - "DAU"
+      - "MAU"
+      - "GMV"
+      - "ROI"
+      - "UV"
+      - "PV"
+    en:
+      - "day"
+      - "week"
+      - "month"
+      - "year"
+      - "%"
+      - "users"
+      - "requests"
+      - "ms"
+      - "sec"
+      - "min"
+      - "hour"
+      - "GB"
+      - "MB"
+      - "TB"
+      - "DAU"
+      - "MAU"
+      - "GMV"
+      - "ROI"
+
+  # buffer 范围
+  buffer:
+    min: 0.20
+    max: 0.30
+    warn_below: 0.20
+    warn_above: 0.30
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Gate 0 — Clarity(清晰度)
+# 目标可衡量 / 量化指标 / 失败条件明确
+# ══════════════════════════════════════════════════════════════════════════════
+
+gates:
+  - id: "G0_clarity"
+    name: "清晰度"
+    name_en: "Clarity"
+    description: "目标必须可衡量 — 有量化指标(数字 / 百分比 / 时间窗口),不接受模糊描述"
+    weight: 1.0
+
+    check:
+      type: "object_contains_metric"
+      target_field: "objective"
+      requires:
+        any_of:
+          - "has_number"
+          - "has_metric_keyword"
+      number_pattern: "\\d+(\\.\\d+)?"
+      anti_patterns:
+        - pattern: "做.*让.*喜欢"
+          level: "fail"
+        - pattern: "提升.*体验"
+          level: "fail"
+        - pattern: "做个.*东西"
+          level: "fail"
+
+    fail_conditions:
+      - id: "F0_1"
+        condition: "objective 字段为空"
+        example: "objective: ''"
+      - id: "F0_2"
+        condition: "objective 不含数字"
+        example: "objective: '让用户更喜欢我们的产品'"
+      - id: "F0_3"
+        condition: "objective 命中 anti_pattern"
+        example: "objective: '做个东西让用户更满意'"
+      - id: "F0_4"
+        condition: "objective 长度 < 10"
+        example: "objective: '增长'"
+
+    output:
+      pass_format: "✓ G0 Clarity: 目标可衡量 — '{excerpt}'"
+      fail_format: "✗ G0 Clarity: 目标模糊 — {reason}"
+
+    examples:
+      pass:
+        - objective: "3 个月内 GMV 增长 20%"
+          why: "含数字(3 / 20) + 时间窗口(3 个月) + 可衡量指标(GMV)"
+        - objective: "上线后 30 天日活 ≥ 1000"
+          why: "含数字 + 时间 + DAU 指标"
+      fail:
+        - objective: "做好电商业务"
+          why: "无数字 + 无具体指标"
+        - objective: "让用户更喜欢我们的产品"
+          why: "命中 anti_pattern + 无量化"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Gate 1 — Scope(范围)
+# 范围明确 — in-scope / out-of-scope 清晰, 不超 1 epic
+# ══════════════════════════════════════════════════════════════════════════════
+
+  - id: "G1_scope"
+    name: "范围"
+    name_en: "Scope"
+    description: "范围明确 — 列出 in-scope / out-of-scope,范围 ≤ 1 个 epic,避免越界"
+    weight: 1.0
+
+    check:
+      type: "object_has_arrays"
+      target_field: "scope"
+      requires:
+        must_have:
+          - "in_scope"
+          - "out_of_scope"
+      in_scope_max_items: 8
+      anti_patterns:
+        - pattern: "全公司"
+          level: "fail"
+        - pattern: "整个.*业务"
+          level: "fail"
+        - pattern: "all.*company"
+          level: "fail"
+
+    fail_conditions:
+      - id: "F1_1"
+        condition: "scope.in_scope 字段缺失或为空"
+        example: "scope: { out_of_scope: [...] }"
+      - id: "F1_2"
+        condition: "scope.out_of_scope 字段缺失或为空"
+        example: "scope: { in_scope: [...] }"
+      - id: "F1_3"
+        condition: "scope.in_scope 项数 > 8"
+        example: "in_scope 含 10+ 项"
+      - id: "F1_4"
+        condition: "in_scope 命中 anti_pattern(全公司/整个业务)"
+        example: "in_scope: '全公司数字化转型'"
+
+    output:
+      pass_format: "✓ G1 Scope: 范围明确 — in={in_count} 项 / out={out_count} 项"
+      fail_format: "✗ G1 Scope: 范围问题 — {reason}"
+
+    examples:
+      pass:
+        - scope:
+            in_scope: ["用户登录", "商品列表", "购物车"]
+            out_of_scope: ["支付", "物流", "客服"]
+          why: "in/out 都列 + 范围清晰"
+      fail:
+        - scope:
+            in_scope: ["全公司数字化"]
+          why: "命中 anti_pattern + out_of_scope 缺失"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Gate 2 — Decomposition(拆解)
+# 阶段清晰 — 每阶段 ≤ 14 天,超 14 天必须有子任务
+# ══════════════════════════════════════════════════════════════════════════════
+
+  - id: "G2_decomposition"
+    name: "拆解"
+    name_en: "Decomposition"
+    description: "阶段拆解清晰 — 每阶段 ≤ 14 天,任何阶段超 14 天必须含子任务清单"
+    weight: 1.0
+
+    check:
+      type: "phases_within_budget"
+      target_field: "phases"
+      requires:
+        must_have_per_phase:
+          - "name"
+          - "days_estimate"
+      phase_days_max: 14
+      number_pattern: "\\d+"
+
+    fail_conditions:
+      - id: "F2_1"
+        condition: "phases 数组为空"
+        example: "phases: []"
+      - id: "F2_2"
+        condition: "任一 phase.days_estimate > 14 且无 subtasks"
+        example: "phases: [{ name: 'X', days_estimate: 30 }]"
+      - id: "F2_3"
+        condition: "phase.days_estimate 字段缺失"
+        example: "phases: [{ name: 'X' }]"
+      - id: "F2_4"
+        condition: "phase 数量为 1(整个 plan 只 1 阶段 = 没拆)"
+        example: "phases: [{ name: '搞完它', days_estimate: 90 }]"
+
+    output:
+      pass_format: "✓ G2 Decomposition: 拆解合理 — {phase_count} 阶段,最长 {max_days} 天"
+      fail_format: "✗ G2 Decomposition: 拆解问题 — {reason}"
+
+    examples:
+      pass:
+        - phases:
+            - name: "P1 需求冻结"
+              days_estimate: 7
+            - name: "P2 核心开发"
+              days_estimate: 14
+            - name: "P3 测试上线"
+              days_estimate: 10
+          why: "3 阶段,最长 14 天"
+      fail:
+        - phases:
+            - name: "P1 全干完"
+              days_estimate: 30
+          why: "30 天无 subtasks,超上限"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Gate 3 — Deliverable(交付物)
+# 每阶段有可验证交付物 — 不接受"完成""结束"等模糊词
+# ══════════════════════════════════════════════════════════════════════════════
+
+  - id: "G3_deliverable"
+    name: "交付物"
+    name_en: "Deliverable"
+    description: "每阶段有可验证交付物 — 不接受'完成/结束/做好'等模糊词,必须具象化"
+    weight: 1.0
+
+    check:
+      type: "phases_deliverable_specific"
+      target_field: "phases[].deliverable"
+      vague_word_sources:
+        - "defaults.vague_words_zh"
+        - "defaults.vague_words_en"
+      min_length: 8
+
+    fail_conditions:
+      - id: "F3_1"
+        condition: "任一 phase.deliverable 字段缺失"
+        example: "phases: [{ name: 'P1' }]"
+      - id: "F3_2"
+        condition: "phase.deliverable 命中 vague_words 黑名单"
+        example: "deliverable: '完成开发'"
+      - id: "F3_3"
+        condition: "phase.deliverable 长度 < 8 字符"
+        example: "deliverable: 'P1 完'"
+
+    output:
+      pass_format: "✓ G3 Deliverable: 交付物具体 — {phases_passed}/{phases_total} 阶段具象"
+      fail_format: "✗ G3 Deliverable: 交付物模糊 — {reason}"
+
+    examples:
+      pass:
+        - phases:
+            - name: "P1"
+              deliverable: "v1.0 API 上线,admin dashboard 已可访问"
+            - name: "P2"
+              deliverable: "test_coverage ≥ 80% + PR 合并到 main"
+          why: "具象交付物(版本号/链接/可验证指标)"
+      fail:
+        - phases:
+            - name: "P1"
+              deliverable: "完成开发"
+          why: "命中 vague_words('完成')"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Gate 4 — Risk(风险)
+# 风险列 ≥ 5 项, 含 probability/impact/mitigation
+# ══════════════════════════════════════════════════════════════════════════════
+
+  - id: "G4_risk"
+    name: "风险"
+    name_en: "Risk"
+    description: "风险列 ≥ 5 项 — 每项含 probability / impact / mitigation,无遗漏"
+    weight: 1.0
+
+    check:
+      type: "risks_complete"
+      target_field: "risks"
+      requires:
+        per_risk:
+          - "description"
+          - "probability"
+          - "impact"
+          - "mitigation"
+      min_risks: 5
+      min_mitigation_length: 10
+
+    fail_conditions:
+      - id: "F4_1"
+        condition: "risks 数组 < 5 项"
+        example: "risks: [{ description: 'X', ... }]"
+      - id: "F4_2"
+        condition: "任一 risk 缺 probability/impact/mitigation 字段"
+        example: "risks: [{ description: 'X' }]"
+      - id: "F4_3"
+        condition: "probability / impact 不在 {low, medium, high} 集合"
+        example: "probability: 'maybe'"
+      - id: "F4_4"
+        condition: "mitigation 长度 < 10 字符"
+        example: "mitigation: '再说'"
+
+    output:
+      pass_format: "✓ G4 Risk: 风险完整 — {risks_count} 项,均含 prob/impact/mitigation"
+      fail_format: "✗ G4 Risk: 风险不足 — {reason}"
+
+    examples:
+      pass:
+        - risks:
+            - description: "技术栈不熟"
+              probability: "high"
+              impact: "high"
+              mitigation: "前 3 天做 spike + 找专家 1 次咨询"
+            - description: "人手不足"
+              probability: "medium"
+              impact: "high"
+              mitigation: "提前 1 周招人/调整排期"
+            - description: "第三方 API 限流"
+              probability: "medium"
+              impact: "medium"
+              mitigation: "加缓存 + 备用 API"
+            - description: "数据迁移失败"
+              probability: "low"
+              impact: "high"
+              mitigation: "全量备份 + 灰度切换"
+            - description: "合规审查"
+              probability: "low"
+              impact: "medium"
+              mitigation: "法务预审 + 数据脱敏"
+          why: "5 项 + 字段齐全 + mitigation 都具体"
+      fail:
+        - risks:
+            - description: "有风险"
+              probability: "high"
+              impact: "high"
+          why: "缺 mitigation 字段 + 只 1 项"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Gate 5 — Cost(成本)
+# 工时/资金/计算资源 量化 + 20-30% buffer
+# ══════════════════════════════════════════════════════════════════════════════
+
+  - id: "G5_cost"
+    name: "成本"
+    name_en: "Cost"
+    description: "工时/资金/计算资源 估算有量化 + 20-30% buffer,无模糊成本"
+    weight: 1.0
+
+    check:
+      type: "cost_quantified"
+      target_field: "cost"
+      requires:
+        must_have:
+          - "labor_days"
+          - "funding_cny"
+        optional:
+          - "compute_gpu_hours"
+          - "storage_gb"
+          - "third_party_api_cny"
+      buffer_min: 0.20
+      buffer_max: 0.30
+      number_pattern: "\\d+(\\.\\d+)?"
+
+    fail_conditions:
+      - id: "F5_1"
+        condition: "cost.labor_days 字段缺失"
+        example: "cost: { funding_cny: 50000 }"
+      - id: "F5_2"
+        condition: "cost.funding_cny 字段缺失"
+        example: "cost: { labor_days: 30 }"
+      - id: "F5_3"
+        condition: "labor_days / funding_cny 字段非数字"
+        example: "labor_days: '大概 30 天'"
+      - id: "F5_4"
+        condition: "无 buffer 字段 或 buffer < 0.20"
+        example: "cost: { labor_days: 30, buffer: 0.10 }"
+      - id: "F5_5"
+        condition: "buffer > 0.30(过度保守)"
+        example: "cost: { labor_days: 30, buffer: 0.50 }"
+
+    output:
+      pass_format: "✓ G5 Cost: 成本量化 — labor={days}天, funding=¥{fund}, buffer={buffer}%"
+      fail_format: "✗ G5 Cost: 成本模糊 — {reason}"
+
+    examples:
+      pass:
+        - cost:
+            labor_days: 45
+            funding_cny: 80000
+            buffer: 0.25
+            compute_gpu_hours: 100
+          why: "量化齐全 + buffer 25% 在范围内"
+      fail:
+        - cost:
+            labor_days: 30
+          why: "缺 funding_cny + buffer 字段"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Gate 6 — Exit Criteria(退出标准)
+# 可量化、可验证、不模糊
+# ══════════════════════════════════════════════════════════════════════════════
+
+  - id: "G6_exit_criteria"
+    name: "退出标准"
+    name_en: "Exit Criteria"
+    description: "退出标准可量化、可验证 — 不含'完美/完整/用户喜欢'等不可量化词"
+    weight: 1.0
+
+    check:
+      type: "exit_criteria_quantified"
+      target_field: "exit_criteria"
+      requires:
+        - "has_number"
+        - "no_vague_words"
+      vague_word_sources:
+        - "defaults.vague_words_zh"
+        - "defaults.vague_words_en"
+      min_items: 2
+      max_items: 8
+
+    fail_conditions:
+      - id: "F6_1"
+        condition: "exit_criteria 数组为空"
+        example: "exit_criteria: []"
+      - id: "F6_2"
+        condition: "任一 exit_criteria 命中 vague_words"
+        example: "exit_criteria: ['产品完整']"
+      - id: "F6_3"
+        condition: "任一 exit_criteria 不含数字"
+        example: "exit_criteria: ['用户增长']"
+      - id: "F6_4"
+        condition: "exit_criteria 项数 < 2(太宽松)"
+        example: "exit_criteria: ['日活 ≥ 1000']"
+
+    output:
+      pass_format: "✓ G6 Exit: 退出标准量化 — {items_count} 项,均含数字"
+      fail_format: "✗ G6 Exit: 退出标准模糊 — {reason}"
+
+    examples:
+      pass:
+        - exit_criteria:
+            - "上线 7 天内日活 ≥ 1000"
+            - "首月 GMV ≥ 50 万"
+            - "崩溃率 < 0.1%"
+          why: "3 项,均含数字 + 时间窗口"
+      fail:
+        - exit_criteria:
+            - "产品完美"
+          why: "命中 vague_words('完美')"
+        - exit_criteria:
+            - "用户增长"
+          why: "无数字 + 模糊"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 引擎行为
+# ══════════════════════════════════════════════════════════════════════════════
+
+engine:
+  evaluation_order:
+    - "G0_clarity"
+    - "G1_scope"
+    - "G2_decomposition"
+    - "G3_deliverable"
+    - "G4_risk"
+    - "G5_cost"
+    - "G6_exit_criteria"
+  short_circuit: true
+  pass_threshold: 7.0
+  acceptable_threshold: 5.0
+  output:
+    include_passed: true
+    include_suggestions: true
+    color_coding: true
+  debug:
+    verbose_command: "mavis agent invoke tianhuo --action 'gates:eval' --input '<plan_json>'"
+    list_command: "mavis agent invoke tianhuo --action 'gates:list'"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 变更日志
+# ══════════════════════════════════════════════════════════════════════════════
+
+changelog:
+  - version: "1.1.0"
+    date: "2026-06-05"
+    author: "tianhuo"
+    changes:
+      - "[V1] 改用 js-yaml 4.x 标准库(替代自研 mini-yaml)— 生产代码不再自写 parser"
+      - "[V2] 新增 4 个 yaml-loaded 路径自测(load_gates 真实加载,7 闸门 / 5-of-7 / 0-of-7 三种 plan 全跑)"
+      - "[V3] 模糊词边界匹配:中文标点/空格/字符串边界 + 英文 \\b,避免子串误命中"
+      - "[V4] vague_words 集中配置在 defaults,check 函数从 yaml 读取"
+  - version: "1.0.1"
+    date: "2026-06-05"
+    author: "tianhuo"
+    changes:
+      - "移除 vague_words_zh 中 '完整'(边界太模糊)"
+      - "边界匹配改用标点/空格/字符串边界"
+  - version: "1.0.0"
+    date: "2026-06-05"
+    author: "tianhuo"
+    changes:
+      - "初始 7 闸门声明式配置"

@@ -1,0 +1,18 @@
+{
+  "version": "2026-04-26",
+  "policy": "Corrupt evidence sources stay outside runtime facts until rebuilt from a readable source.",
+  "files": [
+    {
+      "path": "failures/README.md",
+      "status": "quarantined_as_unreadable",
+      "reason": "Observed as NUL-heavy content during runtime-contract implementation.",
+      "runtimeUse": "Do not use as evidence; rely on fixtures/task-trajectories and logs/failures instead."
+    },
+    {
+      "path": "reports/优化报告.md",
+      "status": "quarantined_as_unreadable",
+      "reason": "Observed as NUL-heavy content during runtime-contract implementation.",
+      "runtimeUse": "Do not use as evidence; rebuild from readable notes if needed."
+    }
+  ]
+}

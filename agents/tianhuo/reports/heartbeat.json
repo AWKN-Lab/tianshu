@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-03-20T00:45:00+08:00",
+  "agent": "天火",
+  "status": "active",
+  "health": {
+    "cpu_usage": 45,
+    "memory_usage": 62,
+    "active_tasks": 3
+  },
+  "message": "心跳测试 - 飞书多维表格写入验证"
+}

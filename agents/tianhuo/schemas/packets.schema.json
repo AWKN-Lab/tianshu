@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tianhuo Governance Packets",
+  "type": "object",
+  "required": [
+    "taskClassificationPacket",
+    "intentPacket",
+    "fetchPacket",
+    "cardPlanPacket",
+    "reviewVerificationPacket",
+    "evolutionWritebackPacket"
+  ],
+  "properties": {
+    "taskClassificationPacket": {
+      "type": "object",
+      "required": ["taskClass", "requestClass", "complexity", "canBypass", "triggerReasons", "reason"],
+      "properties": {
+        "taskClass": { "type": "string", "enum": ["Q", "A", "P", "S"] },
+        "requestClass": { "type": "string", "enum": ["query", "execute", "plan", "strategy"] },
+        "complexity": { "type": "string", "enum": ["simple", "medium", "complex"] },
+        "canBypass": { "type": "boolean" },
+        "triggerReasons": { "type": "array", "items": { "type": "string" } },
+        "reason": { "type": "string", "description": "Why this classification was made" },
+        "awknRoute": { "type": "string" }
+      }
+    },
+    "intentPacket": {
+      "type": "object",
+      "required": [
+        "trueUserIntent",
+        "surfaceIntent",
+        "ambiguities",
+        "successCriteria",
+        "nonGoals",
+        "defaultAssumptions",
+        "confirmationNeeded",
+        "reason"
+      ],
+      "properties": {
+        "trueUserIntent": { "type": "string" },
+        "surfaceIntent": { "type": "string" },
+        "deepIntentHypothesis": { "type": "string" },
+        "ambiguities": { "type": "array", "items": { "type": "string" } },
+        "successCriteria": { "type": "array", "items": { "type": "string" } },
+        "nonGoals": { "type": "array", "items": { "type": "string" } },
+        "defaultAssumptions": { "type": "array", "items": { "type": "string" } },
+        "confirmationNeeded": { "type": "boolean" },
+        "reason": { "type": "string", "description": "Why this intent was judged" }
+      }
+    },
+    "fetchPacket": {
+      "type": "object",
+      "required": ["sourcesChecked", "capabilityMatches", "capabilityGaps", "memoryOrSkillUsed", "reason"],
+      "properties": {
+        "sourcesChecked": { "type": "array", "items": { "type": "string" } },
+        "capabilityMatches": { "type": "array", "items": { "type": "string" } },
+        "capabilityGaps": { "type": "array", "items": { "type": "string" } },
+        "memoryOrSkillUsed": { "type": "array", "items": { "type": "string" } },
+        "reason": { "type": "string", "description": "Why these sources were checked" }
+      }
+    },
+    "cardPlanPacket": {
+      "type": "object",
+      "required": ["card", "decision", "reason", "attentionCost"],
+      "properties": {
+        "card": {
+          "type": "string",
+          "enum": [
+            "Clarify",
+            "Shrink scope",
+            "Options",
+            "Execute",
+            "Verify",
+            "Fix",
+            "Rollback",
+            "Risk",
+            "Nudge",
+            "Pause",
+            "no_card"
+          ]
+        },
+        "decision": { "type": "string", "enum": ["deal", "skip", "defer", "interrupt"] },
+        "reason": { "type": "string" },
+        "attentionCost": { "type": "string", "enum": ["zero", "low", "mid", "high"] }
+      }
+    },
+    "reviewVerificationPacket": {
+      "type": "object",
+      "required": ["findings", "revisionResponses", "verificationEvidence", "closeState", "reason"],
+      "properties": {
+        "findings": { "type": "array", "items": { "type": "string" } },
+        "revisionResponses": { "type": "array", "items": { "type": "string" } },
+        "verificationEvidence": { "type": "array", "items": { "type": "string" } },
+        "closeState": {
+          "type": "string",
+          "enum": ["open", "fixed_pending_verify", "verified_closed", "accepted_risk"]
+        },
+        "reason": { "type": "string", "description": "Why this close state was chosen" }
+      }
+    },
+    "evolutionWritebackPacket": {
+      "type": "object",
+      "required": ["decision", "reason", "targets", "scarRequired"],
+      "properties": {
+        "decision": { "type": "string", "enum": ["writeback", "none"] },
+        "reason": { "type": "string" },
+        "targets": { "type": "array", "items": { "type": "string" } },
+        "scarRequired": { "type": "boolean" }
+      }
+    }
+  }
+}

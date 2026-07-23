@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tianhuo Task Trajectory",
+  "type": "object",
+  "required": [
+    "taskId",
+    "userRequest",
+    "context",
+    "expectedPackets",
+    "expectedGates",
+    "expectedDecision",
+    "mustNotDo",
+    "successEvidence"
+  ],
+  "properties": {
+    "taskId": { "type": "string" },
+    "userRequest": { "type": "string" },
+    "context": {
+      "type": "object",
+      "required": ["riskLevel", "signals"],
+      "properties": {
+        "riskLevel": { "type": "string", "enum": ["low", "medium", "high"] },
+        "signals": { "type": "array", "items": { "type": "string" } },
+        "entrypoint": { "type": "string" },
+        "retryCount": { "type": "number" },
+        "artifactExpected": { "type": "boolean" },
+        "externalAgentInvolved": { "type": "boolean" },
+        "statefulChange": { "type": "boolean" }
+      }
+    },
+    "expectedPackets": { "type": "array", "items": { "type": "string" } },
+    "expectedGates": { "type": "array", "items": { "type": "string" } },
+    "expectedDecision": {
+      "type": "string",
+      "enum": ["Answer", "Clarify", "Execute", "Verify", "Risk", "Pause", "RequestCoordination"]
+    },
+    "mustNotDo": { "type": "array", "items": { "type": "string" } },
+    "successEvidence": { "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "string" }
+  }
+}

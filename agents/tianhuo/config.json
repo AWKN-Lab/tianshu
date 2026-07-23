@@ -1,0 +1,147 @@
+{
+  "agent": {
+    "id": "tianhuo",
+    "name": "天火",
+    "role": "CTO / 技术执行者",
+    "version": "v6.4",
+    "architecture": "lightweight-governance-kernel + personality layer + skill routing",
+    "default_startup_budget": {
+      "p0_approx_context_units_max": 6000,
+      "policy": "load P0 only; route engineering method to awkn-programmer on demand"
+    },
+    "core_flow": [
+      "Classify",
+      "Fetch",
+      "Plan",
+      "Execute",
+      "Review/Verify",
+      "Evolve"
+    ],
+    "p0_files": [
+      "agent.prompt",
+      "01-身份与行为/SOUL.md",
+      "01-身份与行为/BOUNDARY.md",
+      "04-记忆与知识/MEMORY.md#P0-轻量入口"
+    ],
+    "p1_files": [
+      "02-流程与规范/SOP.md",
+      "02-流程与规范/AGENTS.md",
+      "03-能力与工具/CAPABILITY.md",
+      "STATUS.md",
+      "archive/SKILL-REGISTRY.md",
+      "archive/TEAM.md"
+    ],
+    "packets": [
+      "taskClassificationPacket",
+      "intentPacket",
+      "fetchPacket",
+      "cardPlanPacket",
+      "reviewVerificationPacket",
+      "evolutionWritebackPacket"
+    ],
+    "gates": [
+      "clarityGate",
+      "planningGate",
+      "safetyGate",
+      "verificationGate",
+      "evolutionGate"
+    ],
+    "cards": [
+      "Clarify",
+      "Shrink scope",
+      "Options",
+      "Execute",
+      "Verify",
+      "Fix",
+      "Rollback",
+      "Risk",
+      "Nudge",
+      "Pause"
+    ]
+  },
+  "global_skills": {
+    "description": "天火链接的全局技能库 (~/.claude/skills/)",
+    "chain_engineering": [
+      "C:\\Users\\10919\\.claude\\skills\\awkn-程序员天阶功法",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-工程师",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-工程文档",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-spec",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-执行检查",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-审核",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-bug修复大法",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-复盘总结",
+      "C:\\Users\\10919\\.claude\\skills\\饭要一口一口吃",
+      "C:\\Users\\10919\\.claude\\skills\\plan"
+    ],
+    "chain_product": [
+      "C:\\Users\\10919\\.claude\\skills\\awkn-prd",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-分析师",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-调研员"
+    ],
+    "chain_ops": [
+      "C:\\Users\\10919\\.claude\\skills\\awkn-部署",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-cicd",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-浏览器操控",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-电脑操控",
+      "C:\\Users\\10919\\.claude\\skills\\AWKN-搜索"
+    ],
+    "chain_platform": [
+      "C:\\Users\\10919\\.claude\\skills\\awkn-ui",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-Agent设计",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-技能治理",
+      "C:\\Users\\10919\\.claude\\skills\\cailun",
+      "C:\\Users\\10919\\.claude\\skills\\minimax",
+      "C:\\Users\\10919\\.claude\\skills\\飞书套件"
+    ],
+    "chain_tools": [
+      "C:\\Users\\10919\\.claude\\skills\\auto-prompt",
+      "C:\\Users\\10919\\.claude\\skills\\pua-debugging",
+      "C:\\Users\\10919\\.claude\\skills\\source-rater",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-todo-tracker",
+      "C:\\Users\\10919\\.claude\\skills\\distilled",
+      "C:\\Users\\10919\\.claude\\skills\\batch-import",
+      "C:\\Users\\10919\\.claude\\skills\\repo-janitor-souls"
+    ]
+  },
+  "runtime_contract": {
+    "schemas": {
+      "packets": "schemas/packets.schema.json",
+      "task_trajectory": "schemas/task-trajectory.schema.json",
+      "coordination_request": "schemas/coordination-request.schema.json",
+      "runtime_contract_report": "schemas/runtime-contract-report.schema.json",
+      "claude_code_interface_report": "schemas/claude-code-interface-report.schema.json",
+      "agent_scorecard": "schemas/agent-scorecard.schema.json"
+    },
+    "checks": {
+      "note": "旧脚本已清理（2026-06-14），验证改为人工审查"
+    },
+    "source_health_manifest": "data/source-health-manifest.json"
+  },
+  "awkn_programmer": {
+    "root": "C:\\Users\\10919\\.claude\\skills\\awkn-程序员天阶功法",
+    "mandatory_existing_project_chain": [
+      "C:\\Users\\10919\\.claude\\skills\\awkn-执行检查",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-工程文档",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-程序员天阶功法",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-工程师",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-审核",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-cicd",
+      "C:\\Users\\10919\\.claude\\skills\\awkn-部署"
+    ],
+    "routing": {
+      "task_contract": "SKILL.md#Workflow Handoff",
+      "existing_project_gate": "..\\awkn-执行检查\\SKILL.md",
+      "engineering_docs": "..\\awkn-工程文档\\SKILL.md",
+      "implementation": "..\\awkn-工程师\\SKILL.md",
+      "review": "..\\awkn-审核\\SKILL.md",
+      "cicd": "..\\awkn-cicd\\SKILL.md",
+      "ship": "..\\awkn-部署\\SKILL.md",
+      "experience_index": "05_经验沉淀与资产库\\references"
+    }
+  },
+  "security": {
+    "secrets_in_repo_allowed": false,
+    "secret_placeholder_style": "${ENV_VAR}",
+    "external_secret_rotation_requires_authorization": true
+  }
+}

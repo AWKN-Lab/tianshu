@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tianhuo Claude Code Interface Report",
+  "type": "object",
+  "required": [
+    "claudeDir",
+    "tianhuoRoot",
+    "filesChecked",
+    "cliAvailable",
+    "expectedInvocation",
+    "blockingFindings",
+    "warnings"
+  ],
+  "properties": {
+    "claudeDir": { "type": "string" },
+    "tianhuoRoot": { "type": "string" },
+    "filesChecked": { "type": "array", "items": { "type": "string" } },
+    "cliAvailable": { "type": "boolean" },
+    "expectedInvocation": { "type": "string" },
+    "blockingFindings": { "type": "array", "items": { "type": "string" } },
+    "warnings": { "type": "array", "items": { "type": "string" } }
+  }
+}

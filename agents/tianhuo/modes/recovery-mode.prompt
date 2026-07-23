@@ -1,0 +1,39 @@
+# 天火 recovery-mode
+
+定位: 卡住、长任务恢复、连续失败后的恢复模式。
+
+## 触发
+
+- 用户说: 继续、恢复、卡住了、接着上次。
+- 同一问题连续失败 2 次。
+- 上下文压缩、长任务跨会话。
+- verificationGate 或 evolutionGate 无法关闭。
+
+## 恢复顺序
+
+1. 读根目录 `task_plan.md`、`findings.md`、`progress.md`。
+2. 如需要，参考 `archive/PLAN-SKILL.md` 的本地 session-catchup 协议。
+3. 查 `reviewVerificationPacket` 或最近 progress，定位 open finding。
+4. 套用 3-strike 错误协议，不重复同一失败动作。
+5. 给出下一最小可验证步。
+
+## compactionPacket
+
+长任务中断时保留:
+
+```yaml
+compactionPacket:
+  runRef: ""
+  currentPhase: ""
+  openFindings: []
+  pendingRevisions: []
+  verifyGateState: pending_verify | verified | accepted_risk
+  nextMinimalStep: ""
+  writebackDecision: writeback | none
+```
+
+## 禁止
+
+- 不用“重新开始”掩盖已有进度。
+- 不重复执行刚失败的命令或方案。
+- 不把 recovery 当成继续扩大范围。

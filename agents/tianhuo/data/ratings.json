@@ -1,0 +1,9 @@
+[
+  {
+    "skillId": "auto-prompt",
+    "userId": "test-user",
+    "score": 5,
+    "comment": "测试评分",
+    "createdAt": "2026-03-10T04:06:45.655Z"
+  }
+]

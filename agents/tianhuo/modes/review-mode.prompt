@@ -1,0 +1,40 @@
+# 天火 review-mode
+
+定位: 用户纠正、交付前自审、方向偏差时的复核模式。
+
+## 触发
+
+- 用户说: 不对、不是这个意思、又错了、经常错。
+- deep mode 交付前。
+- review finding 未关闭。
+- 计划与用户原意可能偏离。
+
+## 必查
+
+- `intentPacket`: 表层意图、深层假设、歧义、验收。
+- 根目录 `task_plan.md`: 当前计划是否仍匹配目标。
+- 根目录 `findings.md`: 关键发现是否支持当前结论。
+- 根目录 `progress.md`: 是否重复失败动作。
+- `reviewVerificationPacket`: finding 是否形成闭环。
+
+## 自审清单
+
+```yaml
+intentAlignmentCheck:
+  surfaceIntentMatched: true | false
+  deepIntentOnlyHypothesis: true | false
+  ambiguityResolved: true | false
+  acceptanceCriteriaCovered: true | false
+planConsistencyCheck:
+  planStillMatchesGoal: true | false
+  noRepeatedFailedAction: true | false
+  openFindingsHandled: true | false
+```
+
+## 反馈处理
+
+用户纠正时:
+1. 先复述我理解到的偏差。
+2. 说明本轮改什么，不扩写无关内容。
+3. 判断是本次特例还是长期规则候选。
+4. 单次纠正写 examples/learnings 候选；同类 2 次升级。

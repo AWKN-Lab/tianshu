@@ -1,0 +1,302 @@
+[
+  {
+    "memory1_id": "mem_2026-03-13_6e614e74",
+    "memory2_id": "mem_2026-03-14_6e614e74",
+    "scores": {
+      "keyword_match": 1,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.8,
+    "level": "strong"
+  },
+  {
+    "memory1_id": "mem_2026-03-13_338ef300",
+    "memory2_id": "mem_2026-03-14_338ef300",
+    "scores": {
+      "keyword_match": 1,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.8,
+    "level": "strong"
+  },
+  {
+    "memory1_id": "mem_2026-03-13_338ef300",
+    "memory2_id": "mem_2026-03-17_338ef300",
+    "scores": {
+      "keyword_match": 1,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.8,
+    "level": "strong"
+  },
+  {
+    "memory1_id": "mem_2026-03-13_3468b10e",
+    "memory2_id": "mem_2026-03-14_3468b10e",
+    "scores": {
+      "keyword_match": 1,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.8,
+    "level": "strong"
+  },
+  {
+    "memory1_id": "mem_2026-03-13_724add97",
+    "memory2_id": "mem_2026-03-14_724add97",
+    "scores": {
+      "keyword_match": 1,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.8,
+    "level": "strong"
+  },
+  {
+    "memory1_id": "mem_2026-03-14_338ef300",
+    "memory2_id": "mem_2026-03-17_338ef300",
+    "scores": {
+      "keyword_match": 1,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.8,
+    "level": "strong"
+  },
+  {
+    "memory1_id": "mem_2026-03-10_6f33d9c4",
+    "memory2_id": "mem_2026-03-10_736247b7",
+    "scores": {
+      "keyword_match": 0.6666666666666666,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.67,
+    "level": "medium"
+  },
+  {
+    "memory1_id": "mem_2026-03-16_44aa8770",
+    "memory2_id": "mem_2026-03-17_1a46ed48",
+    "scores": {
+      "keyword_match": 0.6666666666666666,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.67,
+    "level": "medium"
+  },
+  {
+    "memory1_id": "mem_2026-03-16_9d767c8",
+    "memory2_id": "mem_2026-03-17_7f397202",
+    "scores": {
+      "keyword_match": 0.6666666666666666,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.67,
+    "level": "medium"
+  },
+  {
+    "memory1_id": "mem_2026-03-16_20ba4d1e",
+    "memory2_id": "mem_2026-03-17_1891bf4b",
+    "scores": {
+      "keyword_match": 0.6666666666666666,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.67,
+    "level": "medium"
+  },
+  {
+    "memory1_id": "mem_2026-03-16_11f4037f",
+    "memory2_id": "mem_2026-03-17_6a0d1bcb",
+    "scores": {
+      "keyword_match": 0.6666666666666666,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.67,
+    "level": "medium"
+  },
+  {
+    "memory1_id": "mem_2026-03-16_43446b45",
+    "memory2_id": "mem_2026-03-17_61f118c2",
+    "scores": {
+      "keyword_match": 0.6666666666666666,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.67,
+    "level": "medium"
+  },
+  {
+    "memory1_id": "mem_2026-03-16_5ce8555b",
+    "memory2_id": "mem_2026-03-17_514bec5d",
+    "scores": {
+      "keyword_match": 0.6666666666666666,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.67,
+    "level": "medium"
+  },
+  {
+    "memory1_id": "mem_2026-03-11_26285a5b",
+    "memory2_id": "mem_2026-03-14_625f9a52",
+    "scores": {
+      "keyword_match": 0.5833333333333334,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.63,
+    "level": "medium"
+  },
+  {
+    "memory1_id": "mem_2026-03-14_2259c0ab",
+    "memory2_id": "mem_2026-03-14_30e2eba2",
+    "scores": {
+      "keyword_match": 0.4166666666666667,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.57,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-16_65408c1c",
+    "memory2_id": "mem_2026-03-17_245ad1be",
+    "scores": {
+      "keyword_match": 0.9,
+      "time_proximity": 1,
+      "category_match": 0,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.56,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-14_19e65cfa",
+    "memory2_id": "mem_2026-03-14_30e2eba2",
+    "scores": {
+      "keyword_match": 0.35714285714285715,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.54,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-10_2ebd1f39",
+    "memory2_id": "mem_2026-03-10_1e0918a3",
+    "scores": {
+      "keyword_match": 0.3333333333333333,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.53,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-11_19089c62",
+    "memory2_id": "mem_2026-03-11_ab97ba3",
+    "scores": {
+      "keyword_match": 0.3333333333333333,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.53,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-29_2f505af9",
+    "memory2_id": "mem_2026-03-29_203d1882",
+    "scores": {
+      "keyword_match": 0.3333333333333333,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.53,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-14_27dad9b7",
+    "memory2_id": "mem_2026-03-14_625f9a52",
+    "scores": {
+      "keyword_match": 0.3,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.52,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-10_2ebd1f39",
+    "memory2_id": "mem_2026-03-11_382571f",
+    "scores": {
+      "keyword_match": 0.25,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.5,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-11_28ef861c",
+    "memory2_id": "mem_2026-03-14_606b6813",
+    "scores": {
+      "keyword_match": 0.25,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.5,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-13_7f9be669",
+    "memory2_id": "mem_2026-03-14_10eb8d58",
+    "scores": {
+      "keyword_match": 0.25,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.5,
+    "level": "weak"
+  },
+  {
+    "memory1_id": "mem_2026-03-14_2d3cf3cb",
+    "memory2_id": "mem_2026-03-14_606b6813",
+    "scores": {
+      "keyword_match": 0.25,
+      "time_proximity": 1,
+      "category_match": 1,
+      "co_occurrence": 0
+    },
+    "totalScore": 0.5,
+    "level": "weak"
+  }
+]

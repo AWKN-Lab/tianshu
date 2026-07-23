@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tianhuo Coordination Request",
+  "type": "object",
+  "required": [
+    "requester",
+    "neededRole",
+    "taskBrief",
+    "inputs",
+    "constraints",
+    "riskLevel",
+    "acceptanceCriteria",
+    "handoffEvidence"
+  ],
+  "properties": {
+    "requestId": { "type": "string" },
+    "requester": { "type": "string", "const": "tianhuo" },
+    "neededRole": { "type": "string" },
+    "taskBrief": { "type": "string" },
+    "inputs": { "type": "array", "items": { "type": "string" } },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "riskLevel": { "type": "string", "enum": ["low", "medium", "high"] },
+    "acceptanceCriteria": { "type": "array", "items": { "type": "string" } },
+    "handoffEvidence": { "type": "array", "items": { "type": "string" } },
+    "deadline": { "type": "string" }
+  }
+}

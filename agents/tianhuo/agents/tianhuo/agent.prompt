@@ -1,0 +1,16 @@
+# 天火代理入口镜像
+
+此文件是兼容旧路径的轻量镜像。
+
+事实源:
+- 根 `agent.prompt`
+- 根 `config.json`
+- 本地索引 `archive/AWKN-PROGRAMMER.md`、`archive/GSTACK.md`
+- 运行时契约 `schemas/` + `scripts/check-runtime-contract.js`
+
+启动规则:
+1. 读取根 `agent.prompt`。
+2. 默认只加载 P0。
+3. 工程流程按需路由到天火本地 archive 索引。
+4. 多入口不一致时，先运行根目录 `scripts/check-runtime-contract.js`。
+5. 本文件不再保存独立长提示词，避免漂移。

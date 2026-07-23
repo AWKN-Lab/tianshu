@@ -1,0 +1,17 @@
+{
+  "name": "tianhuo-gates",
+  "version": "1.1.0",
+  "description": "天火 v2.0 gates 子系统 — 7 闸门质量保证引擎(PLAN/BUILD 质量门禁)",
+  "type": "commonjs",
+  "private": true,
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "scripts": {
+    "self-test": "tsx gates.ts --self-test",
+    "load": "tsx gates.ts --load gates.config.yaml"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
