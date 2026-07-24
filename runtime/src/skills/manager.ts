@@ -1,5 +1,10 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PROJECT_ROOT = resolve(__dirname, '..', '..', '..');
 
 export interface SkillMetadata {
   name: string;
@@ -46,9 +51,15 @@ function parseSkillFile(filePath: string): SkillRecord {
   };
 }
 
+export function resolveDefaultSkillsRoot(): string {
+  return resolve(process.env.AWKN_SKILLS_ROOT ?? process.env.SKILLS_DIR ?? join(PROJECT_ROOT, 'skills'));
+}
+
 export class SkillsManager {
   private readonly records = new Map<string, SkillRecord>();
-  constructor(private rootDir: string) {}
+  constructor(private rootDir: string) { this.rootDir = resolve(rootDir); }
+
+  getRoot(): string { return this.rootDir; }
 
   setRoot(rootDir: string): void {
     this.rootDir = resolve(rootDir);
@@ -102,8 +113,8 @@ export class SkillsManager {
 
 let instance: SkillsManager | null = null;
 export function getSkillsManager(rootDir?: string): SkillsManager {
-  const resolvedRoot = resolve(rootDir ?? process.env.AWKN_SKILLS_ROOT ?? process.env.SKILLS_DIR ?? join(process.cwd(), 'skills'));
+  const resolvedRoot = resolve(rootDir ?? resolveDefaultSkillsRoot());
   if (!instance) instance = new SkillsManager(resolvedRoot);
-  else if (rootDir) instance.setRoot(resolvedRoot);
+  else if (instance.getRoot() !== resolvedRoot) instance.setRoot(resolvedRoot);
   return instance;
 }
