@@ -1,5 +1,6 @@
 import { createLogger } from '../core/logger.js';
-import { getMemoryService } from '../memory/service.js';
+import type { CompiledMemoryContext } from '../memory/backend.js';
+import { getMemoryBackendRouter } from '../memory/router.js';
 import { startSpan } from '../observability/trace.js';
 import { queryRun } from '../store/db.js';
 import type { ChatMessage, ChatRequest, ChatResponse, LlmProvider, LlmProviderInterface } from './types.js';
@@ -15,6 +16,7 @@ interface MemoryEnrichment {
   userText: string;
   projectId: string;
   sessionId: string;
+  context?: CompiledMemoryContext;
 }
 
 export class LlmRouter {
@@ -40,7 +42,7 @@ export class LlmRouter {
 
   async chat(req: ChatRequest): Promise<ChatResponse> {
     const provider = this.selectProvider(req);
-    const enriched = this.enrichWithMemory(req);
+    const enriched = await this.enrichWithMemory(req);
     const startedAt = Date.now();
     const span = startSpan({
       traceId: req.traceId,
@@ -53,6 +55,10 @@ export class LlmRouter {
         'awkn.call_source': req.callSource ?? 'unknown',
         'awkn.fallback_policy': req.fallbackPolicy ?? 'allow',
         'awkn.memory.injected': enriched.request.messages.length > req.messages.length,
+        'awkn.memory.backend': enriched.context?.backend ?? 'none',
+        'awkn.memory.stale': enriched.context?.stale ?? false,
+        'awkn.memory.receipt_id': enriched.context?.receiptId ?? '',
+        'awkn.memory.render_id': enriched.context?.renderId ?? '',
       },
     });
 
@@ -60,7 +66,7 @@ export class LlmRouter {
       const response = await provider.chat(enriched.request);
       const durationMs = Date.now() - startedAt;
       this.recordUsage(response, req.callSource, durationMs);
-      this.rememberResponse(enriched, response, req.traceId);
+      await this.rememberResponse(enriched, response, req.traceId);
       span.end('ok', this.responseAttributes(response, durationMs, false));
       return response;
     } catch (err) {
@@ -83,7 +89,7 @@ export class LlmRouter {
           const response = await fallback.chat(enriched.request);
           const durationMs = Date.now() - startedAt;
           this.recordUsage(response, req.callSource, durationMs);
-          this.rememberResponse(enriched, response, req.traceId);
+          await this.rememberResponse(enriched, response, req.traceId);
           logger.info(`Fallback to ${name} succeeded`);
           span.end('ok', this.responseAttributes(response, durationMs, true));
           return response;
@@ -102,7 +108,7 @@ export class LlmRouter {
     }
   }
 
-  private enrichWithMemory(req: ChatRequest): MemoryEnrichment {
+  private async enrichWithMemory(req: ChatRequest): Promise<MemoryEnrichment> {
     const userText = [...req.messages].reverse().find((message) => message.role === 'user')?.content ?? '';
     const projectId = process.env.AWKN_PROJECT_ID ?? process.env.npm_package_name ?? 'default-project';
     const sessionId = process.env.AWKN_MEMORY_SESSION_ID ?? projectId;
@@ -111,33 +117,47 @@ export class LlmRouter {
     }
 
     try {
-      const context = getMemoryService().buildContext({ query: userText, projectId, sessionId, limit: 8, maxChars: 6000 });
-      if (!context) return { request: req, userText, projectId, sessionId };
+      const context = await getMemoryBackendRouter().compileAndRender({
+        query: userText,
+        projectId,
+        sessionId,
+        tokenBudget: Number(process.env.AWKN_MEMORY_TOKEN_BUDGET ?? 4000),
+        maxItems: Number(process.env.AWKN_MEMORY_MAX_ITEMS ?? 100),
+      });
+      if (!context.prompt) return { request: req, userText, projectId, sessionId, context };
       const messages: ChatMessage[] = [...req.messages];
       let insertAt = 0;
       while (insertAt < messages.length && messages[insertAt]?.role === 'system') insertAt++;
-      messages.splice(insertAt, 0, { role: 'system', content: context });
-      return { request: { ...req, messages }, userText, projectId, sessionId };
+      messages.splice(insertAt, 0, { role: 'system', content: context.prompt });
+      return { request: { ...req, messages }, userText, projectId, sessionId, context };
     } catch (err) {
       logger.warn(`Failed to build memory context: ${String(err)}`);
       return { request: req, userText, projectId, sessionId };
     }
   }
 
-  private rememberResponse(enrichment: MemoryEnrichment, response: ChatResponse, traceId?: string): void {
+  private async rememberResponse(enrichment: MemoryEnrichment, response: ChatResponse, traceId?: string): Promise<void> {
     if (process.env.AWKN_DISABLE_MEMORY === '1') return;
     if (enrichment.request.callSource !== 'main_dialogue') return;
     if (response.finishReason !== 'stop' || !response.content.trim()) return;
     try {
-      getMemoryService().recordInteraction({
+      const memory = getMemoryBackendRouter();
+      await memory.rememberInteraction({
         userText: enrichment.userText,
         assistantText: response.content,
         projectId: enrichment.projectId,
         sessionId: enrichment.sessionId,
         traceId,
       });
+      await memory.finalizeContext({
+        context: enrichment.context,
+        projectId: enrichment.projectId,
+        sessionId: enrichment.sessionId,
+        responseText: response.content,
+        outcome: 'SUCCESS',
+      });
     } catch (err) {
-      logger.warn(`Failed to persist working memory: ${String(err)}`);
+      logger.warn(`Failed to persist or finalize memory: ${String(err)}`);
     }
   }
 
