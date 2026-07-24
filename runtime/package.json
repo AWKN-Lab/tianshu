@@ -16,7 +16,8 @@
     "test:all": "npm run test && npm run test:contracts",
     "check": "npm run typecheck && npm run lint && npm run test:all",
     "test:vitest": "vitest run",
-    "dev": "tsx src/cli.ts"
+    "dev": "tsx src/cli.ts",
+    "approval": "tsx src/approval-cli.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
