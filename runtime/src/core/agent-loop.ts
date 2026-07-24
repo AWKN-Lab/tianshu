@@ -62,6 +62,7 @@ export class AgentLoop {
   private config: AgentLoopConfig;
   private loopMonitor = new LoopMonitor();
   private totalTokens = 0;
+  private activeRunId?: string;
 
   constructor(config: Partial<AgentLoopConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -216,6 +217,7 @@ export class AgentLoop {
             callSource: (this.config.callSource ?? 'main_dialogue') as ExecutionContext['callSource'],
             workspaceRoot: this.config.cwd,
             approvedToolNames: this.config.approvedTools,
+            runId: this.activeRunId,
           };
           const startedAt = Date.now();
           let toolResult = '';
@@ -291,6 +293,7 @@ export class AgentLoop {
       workflowName: 'agent-loop-l2',
       payload: { userInput, provider: this.config.provider, reviewProvider: this.resolveReviewProvider() },
     });
+    this.activeRunId = run.id;
     eventStore.transitionRun(run.id, 'running');
 
     let totalTurns = 0;
@@ -311,6 +314,7 @@ export class AgentLoop {
       if (!goal || goal.state !== 'active') {
         const reason = goal ? `goal state=${goal.state}` : 'goal 不存在';
         eventStore.transitionRun(run.id, 'failed', { reason });
+        this.activeRunId = undefined;
         return this.buildResult(lastFinalText, lastReactState, totalTurns, cycle, true, reason, lastResults, false);
       }
 
@@ -326,6 +330,7 @@ export class AgentLoop {
 
       if (l1Result.terminated) {
         eventStore.transitionRun(run.id, 'failed', { reason: l1Result.terminationReason, cycle });
+        this.activeRunId = undefined;
         return this.buildResult(lastFinalText, lastReactState, totalTurns, cycle, true, l1Result.terminationReason, lastResults, false);
       }
 
@@ -358,11 +363,13 @@ export class AgentLoop {
       if (lastResults.every((result) => result.passed)) {
         goalManager.updateGoal(this.config.goalId, { state: 'achieved' }, 'model');
         eventStore.transitionRun(run.id, 'succeeded', { cycle, results: lastResults });
+        this.activeRunId = undefined;
         return this.buildResult(lastFinalText, lastReactState, totalTurns, cycle, false, undefined, lastResults, true);
       }
 
       if (!budgetResult.passed) {
         eventStore.transitionRun(run.id, 'budget_exceeded', { cycle, results: lastResults });
+        this.activeRunId = undefined;
         return this.buildResult(lastFinalText, lastReactState, totalTurns, cycle, true, '预算超限', lastResults, false);
       }
 
@@ -376,6 +383,7 @@ export class AgentLoop {
 
     const reason = `达到 L2 最大循环数 ${this.config.maxL2Cycles}`;
     eventStore.transitionRun(run.id, 'failed', { reason, results: lastResults });
+    this.activeRunId = undefined;
     return this.buildResult(lastFinalText, lastReactState, totalTurns, cycle, true, reason, lastResults, false);
   }
 

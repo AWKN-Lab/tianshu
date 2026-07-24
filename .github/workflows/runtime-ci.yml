@@ -33,4 +33,15 @@ jobs:
           cache: npm
           cache-dependency-path: runtime/package-lock.json
       - run: npm ci
-      - run: npm run check
+      - name: Run runtime checks
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee check.log
+      - name: Upload check log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-check-log
+          path: runtime/check.log
+          if-no-files-found: error
+          retention-days: 7

@@ -24,7 +24,6 @@ const MIGRATIONS: Migration[] = [
         finished_at TEXT,
         updated_at TEXT NOT NULL
       );
-
       CREATE TABLE IF NOT EXISTS steps (
         id TEXT PRIMARY KEY,
         run_id TEXT NOT NULL,
@@ -40,7 +39,6 @@ const MIGRATIONS: Migration[] = [
         updated_at TEXT NOT NULL,
         FOREIGN KEY (run_id) REFERENCES runs(id)
       );
-
       CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         run_id TEXT NOT NULL,
@@ -51,7 +49,6 @@ const MIGRATIONS: Migration[] = [
         FOREIGN KEY (run_id) REFERENCES runs(id),
         FOREIGN KEY (step_id) REFERENCES steps(id)
       );
-
       CREATE TABLE IF NOT EXISTS artifacts (
         id TEXT PRIMARY KEY,
         run_id TEXT NOT NULL,
@@ -64,7 +61,6 @@ const MIGRATIONS: Migration[] = [
         FOREIGN KEY (run_id) REFERENCES runs(id),
         FOREIGN KEY (step_id) REFERENCES steps(id)
       );
-
       CREATE TABLE IF NOT EXISTS approvals (
         id TEXT PRIMARY KEY,
         run_id TEXT NOT NULL,
@@ -78,7 +74,6 @@ const MIGRATIONS: Migration[] = [
         FOREIGN KEY (run_id) REFERENCES runs(id),
         FOREIGN KEY (step_id) REFERENCES steps(id)
       );
-
       CREATE TABLE IF NOT EXISTS model_calls (
         id TEXT PRIMARY KEY,
         run_id TEXT,
@@ -96,7 +91,6 @@ const MIGRATIONS: Migration[] = [
         FOREIGN KEY (run_id) REFERENCES runs(id),
         FOREIGN KEY (step_id) REFERENCES steps(id)
       );
-
       CREATE INDEX IF NOT EXISTS idx_runs_goal_id ON runs(goal_id);
       CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
       CREATE INDEX IF NOT EXISTS idx_steps_run_id ON steps(run_id);
@@ -106,6 +100,34 @@ const MIGRATIONS: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_artifacts_run_id ON artifacts(run_id);
       CREATE INDEX IF NOT EXISTS idx_approvals_run_id ON approvals(run_id);
       CREATE INDEX IF NOT EXISTS idx_model_calls_run_id ON model_calls(run_id);
+    `,
+  },
+  {
+    version: 3,
+    name: 'sandbox-execution-audit',
+    sql: `
+      CREATE TABLE IF NOT EXISTS sandbox_executions (
+        id TEXT PRIMARY KEY,
+        run_id TEXT,
+        step_id TEXT,
+        session_id TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        backend TEXT NOT NULL,
+        command_sha256 TEXT,
+        cwd TEXT,
+        status TEXT NOT NULL,
+        exit_code INTEGER NOT NULL,
+        stdout_text TEXT NOT NULL DEFAULT '',
+        stderr_text TEXT NOT NULL DEFAULT '',
+        duration_ms INTEGER NOT NULL DEFAULT 0,
+        artifacts_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (run_id) REFERENCES runs(id),
+        FOREIGN KEY (step_id) REFERENCES steps(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_sandbox_run_id ON sandbox_executions(run_id);
+      CREATE INDEX IF NOT EXISTS idx_sandbox_session_id ON sandbox_executions(session_id);
+      CREATE INDEX IF NOT EXISTS idx_sandbox_tool_name ON sandbox_executions(tool_name);
     `,
   },
 ];
@@ -118,18 +140,15 @@ export function runMigrations(db: Database.Database): void {
       applied_at TEXT NOT NULL
     );
   `);
-
   const applied = new Set(
     db.prepare('SELECT version FROM schema_migrations').all()
       .map((row) => (row as { version: number }).version),
   );
-
   const apply = db.transaction((migration: Migration) => {
     db.exec(migration.sql);
     db.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
       .run(migration.version, migration.name, new Date().toISOString());
   });
-
   for (const migration of MIGRATIONS) {
     if (!applied.has(migration.version)) apply(migration);
   }
