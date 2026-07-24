@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type Database from 'better-sqlite3';
 import type { LlmProvider } from '../llm/types.js';
+import type { GovernCandidateInput, GovernCandidateResult } from '../memory/authority.js';
+import { getMemoryBackendRouter } from '../memory/router.js';
 import { getDb } from '../store/db.js';
 import { EvolutionLifecycle, type EvolutionCandidate } from './lifecycle.js';
 import {
@@ -28,6 +30,19 @@ export type AgentReplayExecutor = (input: {
   maxTurns: number;
 }) => Promise<AgentReplayResult>;
 
+export interface EvolutionAuthorityGateway {
+  isRemoteAuthorityEnabled(): boolean;
+  governCandidate(input: GovernCandidateInput): Promise<GovernCandidateResult | null>;
+  activateAuthorityRule(ruleId: string): Promise<Record<string, unknown>>;
+  pauseAuthorityRule(ruleId: string, reason: string): Promise<Record<string, unknown>>;
+}
+
+interface AuthorityProjection {
+  authority_experience_id: string | null;
+  authority_rule_id: string | null;
+  authority_status: string | null;
+}
+
 function parseObject(value: string | null | undefined): Record<string, unknown> {
   if (!value) return {};
   try {
@@ -50,6 +65,14 @@ function promptFrom(input: Record<string, unknown>): string {
 
 function expectedSuccess(expected: Record<string, unknown>): boolean | undefined {
   return typeof expected.success === 'boolean' ? expected.success : undefined;
+}
+
+function projectId(): string {
+  return process.env.AWKN_PROJECT_ID ?? process.env.npm_package_name ?? 'default-project';
+}
+
+function autoGovern(): boolean {
+  return process.env.AWKN_MEMORY_OS_AUTO_GOVERNANCE === '1';
 }
 
 export function metricsFromReplay(result: AgentReplayResult, expected: Record<string, unknown> = {}): ReplayMetrics {
@@ -225,7 +248,10 @@ export class EvolutionOrchestrator {
   private readonly historical: HistoricalReplayManager;
   private readonly lifecycle: EvolutionLifecycle;
 
-  constructor(private readonly db: Database.Database = getDb()) {
+  constructor(
+    private readonly db: Database.Database = getDb(),
+    private readonly authority: EvolutionAuthorityGateway = getMemoryBackendRouter(),
+  ) {
     this.evaluator = new ReplayEvaluator(db);
     this.historical = new HistoricalReplayManager(db);
     this.lifecycle = new EvolutionLifecycle(db);
@@ -268,9 +294,170 @@ export class EvolutionOrchestrator {
     executor?: AgentReplayExecutor;
   }) {
     const evaluation = await this.evaluateCandidate(input);
-    const candidate = evaluation.verdict === 'PASS'
-      ? this.lifecycle.activate(input.candidateId)
-      : this.lifecycle.read(input.candidateId);
-    return { evaluation, candidate };
+    if (evaluation.verdict !== 'PASS') {
+      return { evaluation, candidate: this.lifecycle.read(input.candidateId), authority: null };
+    }
+
+    const candidate = this.requireCandidate(input.candidateId);
+    if (!this.authority.isRemoteAuthorityEnabled()) {
+      return { evaluation, candidate: this.lifecycle.activate(input.candidateId), authority: null };
+    }
+
+    try {
+      const authority = await this.authority.governCandidate({
+        projectId: projectId(),
+        candidateId: candidate.id,
+        experienceKey: candidate.experience_id,
+        content: readFileSync(candidate.content_path, 'utf-8'),
+        evaluation: {
+          verdict: evaluation.verdict,
+          reasons: evaluation.reasons,
+          baseline: evaluation.baseline,
+          candidate: evaluation.candidate,
+        },
+        autoActivate: autoGovern(),
+      });
+      if (!authority) throw new Error('remote authority returned no governance result');
+      this.saveAuthority(candidate.id, authority);
+      const activated = authority.status === 'ACTIVE'
+        ? this.lifecycle.activate(candidate.id)
+        : this.lifecycle.read(candidate.id);
+      return { evaluation, candidate: activated, authority };
+    } catch (error) {
+      this.saveAuthorityError(candidate.id, error);
+      throw error;
+    }
+  }
+
+  async activateApprovedCandidate(candidateId: string): Promise<{
+    candidate: EvolutionCandidate;
+    authority: GovernCandidateResult | null;
+  }> {
+    const candidate = this.requireCandidate(candidateId);
+    if (candidate.status !== 'APPROVED') throw new Error(`candidate ${candidateId} must be APPROVED before activation`);
+    if (!this.authority.isRemoteAuthorityEnabled()) {
+      return { candidate: this.lifecycle.activate(candidateId), authority: null };
+    }
+
+    const projection = this.readAuthority(candidateId);
+    try {
+      let authority: GovernCandidateResult;
+      if (projection.authority_rule_id) {
+        const activation = await this.authority.activateAuthorityRule(projection.authority_rule_id);
+        authority = {
+          experienceId: projection.authority_experience_id ?? '',
+          ruleId: projection.authority_rule_id,
+          status: 'ACTIVE',
+          activationId: typeof activation.activation_id === 'string' ? activation.activation_id : undefined,
+        };
+      } else {
+        const result = await this.authority.governCandidate({
+          projectId: projectId(),
+          candidateId: candidate.id,
+          experienceKey: candidate.experience_id,
+          content: readFileSync(candidate.content_path, 'utf-8'),
+          evaluation: parseObject(candidate.evaluation_json),
+          autoActivate: true,
+        });
+        if (!result) throw new Error('remote authority returned no governance result');
+        authority = result;
+      }
+      if (authority.status !== 'ACTIVE') throw new Error(`authority rule ${authority.ruleId} is not ACTIVE`);
+      this.saveAuthority(candidate.id, authority);
+      return { candidate: this.lifecycle.activate(candidate.id), authority };
+    } catch (error) {
+      this.saveAuthorityError(candidate.id, error);
+      throw error;
+    }
+  }
+
+  async quarantineCandidate(candidateId: string, reason = 'evaluation failed'): Promise<EvolutionCandidate> {
+    this.requireCandidate(candidateId);
+    const projection = this.readAuthority(candidateId);
+    if (projection.authority_rule_id && projection.authority_status === 'ACTIVE') {
+      await this.authority.pauseAuthorityRule(projection.authority_rule_id, reason);
+      this.db.prepare(
+        `UPDATE evolution_candidates SET authority_status = 'PAUSED', authority_synced_at = ?, authority_error = NULL WHERE id = ?`,
+      ).run(new Date().toISOString(), candidateId);
+    }
+    return this.lifecycle.transition(candidateId, 'QUARANTINED', reason);
+  }
+
+  async rollback(experienceId: string): Promise<EvolutionCandidate> {
+    const current = this.db.prepare(
+      `SELECT * FROM evolution_candidates WHERE experience_id = ? AND status = 'ACTIVE' LIMIT 1`,
+    ).get(experienceId) as EvolutionCandidate | undefined;
+    if (!current) throw new Error(`no ACTIVE candidate for ${experienceId}`);
+    const history = this.db.prepare(
+      `SELECT from_candidate_id FROM evolution_activation_history
+       WHERE experience_id = ? AND to_candidate_id = ? AND from_candidate_id IS NOT NULL
+       ORDER BY created_at DESC LIMIT 1`,
+    ).get(experienceId, current.id) as { from_candidate_id: string } | undefined;
+    if (!history) throw new Error(`no rollback target for ${experienceId}`);
+    const previousProjection = this.readAuthority(history.from_candidate_id);
+    const currentProjection = this.readAuthority(current.id);
+
+    if (this.authority.isRemoteAuthorityEnabled()) {
+      if (currentProjection.authority_rule_id && currentProjection.authority_status === 'ACTIVE') {
+        await this.authority.pauseAuthorityRule(currentProjection.authority_rule_id, 'tianshu rollback');
+      }
+      if (previousProjection.authority_rule_id) {
+        await this.authority.activateAuthorityRule(previousProjection.authority_rule_id);
+      }
+    }
+
+    const restored = this.lifecycle.rollback(experienceId);
+    const now = new Date().toISOString();
+    this.db.prepare(
+      `UPDATE evolution_candidates SET authority_status = 'PAUSED', authority_synced_at = ? WHERE id = ?`,
+    ).run(now, current.id);
+    if (previousProjection.authority_rule_id) {
+      this.db.prepare(
+        `UPDATE evolution_candidates SET authority_status = 'ACTIVE', authority_synced_at = ?, authority_error = NULL WHERE id = ?`,
+      ).run(now, restored.id);
+    }
+    return restored;
+  }
+
+  private requireCandidate(candidateId: string): EvolutionCandidate {
+    const candidate = this.lifecycle.read(candidateId);
+    if (!candidate) throw new Error(`candidate ${candidateId} not found`);
+    return candidate;
+  }
+
+  private readAuthority(candidateId: string): AuthorityProjection {
+    return this.db.prepare(
+      `SELECT authority_experience_id, authority_rule_id, authority_status
+       FROM evolution_candidates WHERE id = ?`,
+    ).get(candidateId) as AuthorityProjection;
+  }
+
+  private saveAuthority(candidateId: string, authority: GovernCandidateResult): void {
+    const now = new Date().toISOString();
+    this.db.prepare(
+      `UPDATE evolution_candidates
+       SET authority_experience_id = ?, authority_rule_id = ?, authority_status = ?,
+           authority_synced_at = ?, authority_error = NULL, updated_at = ?
+       WHERE id = ?`,
+    ).run(
+      authority.experienceId,
+      authority.ruleId,
+      authority.status,
+      now,
+      now,
+      candidateId,
+    );
+  }
+
+  private saveAuthorityError(candidateId: string, error: unknown): void {
+    const now = new Date().toISOString();
+    this.db.prepare(
+      `UPDATE evolution_candidates SET authority_error = ?, authority_synced_at = ?, updated_at = ? WHERE id = ?`,
+    ).run(
+      error instanceof Error ? error.message : String(error),
+      now,
+      now,
+      candidateId,
+    );
   }
 }

@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runHistoricalReplayTargetMigration } from './historical-replay-target-migration.js';
+import { runMemoryAuthorityMigration } from './memory-authority-migration.js';
 import { runMigrations } from './migrations.js';
 import { runOperationalEvolutionMigration } from './operational-evolution-migration.js';
 
@@ -21,6 +22,7 @@ export function getDb(dbPath: string = DEFAULT_DB_PATH): Database.Database {
   runMigrations(dbInstance);
   runOperationalEvolutionMigration(dbInstance);
   runHistoricalReplayTargetMigration(dbInstance);
+  runMemoryAuthorityMigration(dbInstance);
   return dbInstance;
 }
 

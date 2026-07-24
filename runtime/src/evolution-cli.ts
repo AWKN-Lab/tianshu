@@ -62,11 +62,11 @@ async function main(): Promise<void> {
       return;
     }
     if (command === 'activate' && value) {
-      console.log(JSON.stringify(lifecycle.activate(value), null, 2));
+      console.log(JSON.stringify(await orchestrator.activateApprovedCandidate(value), null, 2));
       return;
     }
     if (command === 'quarantine' && value) {
-      console.log(JSON.stringify(lifecycle.transition(value, 'QUARANTINED', reason), null, 2));
+      console.log(JSON.stringify(await orchestrator.quarantineCandidate(value, reason), null, 2));
       return;
     }
     if (command === 'retire' && value) {
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
       return;
     }
     if (command === 'rollback' && value) {
-      console.log(JSON.stringify(lifecycle.rollback(value), null, 2));
+      console.log(JSON.stringify(await orchestrator.rollback(value), null, 2));
       return;
     }
     usage();
