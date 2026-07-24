@@ -1,13 +1,3 @@
-/**
- * 工具类型定义 — 简化版（从 awkn-agent 抽取核心，移除耦合）
- *
- * 来源：awkn-agent/src/tools/types.ts（精简）
- * 改动：
- *   1. 移除 featureFlags / principles / core/types / annotations / workflow/contracts 依赖
- *   2. 保留 ToolHandler 核心接口 + TOOL_DEFAULTS
- *   3. 移除 outputContract / uiResource / ServiceToolDeclaration 等高级特性
- */
-
 export type PermissionLevel = 'none' | 'confirm' | 'deny';
 export type ToolPriority = 'critical' | 'high' | 'medium' | 'normal' | 'low';
 export type CallSource =
@@ -16,13 +6,17 @@ export type CallSource =
   | 'compression'
   | 'classifier'
   | 'sub_agent'
-  | 'background_task';
+  | 'background_task'
+  | 'skill_tool';
 
 export interface ExecutionContext {
   sessionId: string;
   userId: string;
   callSource: CallSource;
   parentToolCallId?: string;
+  workspaceRoot?: string;
+  approvedToolNames?: string[];
+  approvalId?: string;
 }
 
 export interface ToolResult {
@@ -36,10 +30,7 @@ export interface ToolHandler {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
-  execute: (
-    args: Record<string, unknown>,
-    ctx?: ExecutionContext,
-  ) => Promise<string | ToolResult>;
+  execute: (args: Record<string, unknown>, ctx?: ExecutionContext) => Promise<string | ToolResult>;
   source: 'builtin' | 'mcp' | 'plugin' | 'integration';
   isReadOnly?: boolean;
   concurrentSafe?: boolean;
@@ -58,14 +49,10 @@ export const TOOL_DEFAULTS = {
   priority: 'normal' as ToolPriority,
 };
 
-export function resolveToolDefaults(tool: ToolHandler): Required<
-  Pick<
-    ToolHandler,
-    | 'name' | 'description' | 'parameters' | 'execute' | 'source'
-    | 'isReadOnly' | 'concurrentSafe' | 'permissionLevel'
-    | 'maxResultSize' | 'disabled' | 'priority'
-  >
-> {
+export function resolveToolDefaults(tool: ToolHandler): Required<Pick<ToolHandler,
+  | 'name' | 'description' | 'parameters' | 'execute' | 'source'
+  | 'isReadOnly' | 'concurrentSafe' | 'permissionLevel'
+  | 'maxResultSize' | 'disabled' | 'priority'>> {
   return {
     name: tool.name,
     description: tool.description,
