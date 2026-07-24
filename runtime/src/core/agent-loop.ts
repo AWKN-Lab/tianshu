@@ -21,6 +21,7 @@ import { getLoopStateManager, type LoopSnapshot } from './loop-state-manager.js'
 import { getCorrectionsLedger } from '../evolve/corrections-ledger.js';
 import { collectArtifactBundle } from '../evidence/artifact-bundle.js';
 import { getEventStore } from '../workflow/event-store.js';
+import { generateTraceId, recordCompletedSpan } from '../observability/trace.js';
 
 const logger = createLogger('AgentLoop');
 
@@ -63,6 +64,7 @@ export class AgentLoop {
   private loopMonitor = new LoopMonitor();
   private totalTokens = 0;
   private activeRunId?: string;
+  private activeTraceId = generateTraceId();
 
   constructor(config: Partial<AgentLoopConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -151,6 +153,7 @@ export class AgentLoop {
         tools: toolRegistry.toFunctionDefinitions().map((tool) => ({ type: 'function' as const, function: tool })),
         callSource: this.config.callSource ?? 'main_dialogue',
         provider: this.config.provider,
+        traceId: this.activeTraceId,
       };
 
       let response;
@@ -218,6 +221,7 @@ export class AgentLoop {
             workspaceRoot: this.config.cwd,
             approvedToolNames: this.config.approvedTools,
             runId: this.activeRunId,
+            traceId: this.activeTraceId,
           };
           const startedAt = Date.now();
           let toolResult = '';
@@ -292,8 +296,10 @@ export class AgentLoop {
       goalId: this.config.goalId,
       workflowName: 'agent-loop-l2',
       payload: { userInput, provider: this.config.provider, reviewProvider: this.resolveReviewProvider() },
+      traceId: this.activeTraceId,
     });
     this.activeRunId = run.id;
+    this.activeTraceId = run.trace_id;
     eventStore.transitionRun(run.id, 'running');
 
     let totalTurns = 0;
@@ -353,6 +359,21 @@ export class AgentLoop {
 
       const budgetResult = await budgetGate(gateContext);
       lastResults = [...deterministic, reviewResult, budgetResult];
+      for (const gate of lastResults) {
+        recordCompletedSpan({
+          traceId: this.activeTraceId,
+          name: 'quality.gate',
+          durationMs: gate.durationMs,
+          status: gate.passed ? 'ok' : 'error',
+          attributes: {
+            'gate.name': gate.name,
+            'gate.passed': gate.passed,
+            'goal.id': this.config.goalId,
+            'run.id': run.id,
+            'l2.cycle': cycle,
+          },
+        });
+      }
       recordGateFailures(this.config.goalId, lastResults);
       eventStore.appendEvent(run.id, 'l2.cycle.evaluated', {
         cycle,
@@ -409,6 +430,7 @@ export class AgentLoop {
         fallbackPolicy: 'none',
         callSource: 'sub_agent',
         temperature: 0,
+        traceId: this.activeTraceId,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: JSON.stringify(bundle, null, 2) },

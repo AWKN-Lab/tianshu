@@ -19,6 +19,7 @@ export interface ExecutionContext {
   approvalId?: string;
   runId?: string;
   stepId?: string;
+  traceId?: string;
 }
 
 export interface ToolResult {

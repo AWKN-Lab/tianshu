@@ -24,6 +24,8 @@ export interface ChatRequest {
   callSource?: string;
   /** Independent review may disable fallback to avoid same-model self-approval. */
   fallbackPolicy?: 'allow' | 'none';
+  /** W3C-compatible trace ID shared by Run, LLM, Tool and Gate spans. */
+  traceId?: string;
 }
 
 export interface ChatResponse {
