@@ -111,7 +111,13 @@ export class AwknMemoryAuthorityClient {
   }
 
   async activateRule(ruleId: string): Promise<Record<string, unknown>> {
-    return this.request('POST', `/api/v1/rules/${encodeURIComponent(ruleId)}/activate`);
+    try {
+      return await this.request('POST', `/api/v1/rules/${encodeURIComponent(ruleId)}/activate`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/failed: 422\b/.test(message)) throw error;
+      return this.reviewApproveActivateRule(ruleId);
+    }
   }
 
   async pauseRule(ruleId: string, reason: string): Promise<Record<string, unknown>> {
