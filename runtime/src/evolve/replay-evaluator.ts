@@ -9,6 +9,7 @@ export interface ReplayCase {
   input: Record<string, unknown>;
   expected?: Record<string, unknown>;
   tags?: string[];
+  sourceRunId?: string;
 }
 
 export interface ReplayMetrics {
@@ -65,22 +66,38 @@ export class ReplayEvaluator {
     const id = randomUUID();
     this.db.prepare(
       `INSERT INTO evolution_replay_cases
-       (id, name, input_json, expected_json, tags_json, enabled, created_at)
-       VALUES (?, ?, ?, ?, ?, 1, ?)`,
-    ).run(id, input.name, JSON.stringify(input.input), JSON.stringify(input.expected ?? {}), JSON.stringify(input.tags ?? []), new Date().toISOString());
+       (id, name, input_json, expected_json, tags_json, enabled, source_run_id, created_at)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+    ).run(
+      id,
+      input.name,
+      JSON.stringify(input.input),
+      JSON.stringify(input.expected ?? {}),
+      JSON.stringify(input.tags ?? []),
+      input.sourceRunId ?? null,
+      new Date().toISOString(),
+    );
     return { id, ...input };
   }
 
   listCases(): ReplayCase[] {
     const rows = this.db.prepare(
-      'SELECT * FROM evolution_replay_cases WHERE enabled = 1 ORDER BY created_at ASC',
-    ).all() as Array<{ id: string; name: string; input_json: string; expected_json: string; tags_json: string }>;
+      'SELECT * FROM evolution_replay_cases WHERE enabled = 1 ORDER BY created_at ASC, rowid ASC',
+    ).all() as Array<{
+      id: string;
+      name: string;
+      input_json: string;
+      expected_json: string;
+      tags_json: string;
+      source_run_id: string | null;
+    }>;
     return rows.map((row) => ({
       id: row.id,
       name: row.name,
       input: JSON.parse(row.input_json) as Record<string, unknown>,
       expected: JSON.parse(row.expected_json) as Record<string, unknown>,
       tags: JSON.parse(row.tags_json) as string[],
+      sourceRunId: row.source_run_id ?? undefined,
     }));
   }
 
