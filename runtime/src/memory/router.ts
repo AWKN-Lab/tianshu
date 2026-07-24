@@ -6,7 +6,7 @@ import type {
   ObserveMemoryUsageInput,
   RememberInteractionInput,
 } from './backend.js';
-import { AwknMemoryOsBackend } from './awkn-memory-os-backend.js';
+import { AwknMemoryOsBackend, type MemoryOsDiagnostic } from './awkn-memory-os-backend.js';
 import { MemoryAuthorityOutboxProcessor } from './authority-outbox.js';
 import {
   AwknMemoryAuthorityClient,
@@ -23,6 +23,14 @@ function configuredMode(): MemoryBackendMode {
 
 function remoteConfigured(mode: MemoryBackendMode): boolean {
   return mode === 'memory-os' || Boolean(process.env.AWKN_MEMORY_OS_URL);
+}
+
+export interface MemoryRouterDiagnostic {
+  mode: MemoryBackendMode;
+  remoteEnabled: boolean;
+  local: Awaited<ReturnType<LocalMemoryBackend['connect']>>;
+  remote?: MemoryOsDiagnostic;
+  error?: string;
 }
 
 export class MemoryBackendRouter {
@@ -48,6 +56,27 @@ export class MemoryBackendRouter {
 
   isRemoteAuthorityEnabled(): boolean {
     return this.mode !== 'local' && remoteConfigured(this.mode);
+  }
+
+  async diagnose(input?: CompileMemoryContextInput): Promise<MemoryRouterDiagnostic> {
+    const local = await this.local.connect();
+    const remoteEnabled = this.isRemoteAuthorityEnabled();
+    if (!remoteEnabled) return { mode: this.mode, remoteEnabled, local };
+    try {
+      return {
+        mode: this.mode,
+        remoteEnabled,
+        local,
+        remote: await this.remote.diagnose(input),
+      };
+    } catch (error) {
+      return {
+        mode: this.mode,
+        remoteEnabled,
+        local,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   async compileAndRender(input: CompileMemoryContextInput): Promise<CompiledMemoryContext> {

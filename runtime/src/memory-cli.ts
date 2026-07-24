@@ -16,7 +16,7 @@ function args(): Record<string, string> {
 }
 
 function usage(): never {
-  console.error('Usage: npm run memory -- put|search|context|remote-context|versions|rollback|invalidate|compress|gc|flush-remote|flush-authority [--type TYPE --scope ID --key KEY --content TEXT --query TEXT --version N]');
+  console.error('Usage: npm run memory -- put|search|context|remote-context|diagnose|versions|rollback|invalidate|compress|gc|flush-remote|flush-authority [--type TYPE --scope ID --key KEY --content TEXT --query TEXT --version N]');
   process.exit(1);
 }
 
@@ -65,6 +65,17 @@ async function main(): Promise<void> {
         tokenBudget: options.tokenBudget ? Number(options.tokenBudget) : undefined,
         maxItems: options.limit ? Number(options.limit) : undefined,
       }), null, 2));
+      return;
+    }
+    if (command === 'diagnose') {
+      const deep = Boolean(options.project || options.query || options.session);
+      console.log(JSON.stringify(await getMemoryBackendRouter().diagnose(deep ? {
+        query: options.query ?? 'memory protocol smoke',
+        projectId: options.project ?? process.env.AWKN_PROJECT_ID ?? 'default-project',
+        sessionId: options.session ?? process.env.AWKN_MEMORY_SESSION_ID,
+        tokenBudget: options.tokenBudget ? Number(options.tokenBudget) : 512,
+        maxItems: options.limit ? Number(options.limit) : 10,
+      } : undefined), null, 2));
       return;
     }
     if (command === 'versions') {
