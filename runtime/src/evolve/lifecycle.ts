@@ -1,0 +1,151 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import type Database from 'better-sqlite3';
+import { getDb } from '../store/db.js';
+
+export type EvolutionStatus = 'DRAFT' | 'VALIDATING' | 'APPROVED' | 'ACTIVE' | 'QUARANTINED' | 'RETIRED';
+
+export interface EvolutionCandidate {
+  id: string;
+  experience_id: string;
+  version: number;
+  status: EvolutionStatus;
+  content_path: string;
+  content_hash: string;
+  source_pattern_json: string;
+  baseline_metrics_json: string | null;
+  candidate_metrics_json: string | null;
+  evaluation_json: string | null;
+  quarantine_reason: string | null;
+  promoted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+const ALLOWED: Record<EvolutionStatus, EvolutionStatus[]> = {
+  DRAFT: ['VALIDATING', 'RETIRED'],
+  VALIDATING: ['APPROVED', 'QUARANTINED'],
+  APPROVED: ['ACTIVE', 'QUARANTINED', 'RETIRED'],
+  ACTIVE: ['QUARANTINED', 'RETIRED'],
+  QUARANTINED: ['VALIDATING', 'RETIRED'],
+  RETIRED: [],
+};
+
+export function sha256Content(content: string): string {
+  return createHash('sha256').update(content).digest('hex');
+}
+
+export class EvolutionLifecycle {
+  constructor(private readonly db: Database.Database = getDb()) {}
+
+  createCandidate(input: {
+    experienceId: string;
+    contentPath: string;
+    contentHash?: string;
+    sourcePattern?: Record<string, unknown>;
+  }): EvolutionCandidate {
+    const contentHash = input.contentHash ?? sha256Content(readFileSync(input.contentPath, 'utf-8'));
+    const current = this.db.prepare(
+      'SELECT COALESCE(MAX(version), 0) AS version FROM evolution_candidates WHERE experience_id = ?',
+    ).get(input.experienceId) as { version: number };
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    this.db.prepare(
+      `INSERT INTO evolution_candidates
+       (id, experience_id, version, status, content_path, content_hash, source_pattern_json, created_at, updated_at)
+       VALUES (?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?)`,
+    ).run(id, input.experienceId, current.version + 1, input.contentPath, contentHash, JSON.stringify(input.sourcePattern ?? {}), now, now);
+    return this.read(id)!;
+  }
+
+  read(id: string): EvolutionCandidate | null {
+    return (this.db.prepare('SELECT * FROM evolution_candidates WHERE id = ?').get(id) as EvolutionCandidate | undefined) ?? null;
+  }
+
+  list(status?: EvolutionStatus): EvolutionCandidate[] {
+    return (status
+      ? this.db.prepare('SELECT * FROM evolution_candidates WHERE status = ? ORDER BY created_at DESC').all(status)
+      : this.db.prepare('SELECT * FROM evolution_candidates ORDER BY created_at DESC').all()) as EvolutionCandidate[];
+  }
+
+  transition(id: string, next: EvolutionStatus, reason?: string): EvolutionCandidate {
+    const candidate = this.read(id);
+    if (!candidate) throw new Error(`candidate ${id} not found`);
+    if (!ALLOWED[candidate.status].includes(next)) throw new Error(`invalid transition ${candidate.status} -> ${next}`);
+    const now = new Date().toISOString();
+    this.db.prepare(
+      `UPDATE evolution_candidates SET status = ?, quarantine_reason = ?, updated_at = ? WHERE id = ?`,
+    ).run(next, next === 'QUARANTINED' ? reason ?? 'evaluation failed' : null, now, id);
+    return this.read(id)!;
+  }
+
+  saveEvaluation(id: string, input: {
+    baselineMetrics: Record<string, unknown>;
+    candidateMetrics: Record<string, unknown>;
+    evaluation: Record<string, unknown>;
+  }): EvolutionCandidate {
+    this.db.prepare(
+      `UPDATE evolution_candidates
+       SET baseline_metrics_json = ?, candidate_metrics_json = ?, evaluation_json = ?, updated_at = ?
+       WHERE id = ?`,
+    ).run(JSON.stringify(input.baselineMetrics), JSON.stringify(input.candidateMetrics), JSON.stringify(input.evaluation), new Date().toISOString(), id);
+    return this.read(id)!;
+  }
+
+  activate(id: string): EvolutionCandidate {
+    const candidate = this.read(id);
+    if (!candidate) throw new Error(`candidate ${id} not found`);
+    if (candidate.status !== 'APPROVED') throw new Error(`candidate ${id} must be APPROVED before activation`);
+    const activate = this.db.transaction(() => {
+      const current = this.db.prepare(
+        `SELECT * FROM evolution_candidates WHERE experience_id = ? AND status = 'ACTIVE' LIMIT 1`,
+      ).get(candidate.experience_id) as EvolutionCandidate | undefined;
+      const now = new Date().toISOString();
+      if (current) {
+        this.db.prepare(`UPDATE evolution_candidates SET status = 'RETIRED', updated_at = ? WHERE id = ?`).run(now, current.id);
+      }
+      this.db.prepare(
+        `UPDATE evolution_candidates SET status = 'ACTIVE', promoted_at = ?, updated_at = ? WHERE id = ?`,
+      ).run(now, now, id);
+      this.db.prepare(
+        `INSERT INTO evolution_activation_history
+         (id, experience_id, from_candidate_id, to_candidate_id, action, created_at)
+         VALUES (?, ?, ?, ?, 'activate', ?)`,
+      ).run(randomUUID(), candidate.experience_id, current?.id ?? null, id, now);
+    });
+    activate();
+    return this.read(id)!;
+  }
+
+  rollback(experienceId: string): EvolutionCandidate {
+    const current = this.db.prepare(
+      `SELECT * FROM evolution_candidates WHERE experience_id = ? AND status = 'ACTIVE' LIMIT 1`,
+    ).get(experienceId) as EvolutionCandidate | undefined;
+    if (!current) throw new Error(`no ACTIVE candidate for ${experienceId}`);
+    const history = this.db.prepare(
+      `SELECT from_candidate_id FROM evolution_activation_history
+       WHERE experience_id = ? AND to_candidate_id = ? AND from_candidate_id IS NOT NULL
+       ORDER BY created_at DESC LIMIT 1`,
+    ).get(experienceId, current.id) as { from_candidate_id: string } | undefined;
+    if (!history) throw new Error(`no rollback target for ${experienceId}`);
+    const previous = this.read(history.from_candidate_id);
+    if (!previous) throw new Error(`rollback target ${history.from_candidate_id} missing`);
+
+    const rollback = this.db.transaction(() => {
+      const now = new Date().toISOString();
+      this.db.prepare(
+        `UPDATE evolution_candidates SET status = 'QUARANTINED', quarantine_reason = 'rolled back', updated_at = ? WHERE id = ?`,
+      ).run(now, current.id);
+      this.db.prepare(
+        `UPDATE evolution_candidates SET status = 'ACTIVE', quarantine_reason = NULL, promoted_at = ?, updated_at = ? WHERE id = ?`,
+      ).run(now, now, previous.id);
+      this.db.prepare(
+        `INSERT INTO evolution_activation_history
+         (id, experience_id, from_candidate_id, to_candidate_id, action, created_at)
+         VALUES (?, ?, ?, ?, 'rollback', ?)`,
+      ).run(randomUUID(), experienceId, current.id, previous.id, now);
+    });
+    rollback();
+    return this.read(previous.id)!;
+  }
+}

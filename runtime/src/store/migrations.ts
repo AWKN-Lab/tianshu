@@ -182,6 +182,62 @@ const MIGRATIONS: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_runs_trace_id ON runs(trace_id);
     `,
   },
+  {
+    version: 6,
+    name: 'evolution-candidate-lifecycle',
+    sql: `
+      CREATE TABLE IF NOT EXISTS evolution_candidates (
+        id TEXT PRIMARY KEY,
+        experience_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        content_path TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        source_pattern_json TEXT NOT NULL DEFAULT '{}',
+        baseline_metrics_json TEXT,
+        candidate_metrics_json TEXT,
+        evaluation_json TEXT,
+        quarantine_reason TEXT,
+        promoted_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (experience_id, version)
+      );
+      CREATE TABLE IF NOT EXISTS evolution_replay_cases (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        input_json TEXT NOT NULL,
+        expected_json TEXT NOT NULL DEFAULT '{}',
+        tags_json TEXT NOT NULL DEFAULT '[]',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS evolution_evaluations (
+        id TEXT PRIMARY KEY,
+        candidate_id TEXT NOT NULL,
+        baseline_json TEXT NOT NULL,
+        candidate_json TEXT NOT NULL,
+        delta_json TEXT NOT NULL,
+        verdict TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (candidate_id) REFERENCES evolution_candidates(id)
+      );
+      CREATE TABLE IF NOT EXISTS evolution_activation_history (
+        id TEXT PRIMARY KEY,
+        experience_id TEXT NOT NULL,
+        from_candidate_id TEXT,
+        to_candidate_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (from_candidate_id) REFERENCES evolution_candidates(id),
+        FOREIGN KEY (to_candidate_id) REFERENCES evolution_candidates(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_evolution_candidate_status ON evolution_candidates(status);
+      CREATE INDEX IF NOT EXISTS idx_evolution_candidate_experience ON evolution_candidates(experience_id, version);
+      CREATE INDEX IF NOT EXISTS idx_evolution_evaluation_candidate ON evolution_evaluations(candidate_id);
+      CREATE INDEX IF NOT EXISTS idx_evolution_history_experience ON evolution_activation_history(experience_id, created_at);
+    `,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {
