@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import type Database from 'better-sqlite3';
 import { getMemoryService } from '../memory/service.js';
 import { getDb } from '../store/db.js';
+import { runOperationalEvolutionMigration } from '../store/operational-evolution-migration.js';
 import { getCorrectionsLedger } from './corrections-ledger.js';
 
 export type EvolutionStatus = 'DRAFT' | 'VALIDATING' | 'APPROVED' | 'ACTIVE' | 'QUARANTINED' | 'RETIRED';
@@ -43,7 +44,9 @@ function projectId(): string {
 }
 
 export class EvolutionLifecycle {
-  constructor(private readonly db: Database.Database = getDb()) {}
+  constructor(private readonly db: Database.Database = getDb()) {
+    runOperationalEvolutionMigration(db);
+  }
 
   createCandidate(input: {
     experienceId: string;
