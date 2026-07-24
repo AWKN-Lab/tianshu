@@ -14,11 +14,13 @@ import {
 } from '../../src/evolve/operational-evolution.js';
 import { ReplayEvaluator } from '../../src/evolve/replay-evaluator.js';
 import { runMigrations } from '../../src/store/migrations.js';
+import { runOperationalEvolutionMigration } from '../../src/store/operational-evolution-migration.js';
 
 function setup() {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   runMigrations(db);
+  runOperationalEvolutionMigration(db);
   return db;
 }
 
@@ -46,20 +48,13 @@ describe('operational evolution loop', () => {
     insertCorrection(db, correctionId, 'fingerprint-1');
     const path = candidateFile();
     const first = lifecycle.createCandidate({
-      experienceId: 'EXP-OP-1',
-      contentPath: path,
-      sourceFingerprint: 'fingerprint-1',
-      correctionIds: [correctionId],
+      experienceId: 'EXP-OP-1', contentPath: path, sourceFingerprint: 'fingerprint-1', correctionIds: [correctionId],
     });
     const second = lifecycle.createCandidate({
-      experienceId: 'EXP-OP-OTHER',
-      contentPath: path,
-      sourceFingerprint: 'fingerprint-1',
-      correctionIds: [correctionId],
+      experienceId: 'EXP-OP-OTHER', contentPath: path, sourceFingerprint: 'fingerprint-1', correctionIds: [correctionId],
     });
     assert.equal(second.id, first.id);
     assert.equal((db.prepare('SELECT status FROM corrections_ledger WHERE id = ?').get(correctionId) as { status: string }).status, 'open');
-
     lifecycle.transition(first.id, 'VALIDATING');
     lifecycle.transition(first.id, 'APPROVED');
     lifecycle.activate(first.id);
@@ -84,10 +79,7 @@ describe('operational evolution loop', () => {
 
   it('calculates takeover and security metrics from replay evidence', () => {
     const metrics = metricsFromReplay({
-      finalText: '',
-      totalTurns: 2,
-      totalTokens: 120,
-      terminated: true,
+      finalText: '', totalTurns: 2, totalTokens: 120, terminated: true,
       terminationReason: 'policy blocked: workspace boundary',
       observations: [{ isError: true, errorMessage: 'approval required' }],
     }, { success: true });
@@ -101,42 +93,30 @@ describe('operational evolution loop', () => {
     const db = setup();
     const lifecycle = new EvolutionLifecycle(db);
     const candidate = lifecycle.createCandidate({
-      experienceId: 'EXP-OP-PROMOTE',
-      contentPath: candidateFile('Use deterministic checks.'),
-      sourceFingerprint: 'promote-fingerprint',
+      experienceId: 'EXP-OP-PROMOTE', contentPath: candidateFile('Use deterministic checks.'), sourceFingerprint: 'promote-fingerprint',
     });
-    const evaluator = new ReplayEvaluator(db);
-    evaluator.addCase({ name: 'repair', input: { prompt: 'repair test' }, expected: { success: true } });
+    new ReplayEvaluator(db).addCase({ name: 'repair', input: { prompt: 'repair test' }, expected: { success: true } });
     let calls = 0;
-    const orchestrator = new EvolutionOrchestrator(db);
-    const result = await orchestrator.promote({
+    const result = await new EvolutionOrchestrator(db).promote({
       candidateId: candidate.id,
       executor: async ({ systemPrompt }) => {
         calls++;
-        const candidateApplied = systemPrompt?.includes('CANDIDATE_ENGINEERING_RULE') ?? false;
-        return {
-          finalText: 'completed',
-          totalTurns: candidateApplied ? 2 : 3,
-          totalTokens: candidateApplied ? 80 : 100,
-          terminated: false,
-          observations: [],
-        };
+        const applied = systemPrompt?.includes('CANDIDATE_ENGINEERING_RULE') ?? false;
+        return { finalText: 'completed', totalTurns: applied ? 2 : 3, totalTokens: applied ? 80 : 100, terminated: false, observations: [] };
       },
     });
     assert.equal(calls, 2);
     assert.equal(result.evaluation.verdict, 'PASS');
     assert.equal(result.candidate?.status, 'ACTIVE');
-    const replayRows = db.prepare('SELECT mode FROM evolution_replay_runs ORDER BY rowid ASC').all() as Array<{ mode: string }>;
-    assert.deepEqual(replayRows.map((row) => row.mode), ['baseline', 'candidate']);
+    const rows = db.prepare('SELECT mode FROM evolution_replay_runs ORDER BY rowid ASC').all() as Array<{ mode: string }>;
+    assert.deepEqual(rows.map((row) => row.mode), ['baseline', 'candidate']);
   });
 
   it('records failed candidate replay and quarantines regressions', async () => {
     const db = setup();
     const lifecycle = new EvolutionLifecycle(db);
     const candidate = lifecycle.createCandidate({
-      experienceId: 'EXP-OP-FAIL',
-      contentPath: candidateFile('Unsafe candidate.'),
-      sourceFingerprint: 'fail-fingerprint',
+      experienceId: 'EXP-OP-FAIL', contentPath: candidateFile('Unsafe candidate.'), sourceFingerprint: 'fail-fingerprint',
     });
     new ReplayEvaluator(db).addCase({ name: 'security', input: { prompt: 'safe task' }, expected: { success: true } });
     const runner = new AgentReplayRunner(db, {
