@@ -1,6 +1,7 @@
-import { closeDb, getDb } from './store/db.js';
+import { getMemoryBackendRouter } from './memory/router.js';
 import { getMemoryService } from './memory/service.js';
 import type { MemoryType } from './memory/types.js';
+import { closeDb, getDb } from './store/db.js';
 
 function args(): Record<string, string> {
   const output: Record<string, string> = {};
@@ -15,7 +16,7 @@ function args(): Record<string, string> {
 }
 
 function usage(): never {
-  console.error('Usage: npm run memory -- put|search|context|versions|rollback|invalidate|compress|gc [--type TYPE --scope ID --key KEY --content TEXT --query TEXT --version N]');
+  console.error('Usage: npm run memory -- put|search|context|remote-context|versions|rollback|invalidate|compress|gc|flush-remote|flush-authority [--type TYPE --scope ID --key KEY --content TEXT --query TEXT --version N]');
   process.exit(1);
 }
 
@@ -25,7 +26,7 @@ function type(value: string | undefined): MemoryType {
   return resolved;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   getDb();
   const service = getMemoryService();
   const command = process.argv[2];
@@ -56,6 +57,16 @@ function main(): void {
       console.log(service.buildContext({ query: options.query ?? '', projectId: options.project, sessionId: options.session }));
       return;
     }
+    if (command === 'remote-context') {
+      console.log(JSON.stringify(await getMemoryBackendRouter().compileAndRender({
+        query: options.query ?? '',
+        projectId: options.project ?? process.env.AWKN_PROJECT_ID ?? 'default-project',
+        sessionId: options.session ?? process.env.AWKN_MEMORY_SESSION_ID,
+        tokenBudget: options.tokenBudget ? Number(options.tokenBudget) : undefined,
+        maxItems: options.limit ? Number(options.limit) : undefined,
+      }), null, 2));
+      return;
+    }
     if (command === 'versions') {
       console.log(JSON.stringify(service.listVersions(type(options.type), options.scope ?? '', options.key ?? ''), null, 2));
       return;
@@ -81,10 +92,18 @@ function main(): void {
       console.log(JSON.stringify({ expired: service.expireNow() }, null, 2));
       return;
     }
+    if (command === 'flush-remote') {
+      console.log(JSON.stringify(await getMemoryBackendRouter().flushRemoteOutbox(), null, 2));
+      return;
+    }
+    if (command === 'flush-authority') {
+      console.log(JSON.stringify(await getMemoryBackendRouter().flushAuthorityOutbox(Number(options.limit ?? 20)), null, 2));
+      return;
+    }
     usage();
   } finally {
     closeDb();
   }
 }
 
-main();
+void main();
