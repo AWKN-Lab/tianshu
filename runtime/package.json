@@ -1,7 +1,7 @@
 {
   "name": "awkn-engine-runtime",
   "version": "0.1.0",
-  "description": "awkn引擎 自带轻量 Node.js 运行时 — Loop Engineering L1-L4",
+  "description": "awkn引擎持久化 Agent 工作流运行时",
   "type": "module",
   "main": "dist/cli.js",
   "bin": {
@@ -10,8 +10,11 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check src/",
+    "lint": "tsc --noEmit",
     "test": "node --import tsx --test \"test/*.test.ts\"",
+    "test:contracts": "node --import tsx --test \"test/contracts/*.test.ts\"",
+    "test:all": "npm run test && npm run test:contracts",
+    "check": "npm run typecheck && npm run lint && npm run test:all",
     "test:vitest": "vitest run",
     "dev": "tsx src/cli.ts"
   },

@@ -1,0 +1,36 @@
+name: runtime-ci
+
+on:
+  pull_request:
+    paths:
+      - 'runtime/**'
+      - '.github/workflows/runtime-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/**'
+      - '.github/workflows/runtime-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+      - run: npm ci
+      - run: npm run check
