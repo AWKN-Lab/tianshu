@@ -33,11 +33,29 @@ function asObject(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function parseJsonObject(text: string): Record<string, unknown> {
+  if (!text) return {};
+  try {
+    return asObject(JSON.parse(text));
+  } catch {
+    return { raw: text };
+  }
+}
+
 export class MemoryProtocolError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'MemoryProtocolError';
   }
+}
+
+export interface MemoryOsDiagnostic {
+  capabilities: MemoryBackendCapabilities;
+  context?: CompiledMemoryContext;
+  outbox: {
+    pending: number;
+    quarantinePath: string;
+  };
 }
 
 export class AwknMemoryOsBackend implements MemoryBackend {
@@ -73,6 +91,19 @@ export class AwknMemoryOsBackend implements MemoryBackend {
     return { backend: this.kind, online: true, protocol, features: [...features] };
   }
 
+  async diagnose(input?: CompileMemoryContextInput): Promise<MemoryOsDiagnostic> {
+    const capabilities = await this.connect();
+    const context = input ? await this.compileContext(input) : undefined;
+    return {
+      capabilities,
+      context,
+      outbox: {
+        pending: this.outbox.readValid().length,
+        quarantinePath: this.outbox.quarantinePath,
+      },
+    };
+  }
+
   async compileContext(input: CompileMemoryContextInput): Promise<CompiledMemoryContext> {
     const capabilities = this.protocol
       ? { protocol: this.protocol }
@@ -91,6 +122,19 @@ export class AwknMemoryOsBackend implements MemoryBackend {
     });
     const receiptId = String(receipt.receipt_id ?? asObject(receipt.receipt).receipt_id ?? '');
     if (!receiptId) throw new Error('AWKN Memory OS context response has no receipt_id');
+
+    const assembledItems = Array.isArray(receipt.items) ? receipt.items : null;
+    if (assembledItems?.length === 0 || Number(receipt.item_count) === 0) {
+      return {
+        backend: this.kind,
+        prompt: '',
+        stale: false,
+        receiptId,
+        protocol: capabilities.protocol,
+        items: [],
+      };
+    }
+
     const render = await this.request('POST', `/api/v1/context/receipts/${encodeURIComponent(receiptId)}/render`, {
       idempotency_key: randomUUID(),
       items: null,
@@ -223,7 +267,7 @@ export class AwknMemoryOsBackend implements MemoryBackend {
         body: cleanPayload ? JSON.stringify(cleanPayload) : undefined,
       });
       const text = await response.text();
-      const body = text ? asObject(JSON.parse(text)) : {};
+      const body = parseJsonObject(text);
       if (response.status >= 500 && queueOnFailure) {
         return this.queued(method, path, cleanPayload, idempotencyKey, `core-${response.status}`);
       }
