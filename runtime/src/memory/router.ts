@@ -136,6 +136,11 @@ export class MemoryBackendRouter {
     return this.authority.governCandidate(input);
   }
 
+  async reviewApproveActivateAuthorityRule(ruleId: string): Promise<Record<string, unknown>> {
+    if (!this.isRemoteAuthorityEnabled()) return { backend: 'local', status: 'SKIPPED' };
+    return this.authority.reviewApproveActivateRule(ruleId);
+  }
+
   async activateAuthorityRule(ruleId: string): Promise<Record<string, unknown>> {
     if (!this.isRemoteAuthorityEnabled()) return { backend: 'local', status: 'SKIPPED' };
     return this.authority.activateRule(ruleId);
