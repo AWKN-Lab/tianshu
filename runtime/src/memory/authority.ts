@@ -95,15 +95,23 @@ export class AwknMemoryAuthorityClient {
     if (!ruleId) throw new Error('AWKN Memory OS did not return rule_id');
 
     if (!input.autoActivate) return { experienceId, ruleId, status: 'PROPOSED' };
-    await this.request('POST', `/api/v1/rules/${encodeURIComponent(ruleId)}/review`);
-    await this.request('POST', `/api/v1/rules/${encodeURIComponent(ruleId)}/approve`);
-    const activation = await this.request('POST', `/api/v1/rules/${encodeURIComponent(ruleId)}/activate`);
+    const activation = await this.reviewApproveActivateRule(ruleId);
     return {
       experienceId,
       ruleId,
       status: 'ACTIVE',
       activationId: typeof activation.activation_id === 'string' ? activation.activation_id : undefined,
     };
+  }
+
+  async reviewApproveActivateRule(ruleId: string): Promise<Record<string, unknown>> {
+    await this.request('POST', `/api/v1/rules/${encodeURIComponent(ruleId)}/review`);
+    await this.request('POST', `/api/v1/rules/${encodeURIComponent(ruleId)}/approve`);
+    return this.request('POST', `/api/v1/rules/${encodeURIComponent(ruleId)}/activate`);
+  }
+
+  async activateRule(ruleId: string): Promise<Record<string, unknown>> {
+    return this.request('POST', `/api/v1/rules/${encodeURIComponent(ruleId)}/activate`);
   }
 
   async pauseRule(ruleId: string, reason: string): Promise<Record<string, unknown>> {
