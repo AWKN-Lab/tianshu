@@ -17,6 +17,8 @@ export interface ExecutionContext {
   workspaceRoot?: string;
   approvedToolNames?: string[];
   approvalId?: string;
+  runId?: string;
+  stepId?: string;
 }
 
 export interface ToolResult {
