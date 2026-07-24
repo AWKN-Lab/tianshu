@@ -5,7 +5,8 @@
   "type": "module",
   "main": "dist/cli.js",
   "bin": {
-    "awkn-engine": "bin/awkn-engine.js"
+    "awkn-engine": "bin/awkn-engine.js",
+    "awkn-mcp-server": "bin/awkn-mcp-server.js"
   },
   "scripts": {
     "build": "tsc",
@@ -16,6 +17,7 @@
     "dev": "tsx src/cli.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^11.7.0",
     "cron-parser": "^5.5.0",
     "zod": "^3.24.0"
