@@ -138,7 +138,11 @@ export class ReplayEvaluator {
       verdict,
       new Date().toISOString(),
     );
-    this.lifecycle.saveEvaluation(candidateId, { baselineMetrics: baseline, candidateMetrics, evaluation });
+    this.lifecycle.saveEvaluation(candidateId, {
+      baselineMetrics: { ...baseline },
+      candidateMetrics: { ...candidateMetrics },
+      evaluation,
+    });
     if (originalStatus === 'ACTIVE') {
       if (verdict === 'FAIL') this.lifecycle.transition(candidateId, 'QUARANTINED', reasons.join('; '));
     } else {
