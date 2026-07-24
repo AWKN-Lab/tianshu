@@ -372,7 +372,7 @@ export class EvolutionOrchestrator {
   }
 
   async quarantineCandidate(candidateId: string, reason = 'evaluation failed'): Promise<EvolutionCandidate> {
-    const candidate = this.requireCandidate(candidateId);
+    this.requireCandidate(candidateId);
     const projection = this.readAuthority(candidateId);
     if (projection.authority_rule_id && projection.authority_status === 'ACTIVE') {
       await this.authority.pauseAuthorityRule(projection.authority_rule_id, reason);
@@ -433,6 +433,7 @@ export class EvolutionOrchestrator {
   }
 
   private saveAuthority(candidateId: string, authority: GovernCandidateResult): void {
+    const now = new Date().toISOString();
     this.db.prepare(
       `UPDATE evolution_candidates
        SET authority_experience_id = ?, authority_rule_id = ?, authority_status = ?,
@@ -442,19 +443,20 @@ export class EvolutionOrchestrator {
       authority.experienceId,
       authority.ruleId,
       authority.status,
-      new Date().toISOString(),
-      new Date().toISOString(),
+      now,
+      now,
       candidateId,
     );
   }
 
   private saveAuthorityError(candidateId: string, error: unknown): void {
+    const now = new Date().toISOString();
     this.db.prepare(
       `UPDATE evolution_candidates SET authority_error = ?, authority_synced_at = ?, updated_at = ? WHERE id = ?`,
     ).run(
       error instanceof Error ? error.message : String(error),
-      new Date().toISOString(),
-      new Date().toISOString(),
+      now,
+      now,
       candidateId,
     );
   }
