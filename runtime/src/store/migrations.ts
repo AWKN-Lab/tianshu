@@ -238,6 +238,59 @@ const MIGRATIONS: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_evolution_history_experience ON evolution_activation_history(experience_id, created_at);
     `,
   },
+  {
+    version: 7,
+    name: 'runtime-memory-os',
+    sql: `
+      CREATE TABLE IF NOT EXISTS memory_entries (
+        id TEXT PRIMARY KEY,
+        memory_type TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        memory_key TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        content TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        embedding_json TEXT NOT NULL DEFAULT '[]',
+        importance REAL NOT NULL DEFAULT 0.5,
+        confidence REAL NOT NULL DEFAULT 0.8,
+        source_run_id TEXT,
+        source_step_id TEXT,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        expires_at TEXT,
+        access_count INTEGER NOT NULL DEFAULT 0,
+        last_access_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (memory_type, scope_id, memory_key, version),
+        FOREIGN KEY (source_run_id) REFERENCES runs(id),
+        FOREIGN KEY (source_step_id) REFERENCES steps(id)
+      );
+      CREATE TABLE IF NOT EXISTS memory_events (
+        id TEXT PRIMARY KEY,
+        memory_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (memory_id) REFERENCES memory_entries(id)
+      );
+      CREATE TABLE IF NOT EXISTS memory_compactions (
+        id TEXT PRIMARY KEY,
+        memory_type TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        source_ids_json TEXT NOT NULL,
+        output_memory_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (output_memory_id) REFERENCES memory_entries(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_memory_active_scope_type ON memory_entries(status, scope_id, memory_type, updated_at);
+      CREATE INDEX IF NOT EXISTS idx_memory_key_versions ON memory_entries(memory_type, scope_id, memory_key, version DESC);
+      CREATE INDEX IF NOT EXISTS idx_memory_expiry ON memory_entries(status, expires_at);
+      CREATE INDEX IF NOT EXISTS idx_memory_source_run ON memory_entries(source_run_id);
+      CREATE INDEX IF NOT EXISTS idx_memory_events_memory ON memory_events(memory_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_memory_compactions_scope ON memory_compactions(scope_id, memory_type, created_at);
+    `,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {
