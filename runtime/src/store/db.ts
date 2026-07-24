@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runMigrations } from './migrations.js';
+import { runOperationalEvolutionMigration } from './operational-evolution-migration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -17,6 +18,7 @@ export function getDb(dbPath: string = DEFAULT_DB_PATH): Database.Database {
   dbInstance.pragma('journal_mode = WAL');
   dbInstance.pragma('foreign_keys = ON');
   runMigrations(dbInstance);
+  runOperationalEvolutionMigration(dbInstance);
   return dbInstance;
 }
 
