@@ -1,4 +1,5 @@
 import { createLogger } from '../core/logger.js';
+import { startSpan } from '../observability/trace.js';
 import { getSandboxExecutor } from '../sandbox/index.js';
 import { recordSandboxExecution } from '../sandbox/audit-store.js';
 import { getApprovalStore } from '../workflow/approval-store.js';
@@ -38,38 +39,68 @@ export class ToolRegistry {
     if (tool.disabled) throw new Error(`Tool "${name}" is disabled`);
 
     const resolved = resolveToolDefaults(tool);
-    const approvedNames = new Set(ctx?.approvedToolNames ?? []);
-    if (resolved.permissionLevel === 'confirm' && ctx?.runId && !approvedNames.has(name) && !approvedNames.has('*')) {
-      const approvalStore = getApprovalStore();
-      const approved = ctx.approvalId
-        ? approvalStore.isApproved(ctx.approvalId, ctx.runId, name)
-        : approvalStore.findApproved(ctx.runId, name) !== null;
-      if (!approved) {
-        const approval = approvalStore.request({
-          runId: ctx.runId,
-          stepId: ctx.stepId,
-          toolName: name,
-          args,
-        });
-        const decision = toolPolicy.evaluate(tool, args, ctx);
-        throw new ToolPolicyError(`approval required: ${approval.id}`, {
-          ...decision,
-          allowed: false,
-          approvalRequired: true,
-          reason: `approval required: ${approval.id}`,
-        });
+    const span = startSpan({
+      traceId: ctx?.traceId,
+      name: 'tool.execute',
+      kind: 'client',
+      attributes: {
+        'tool.name': name,
+        'tool.source': tool.source,
+        'tool.permission_level': resolved.permissionLevel,
+        'awkn.call_source': ctx?.callSource ?? 'unknown',
+        'run.id': ctx?.runId ?? '',
+        'step.id': ctx?.stepId ?? '',
+      },
+    });
+
+    try {
+      const approvedNames = new Set(ctx?.approvedToolNames ?? []);
+      if (resolved.permissionLevel === 'confirm' && ctx?.runId && !approvedNames.has(name) && !approvedNames.has('*')) {
+        const approvalStore = getApprovalStore();
+        const approved = ctx.approvalId
+          ? approvalStore.isApproved(ctx.approvalId, ctx.runId, name)
+          : approvalStore.findApproved(ctx.runId, name) !== null;
+        if (!approved) {
+          const approval = approvalStore.request({
+            runId: ctx.runId,
+            stepId: ctx.stepId,
+            toolName: name,
+            args,
+          });
+          const decision = toolPolicy.evaluate(tool, args, ctx);
+          throw new ToolPolicyError(`approval required: ${approval.id}`, {
+            ...decision,
+            allowed: false,
+            approvalRequired: true,
+            reason: `approval required: ${approval.id}`,
+          });
+        }
+        approvedNames.add(name);
       }
-      approvedNames.add(name);
+
+      const effectiveContext = ctx ? { ...ctx, approvedToolNames: [...approvedNames] } : ctx;
+      toolPolicy.assertAllowed(tool, args, effectiveContext);
+      const text = name === 'exec' || name === 'write'
+        ? await this.executeSandboxed(name, args, effectiveContext)
+        : await this.executeHandler(tool, args, effectiveContext);
+
+      span.end('ok', {
+        'tool.result.size': text.length,
+        'tool.sandboxed': name === 'exec' || name === 'write',
+        'tool.approval.present': resolved.permissionLevel !== 'confirm' || approvedNames.has(name) || approvedNames.has('*'),
+      });
+      return text;
+    } catch (err) {
+      span.end('error', {
+        'tool.sandboxed': name === 'exec' || name === 'write',
+        'tool.policy_blocked': err instanceof ToolPolicyError,
+      }, err);
+      throw err;
     }
+  }
 
-    const effectiveContext = ctx ? { ...ctx, approvedToolNames: [...approvedNames] } : ctx;
-    toolPolicy.assertAllowed(tool, args, effectiveContext);
-
-    if (name === 'exec' || name === 'write') {
-      return this.executeSandboxed(name, args, effectiveContext);
-    }
-
-    const result = await tool.execute(args, effectiveContext);
+  private async executeHandler(tool: ToolHandler, args: Record<string, unknown>, ctx?: ExecutionContext): Promise<string> {
+    const result = await tool.execute(args, ctx);
     const text = typeof result === 'string' ? result : result.content;
     const maxSize = tool.maxResultSize ?? TOOL_DEFAULTS.maxResultSize;
     return text.length > maxSize ? `${text.slice(0, maxSize)}\n... [truncated]` : text;
