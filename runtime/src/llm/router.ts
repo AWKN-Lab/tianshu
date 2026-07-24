@@ -1,13 +1,21 @@
 import { createLogger } from '../core/logger.js';
+import { getMemoryService } from '../memory/service.js';
 import { startSpan } from '../observability/trace.js';
 import { queryRun } from '../store/db.js';
-import type { ChatRequest, ChatResponse, LlmProvider, LlmProviderInterface } from './types.js';
+import type { ChatMessage, ChatRequest, ChatResponse, LlmProvider, LlmProviderInterface } from './types.js';
 import { TraeProvider } from './providers/trae.js';
 import { CodexProvider } from './providers/codex.js';
 import { MiniMaxProvider } from './providers/minimax.js';
 
 const logger = createLogger('LlmRouter');
 const ENV_PROVIDER = process.env.AWKN_LLM_PROVIDER as LlmProvider | undefined;
+
+interface MemoryEnrichment {
+  request: ChatRequest;
+  userText: string;
+  projectId: string;
+  sessionId: string;
+}
 
 export class LlmRouter {
   private providers: Map<LlmProvider, LlmProviderInterface> = new Map();
@@ -32,6 +40,7 @@ export class LlmRouter {
 
   async chat(req: ChatRequest): Promise<ChatResponse> {
     const provider = this.selectProvider(req);
+    const enriched = this.enrichWithMemory(req);
     const startedAt = Date.now();
     const span = startSpan({
       traceId: req.traceId,
@@ -43,13 +52,15 @@ export class LlmRouter {
         'gen_ai.provider.requested': provider.name,
         'awkn.call_source': req.callSource ?? 'unknown',
         'awkn.fallback_policy': req.fallbackPolicy ?? 'allow',
+        'awkn.memory.injected': enriched.request.messages.length > req.messages.length,
       },
     });
 
     try {
-      const response = await provider.chat(req);
+      const response = await provider.chat(enriched.request);
       const durationMs = Date.now() - startedAt;
       this.recordUsage(response, req.callSource, durationMs);
+      this.rememberResponse(enriched, response, req.traceId);
       span.end('ok', this.responseAttributes(response, durationMs, false));
       return response;
     } catch (err) {
@@ -69,9 +80,10 @@ export class LlmRouter {
         const fallback = this.providers.get(name);
         if (!fallback) continue;
         try {
-          const response = await fallback.chat(req);
+          const response = await fallback.chat(enriched.request);
           const durationMs = Date.now() - startedAt;
           this.recordUsage(response, req.callSource, durationMs);
+          this.rememberResponse(enriched, response, req.traceId);
           logger.info(`Fallback to ${name} succeeded`);
           span.end('ok', this.responseAttributes(response, durationMs, true));
           return response;
@@ -87,6 +99,45 @@ export class LlmRouter {
         'awkn.duration_ms': Date.now() - startedAt,
       }, err);
       throw err;
+    }
+  }
+
+  private enrichWithMemory(req: ChatRequest): MemoryEnrichment {
+    const userText = [...req.messages].reverse().find((message) => message.role === 'user')?.content ?? '';
+    const projectId = process.env.AWKN_PROJECT_ID ?? process.env.npm_package_name ?? 'default-project';
+    const sessionId = process.env.AWKN_MEMORY_SESSION_ID ?? projectId;
+    if (process.env.AWKN_DISABLE_MEMORY === '1' || req.callSource !== 'main_dialogue' || !userText.trim()) {
+      return { request: req, userText, projectId, sessionId };
+    }
+
+    try {
+      const context = getMemoryService().buildContext({ query: userText, projectId, sessionId, limit: 8, maxChars: 6000 });
+      if (!context) return { request: req, userText, projectId, sessionId };
+      const messages: ChatMessage[] = [...req.messages];
+      let insertAt = 0;
+      while (insertAt < messages.length && messages[insertAt]?.role === 'system') insertAt++;
+      messages.splice(insertAt, 0, { role: 'system', content: context });
+      return { request: { ...req, messages }, userText, projectId, sessionId };
+    } catch (err) {
+      logger.warn(`Failed to build memory context: ${String(err)}`);
+      return { request: req, userText, projectId, sessionId };
+    }
+  }
+
+  private rememberResponse(enrichment: MemoryEnrichment, response: ChatResponse, traceId?: string): void {
+    if (process.env.AWKN_DISABLE_MEMORY === '1') return;
+    if (enrichment.request.callSource !== 'main_dialogue') return;
+    if (response.finishReason !== 'stop' || !response.content.trim()) return;
+    try {
+      getMemoryService().recordInteraction({
+        userText: enrichment.userText,
+        assistantText: response.content,
+        projectId: enrichment.projectId,
+        sessionId: enrichment.sessionId,
+        traceId,
+      });
+    } catch (err) {
+      logger.warn(`Failed to persist working memory: ${String(err)}`);
     }
   }
 
