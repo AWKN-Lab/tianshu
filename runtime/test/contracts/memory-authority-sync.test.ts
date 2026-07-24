@@ -31,24 +31,48 @@ function candidateFile(content = 'Preserve public APIs and add deterministic reg
   return path;
 }
 
+function approve(lifecycle: EvolutionLifecycle, candidateId: string): void {
+  lifecycle.transition(candidateId, 'VALIDATING');
+  lifecycle.transition(candidateId, 'APPROVED');
+}
+
+function setAuthority(
+  db: Database.Database,
+  candidateId: string,
+  experienceId: string,
+  ruleId: string,
+  status: string,
+): void {
+  db.prepare(
+    `UPDATE evolution_candidates
+     SET authority_experience_id = ?, authority_rule_id = ?, authority_status = ? WHERE id = ?`,
+  ).run(experienceId, ruleId, status, candidateId);
+}
+
 class FakeAuthority implements EvolutionAuthorityGateway {
   readonly governed: GovernCandidateInput[] = [];
   readonly activated: string[] = [];
   readonly paused: string[] = [];
+  readonly operations: string[] = [];
+  failActivationFor?: string;
 
   isRemoteAuthorityEnabled(): boolean { return true; }
 
   async governCandidate(input: GovernCandidateInput): Promise<GovernCandidateResult> {
     this.governed.push(input);
+    this.operations.push(`govern:${input.candidateId}`);
     return { experienceId: 'exp-remote-1', ruleId: 'rule-remote-1', status: 'PROPOSED' };
   }
 
   async activateAuthorityRule(ruleId: string): Promise<Record<string, unknown>> {
+    this.operations.push(`activate:${ruleId}`);
+    if (this.failActivationFor === ruleId) throw new Error(`activation failed: ${ruleId}`);
     this.activated.push(ruleId);
-    return { activation_id: 'activation-1', status: 'ACTIVE' };
+    return { activation_id: `activation-${ruleId}`, status: 'ACTIVE' };
   }
 
-  async pauseAuthorityRule(ruleId: string): Promise<Record<string, unknown>> {
+  async pauseAuthorityRule(ruleId: string, _reason: string): Promise<Record<string, unknown>> {
+    this.operations.push(`pause:${ruleId}`);
     this.paused.push(ruleId);
     return { status: 'PAUSED' };
   }
@@ -128,20 +152,65 @@ describe('Memory OS authority synchronization', () => {
     assert.deepEqual(authority.activated, ['rule-remote-1']);
   });
 
+  it('pauses the previous remote rule before activating a replacement version', async () => {
+    const db = setup();
+    const lifecycle = new EvolutionLifecycle(db);
+    const first = lifecycle.createCandidate({ experienceId: 'EXP-SINGLE', contentPath: candidateFile('rule v1') });
+    approve(lifecycle, first.id);
+    lifecycle.activate(first.id);
+    setAuthority(db, first.id, 'exp-old', 'rule-old', 'ACTIVE');
+
+    const second = lifecycle.createCandidate({ experienceId: 'EXP-SINGLE', contentPath: candidateFile('rule v2') });
+    approve(lifecycle, second.id);
+    setAuthority(db, second.id, 'exp-new', 'rule-new', 'PROPOSED');
+
+    const authority = new FakeAuthority();
+    const activated = await new EvolutionOrchestrator(db, authority).activateApprovedCandidate(second.id);
+    assert.equal(activated.candidate.status, 'ACTIVE');
+    assert.deepEqual(authority.operations, ['pause:rule-old', 'activate:rule-new']);
+    assert.equal(lifecycle.read(first.id)?.status, 'RETIRED');
+    const rows = db.prepare(
+      `SELECT id, authority_status FROM evolution_candidates WHERE id IN (?, ?) ORDER BY id`,
+    ).all(first.id, second.id) as Array<{ id: string; authority_status: string }>;
+    const statuses = new Map(rows.map((row) => [row.id, row.authority_status]));
+    assert.equal(statuses.get(first.id), 'PAUSED');
+    assert.equal(statuses.get(second.id), 'ACTIVE');
+  });
+
+  it('reactivates the previous remote rule when replacement activation fails', async () => {
+    const db = setup();
+    const lifecycle = new EvolutionLifecycle(db);
+    const first = lifecycle.createCandidate({ experienceId: 'EXP-COMPENSATE', contentPath: candidateFile('rule old') });
+    approve(lifecycle, first.id);
+    lifecycle.activate(first.id);
+    setAuthority(db, first.id, 'exp-old', 'rule-old', 'ACTIVE');
+
+    const second = lifecycle.createCandidate({ experienceId: 'EXP-COMPENSATE', contentPath: candidateFile('rule bad') });
+    approve(lifecycle, second.id);
+    setAuthority(db, second.id, 'exp-bad', 'rule-bad', 'PROPOSED');
+
+    const authority = new FakeAuthority();
+    authority.failActivationFor = 'rule-bad';
+    await assert.rejects(
+      () => new EvolutionOrchestrator(db, authority).activateApprovedCandidate(second.id),
+      /activation failed: rule-bad/,
+    );
+    assert.deepEqual(authority.operations, ['pause:rule-old', 'activate:rule-bad', 'activate:rule-old']);
+    assert.equal(lifecycle.read(first.id)?.status, 'ACTIVE');
+    assert.equal(lifecycle.read(second.id)?.status, 'APPROVED');
+    const oldStatus = db.prepare('SELECT authority_status FROM evolution_candidates WHERE id = ?').get(first.id) as { authority_status: string };
+    assert.equal(oldStatus.authority_status, 'ACTIVE');
+  });
+
   it('pauses the remote rule before quarantining an active local candidate', async () => {
     const db = setup();
     const lifecycle = new EvolutionLifecycle(db);
     const candidate = lifecycle.createCandidate({
       experienceId: 'EXP-AUTHORITY-2', contentPath: candidateFile(), sourceFingerprint: 'authority-fingerprint-2',
     });
-    lifecycle.transition(candidate.id, 'VALIDATING');
-    lifecycle.transition(candidate.id, 'APPROVED');
+    approve(lifecycle, candidate.id);
     lifecycle.activate(candidate.id);
-    db.prepare(
-      `UPDATE evolution_candidates
-       SET authority_experience_id = 'exp-2', authority_rule_id = 'rule-2', authority_status = 'ACTIVE'
-       WHERE id = ?`,
-    ).run(candidate.id);
+    setAuthority(db, candidate.id, 'exp-2', 'rule-2', 'ACTIVE');
     const authority = new FakeAuthority();
     const orchestrator = new EvolutionOrchestrator(db, authority);
     const quarantined = await orchestrator.quarantineCandidate(candidate.id, 'regression detected');

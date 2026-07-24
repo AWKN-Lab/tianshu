@@ -315,14 +315,15 @@ export class EvolutionOrchestrator {
           baseline: evaluation.baseline,
           candidate: evaluation.candidate,
         },
-        autoActivate: autoGovern(),
+        autoActivate: false,
       });
       if (!authority) throw new Error('remote authority returned no governance result');
       this.saveAuthority(candidate.id, authority);
-      const activated = authority.status === 'ACTIVE'
-        ? this.lifecycle.activate(candidate.id)
-        : this.lifecycle.read(candidate.id);
-      return { evaluation, candidate: activated, authority };
+      if (autoGovern()) {
+        const activated = await this.activateApprovedCandidate(candidate.id);
+        return { evaluation, candidate: activated.candidate, authority: activated.authority };
+      }
+      return { evaluation, candidate: this.lifecycle.read(candidate.id), authority };
     } catch (error) {
       this.saveAuthorityError(candidate.id, error);
       throw error;
@@ -339,32 +340,23 @@ export class EvolutionOrchestrator {
       return { candidate: this.lifecycle.activate(candidateId), authority: null };
     }
 
-    const projection = this.readAuthority(candidateId);
+    let projection = this.readAuthority(candidateId);
     try {
-      let authority: GovernCandidateResult;
-      if (projection.authority_rule_id) {
-        const activation = await this.authority.activateAuthorityRule(projection.authority_rule_id);
-        authority = {
-          experienceId: projection.authority_experience_id ?? '',
-          ruleId: projection.authority_rule_id,
-          status: 'ACTIVE',
-          activationId: typeof activation.activation_id === 'string' ? activation.activation_id : undefined,
-        };
-      } else {
-        const result = await this.authority.governCandidate({
+      if (!projection.authority_rule_id) {
+        const governed = await this.authority.governCandidate({
           projectId: projectId(),
           candidateId: candidate.id,
           experienceKey: candidate.experience_id,
           content: readFileSync(candidate.content_path, 'utf-8'),
           evaluation: parseObject(candidate.evaluation_json),
-          autoActivate: true,
+          autoActivate: false,
         });
-        if (!result) throw new Error('remote authority returned no governance result');
-        authority = result;
+        if (!governed) throw new Error('remote authority returned no governance result');
+        this.saveAuthority(candidate.id, governed);
+        projection = this.readAuthority(candidateId);
       }
-      if (authority.status !== 'ACTIVE') throw new Error(`authority rule ${authority.ruleId} is not ACTIVE`);
-      this.saveAuthority(candidate.id, authority);
-      return { candidate: this.lifecycle.activate(candidate.id), authority };
+      if (!projection.authority_rule_id) throw new Error(`candidate ${candidateId} has no authority rule`);
+      return await this.activateWithSingleActive(candidate, projection);
     } catch (error) {
       this.saveAuthorityError(candidate.id, error);
       throw error;
@@ -374,13 +366,21 @@ export class EvolutionOrchestrator {
   async quarantineCandidate(candidateId: string, reason = 'evaluation failed'): Promise<EvolutionCandidate> {
     this.requireCandidate(candidateId);
     const projection = this.readAuthority(candidateId);
+    let paused = false;
     if (projection.authority_rule_id && projection.authority_status === 'ACTIVE') {
       await this.authority.pauseAuthorityRule(projection.authority_rule_id, reason);
-      this.db.prepare(
-        `UPDATE evolution_candidates SET authority_status = 'PAUSED', authority_synced_at = ?, authority_error = NULL WHERE id = ?`,
-      ).run(new Date().toISOString(), candidateId);
+      this.setAuthorityStatus(candidateId, 'PAUSED');
+      paused = true;
     }
-    return this.lifecycle.transition(candidateId, 'QUARANTINED', reason);
+    try {
+      return this.lifecycle.transition(candidateId, 'QUARANTINED', reason);
+    } catch (error) {
+      if (paused && projection.authority_rule_id) {
+        await this.authority.activateAuthorityRule(projection.authority_rule_id).catch(() => ({}));
+        this.setAuthorityStatus(candidateId, 'ACTIVE');
+      }
+      throw error;
+    }
   }
 
   async rollback(experienceId: string): Promise<EvolutionCandidate> {
@@ -394,29 +394,105 @@ export class EvolutionOrchestrator {
        ORDER BY created_at DESC LIMIT 1`,
     ).get(experienceId, current.id) as { from_candidate_id: string } | undefined;
     if (!history) throw new Error(`no rollback target for ${experienceId}`);
-    const previousProjection = this.readAuthority(history.from_candidate_id);
+    const previous = this.requireCandidate(history.from_candidate_id);
+    const previousProjection = this.readAuthority(previous.id);
     const currentProjection = this.readAuthority(current.id);
+    let currentPaused = false;
+    let previousActivated = false;
 
     if (this.authority.isRemoteAuthorityEnabled()) {
-      if (currentProjection.authority_rule_id && currentProjection.authority_status === 'ACTIVE') {
-        await this.authority.pauseAuthorityRule(currentProjection.authority_rule_id, 'tianshu rollback');
-      }
-      if (previousProjection.authority_rule_id) {
-        await this.authority.activateAuthorityRule(previousProjection.authority_rule_id);
+      try {
+        if (currentProjection.authority_rule_id && currentProjection.authority_status === 'ACTIVE') {
+          await this.authority.pauseAuthorityRule(currentProjection.authority_rule_id, 'tianshu rollback');
+          this.setAuthorityStatus(current.id, 'PAUSED');
+          currentPaused = true;
+        }
+        if (previousProjection.authority_rule_id) {
+          await this.authority.activateAuthorityRule(previousProjection.authority_rule_id);
+          this.setAuthorityStatus(previous.id, 'ACTIVE');
+          previousActivated = true;
+        }
+      } catch (error) {
+        if (previousActivated && previousProjection.authority_rule_id) {
+          await this.authority.pauseAuthorityRule(previousProjection.authority_rule_id, 'rollback compensation').catch(() => ({}));
+          this.setAuthorityStatus(previous.id, 'PAUSED');
+        }
+        if (currentPaused && currentProjection.authority_rule_id) {
+          await this.authority.activateAuthorityRule(currentProjection.authority_rule_id).catch(() => ({}));
+          this.setAuthorityStatus(current.id, 'ACTIVE');
+        }
+        throw error;
       }
     }
 
-    const restored = this.lifecycle.rollback(experienceId);
-    const now = new Date().toISOString();
-    this.db.prepare(
-      `UPDATE evolution_candidates SET authority_status = 'PAUSED', authority_synced_at = ? WHERE id = ?`,
-    ).run(now, current.id);
-    if (previousProjection.authority_rule_id) {
-      this.db.prepare(
-        `UPDATE evolution_candidates SET authority_status = 'ACTIVE', authority_synced_at = ?, authority_error = NULL WHERE id = ?`,
-      ).run(now, restored.id);
+    try {
+      return this.lifecycle.rollback(experienceId);
+    } catch (error) {
+      if (this.authority.isRemoteAuthorityEnabled()) {
+        if (previousActivated && previousProjection.authority_rule_id) {
+          await this.authority.pauseAuthorityRule(previousProjection.authority_rule_id, 'local rollback failed').catch(() => ({}));
+          this.setAuthorityStatus(previous.id, 'PAUSED');
+        }
+        if (currentPaused && currentProjection.authority_rule_id) {
+          await this.authority.activateAuthorityRule(currentProjection.authority_rule_id).catch(() => ({}));
+          this.setAuthorityStatus(current.id, 'ACTIVE');
+        }
+      }
+      throw error;
     }
-    return restored;
+  }
+
+  private async activateWithSingleActive(
+    candidate: EvolutionCandidate,
+    projection: AuthorityProjection,
+  ): Promise<{ candidate: EvolutionCandidate; authority: GovernCandidateResult }> {
+    const ruleId = projection.authority_rule_id;
+    if (!ruleId) throw new Error(`candidate ${candidate.id} has no authority rule`);
+    const previous = this.findPreviousActiveCandidate(candidate);
+    const previousProjection = previous ? this.readAuthority(previous.id) : null;
+    let previousPaused = false;
+
+    try {
+      if (previous && previousProjection?.authority_rule_id && previousProjection.authority_status === 'ACTIVE') {
+        await this.authority.pauseAuthorityRule(previousProjection.authority_rule_id, `superseded by candidate ${candidate.id}`);
+        this.setAuthorityStatus(previous.id, 'PAUSED');
+        previousPaused = true;
+      }
+      const activation = await this.authority.activateAuthorityRule(ruleId);
+      const authority: GovernCandidateResult = {
+        experienceId: projection.authority_experience_id ?? '',
+        ruleId,
+        status: 'ACTIVE',
+        activationId: typeof activation.activation_id === 'string' ? activation.activation_id : undefined,
+      };
+      this.saveAuthority(candidate.id, authority);
+
+      try {
+        return { candidate: this.lifecycle.activate(candidate.id), authority };
+      } catch (error) {
+        await this.authority.pauseAuthorityRule(ruleId, 'local activation failed').catch(() => ({}));
+        this.setAuthorityStatus(candidate.id, 'PAUSED');
+        if (previousPaused && previousProjection?.authority_rule_id && previous) {
+          await this.authority.activateAuthorityRule(previousProjection.authority_rule_id).catch(() => ({}));
+          this.setAuthorityStatus(previous.id, 'ACTIVE');
+        }
+        throw error;
+      }
+    } catch (error) {
+      if (previousPaused && previousProjection?.authority_rule_id && previous) {
+        await this.authority.activateAuthorityRule(previousProjection.authority_rule_id).catch(() => ({}));
+        this.setAuthorityStatus(previous.id, 'ACTIVE');
+      }
+      throw error;
+    }
+  }
+
+  private findPreviousActiveCandidate(candidate: EvolutionCandidate): EvolutionCandidate | null {
+    return (this.db.prepare(
+      `SELECT * FROM evolution_candidates
+       WHERE experience_id = ? AND status = 'ACTIVE' AND id <> ?
+       ORDER BY promoted_at DESC, updated_at DESC LIMIT 1`,
+    ).get(candidate.experience_id, candidate.id) as EvolutionCandidate | undefined) ?? null;
   }
 
   private requireCandidate(candidateId: string): EvolutionCandidate {
@@ -447,6 +523,15 @@ export class EvolutionOrchestrator {
       now,
       candidateId,
     );
+  }
+
+  private setAuthorityStatus(candidateId: string, status: string): void {
+    const now = new Date().toISOString();
+    this.db.prepare(
+      `UPDATE evolution_candidates
+       SET authority_status = ?, authority_synced_at = ?, authority_error = NULL, updated_at = ?
+       WHERE id = ?`,
+    ).run(status, now, now, candidateId);
   }
 
   private saveAuthorityError(candidateId: string, error: unknown): void {
