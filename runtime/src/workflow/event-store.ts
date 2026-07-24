@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { getMemoryService } from '../memory/service.js';
 import { generateTraceId, recordCompletedSpan } from '../observability/trace.js';
 import { queryAll, queryOne, queryRun, transaction } from '../store/db.js';
 
@@ -149,6 +150,7 @@ export class EventStore {
       );
       this.insertEvent(id, `run.${status}`, { ...(output ?? {}), status });
     });
+
     recordCompletedSpan({
       traceId: existing.trace_id,
       name: `workflow.run.${status}`,
@@ -156,6 +158,14 @@ export class EventStore {
       status: ['failed', 'budget_exceeded', 'policy_blocked'].includes(status) ? 'error' : 'ok',
       attributes: { 'workflow.name': existing.workflow_name, 'run.id': id, 'run.status': status },
     });
+
+    if (terminal && process.env.AWKN_DISABLE_MEMORY !== '1') {
+      try {
+        getMemoryService().recordRunTrajectory(id);
+      } catch {
+        // Memory persistence is fail-open for the workflow state transition.
+      }
+    }
     return this.readRun(id)!;
   }
 
@@ -166,8 +176,7 @@ export class EventStore {
     payload?: Record<string, unknown>;
     attempt?: number;
   }): StepRecord {
-    const run = this.readRun(input.runId);
-    if (!run) throw new Error(`run ${input.runId} not found`);
+    if (!this.readRun(input.runId)) throw new Error(`run ${input.runId} not found`);
     const attempt = input.attempt ?? 1;
     const existing = this.findStep(input.runId, input.stepKey, attempt);
     if (existing) return existing;
@@ -232,6 +241,7 @@ export class EventStore {
         ...(errorText ? { error: errorText } : {}),
       }, id);
     });
+
     if (run) {
       recordCompletedSpan({
         traceId: run.trace_id,
@@ -269,7 +279,7 @@ export class EventStore {
 
     for (const event of events) {
       let payload: Record<string, unknown> = {};
-      try { payload = JSON.parse(event.payload_json) as Record<string, unknown>; } catch { /* corrupted payload remains auditable */ }
+      try { payload = JSON.parse(event.payload_json) as Record<string, unknown>; } catch { /* audit keeps malformed payload */ }
       if (event.event_type.startsWith('run.')) {
         const next = event.event_type.slice(4) as RunStatus;
         if (RUN_STATUSES.has(next)) status = next;
@@ -286,15 +296,15 @@ export class EventStore {
         }
       } else if (event.event_type.startsWith('step.')) {
         const next = event.event_type.slice(5) as StepStatus;
-        const projectedStepId = String(payload.stepId ?? event.step_id ?? '');
-        if (projectedStepId && STEP_STATUSES.has(next)) {
-          const current = steps[projectedStepId] ?? {
-            stepId: projectedStepId,
+        const stepId = String(payload.stepId ?? event.step_id ?? '');
+        if (stepId && STEP_STATUSES.has(next)) {
+          const current = steps[stepId] ?? {
+            stepId,
             stepKey: String(payload.stepKey ?? ''),
             status: 'created' as StepStatus,
             attempt: Number(payload.attempt ?? 1),
           };
-          steps[projectedStepId] = { ...current, status: next };
+          steps[stepId] = { ...current, status: next };
         }
       }
     }
@@ -321,14 +331,20 @@ export class EventStore {
     }
 
     if (eventType === 'l2.cycle.evaluated') {
-      const step = this.findStep(runId, stepKey, 1) ?? this.createStep({ runId, stepKey, stepType: 'l2_cycle', payload: { cycle }, attempt: 1 });
+      const step = this.findStep(runId, stepKey, 1)
+        ?? this.createStep({ runId, stepKey, stepType: 'l2_cycle', payload: { cycle }, attempt: 1 });
       if (step.status === 'created') this.transitionStep(step.id, 'running');
       const current = this.readStep(step.id)!;
       if (!['running', 'retrying', 'waiting_tool', 'waiting_approval'].includes(current.status)) return;
       const results = Array.isArray(payload.results) ? payload.results : [];
       const passed = results.length > 0 && results.every((result) =>
         Boolean(result && typeof result === 'object' && (result as { passed?: unknown }).passed === true));
-      this.transitionStep(current.id, passed ? 'succeeded' : 'failed', payload, passed ? undefined : 'one or more L2 gates failed');
+      this.transitionStep(
+        current.id,
+        passed ? 'succeeded' : 'failed',
+        payload,
+        passed ? undefined : 'one or more L2 gates failed',
+      );
     }
   }
 }
