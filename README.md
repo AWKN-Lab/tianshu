@@ -9,6 +9,27 @@
 - `skills/`：外置资产，不进入本仓库。通过 `AWKN_SKILLS_ROOT` 或 `SKILLS_DIR` 指向本地技能库。
 - `loop-engineering/`：循环工程方法与质量约束。
 
+## Agent OS 3.0 工程规划
+
+天枢是 AWKN Agent OS 总框架、运行时协议、治理规则和进化闭环的权威项目。
+
+Agent OS 3.0 在现有 `Goal / Loop / Gate / Tool / Memory / Evidence / Evolve` 基础上增加：
+
+- Trusted Input Gateway；
+- Intent & Goal Router；
+- Context Planner 与 Claim Ledger；
+- Policy & Skill Compiler；
+- Tool & Model Broker；
+- Evidence-Gain Loop；
+- Delivery Router；
+- Evidence & Outcome；
+- Memory Write Gate；
+- Evolve v2。
+
+工程文档入口：[`docs/agent-os-3.0/README.md`](./docs/agent-os-3.0/README.md)
+
+AWKN Memory OS保持独立项目，通过 `MemoryBackend` 协议挂载到天枢；GUNDAM和各垂直项目按组件吸收天枢能力并保留领域实现。
+
 ## 快速验证
 
 ```bash
@@ -25,7 +46,6 @@ $env:AWKN_SKILLS_ROOT='D:\\awkn-lab\\skills'
 
 # Linux/macOS
 export AWKN_SKILLS_ROOT=/opt/awkn/skills
-
 npm run dev -- skill list
 ```
 
