@@ -1,0 +1,9 @@
+{
+  "negativeZero": -0,
+  "oneMicro": 0.000001,
+  "oneTenth": 0.1,
+  "smallExponent": 1e-7,
+  "largeExponent": 1e21,
+  "maxSafe": 9007199254740991,
+  "rounded": 333333333.33333329
+}

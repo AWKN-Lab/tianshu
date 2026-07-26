@@ -1,0 +1,5 @@
+{
+  "valid": true,
+  "schemaId": "awkn-number-vectors/v1",
+  "numberSerialization": "ECMAScript shortest round-trip; negative zero normalized to zero"
+}
