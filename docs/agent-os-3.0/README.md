@@ -1,8 +1,8 @@
 # 天枢 Agent OS 3.0 工程文档集
 
-> 版本：v1.2 Engineering Draft  
+> 版本：v1.3 Engineering Draft  
 > 日期：2026-07-26  
-> 状态：工程文档与总开发计划已齐备；R0 已完成，R1 进入合并 Gate  
+> 状态：工程文档与总开发计划已齐备；R0、R1 已完成，当前进入 R2 Trusted Decision Core  
 > 权威项目：`AWKN-Lab/tianshu`
 
 ## 一、定位
@@ -111,9 +111,9 @@ AWKN Memory OS 独立部署、独立发布、独立使用，通过 `MemoryBacken
 ## 六、发布里程碑 Gate
 
 ```text
-R0 Baseline                已完成：PR #39 已合并 main
-→ R1 Contract Kernel       当前：PR #38 切回 main 后最终复验
-→ R2 Trusted Decision Core WP02—05
+R0 Baseline                已完成：PR #39 → main@f86506a4
+→ R1 Contract Kernel       已完成：PR #38 → main@17cbda27
+→ R2 Trusted Decision Core 当前：WP02—05，先执行 WP02 / Issue #40
 → R3 Governed Execution    WP06—10
 → R4 Outcome & Memory      WP11—14 + WP17A
 → R5 Shadow Beta           WP15—18 + WP17B
