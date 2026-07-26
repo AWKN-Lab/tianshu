@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ActorRefSchema, ExecutionScopeSchema, ObjectRefSchema } from './actors.js';
 import { awknIdSchema } from './ids.js';
+import { SafeNonNegativeIntegerSchema } from './numbers.js';
 import { UtcTimestampSchema } from './time.js';
 
 export const ExecutionStateSchema = z.enum([
@@ -32,7 +33,7 @@ export const ExecutionEnvelopeSchema = z.object({
   schema: z.literal('awkn-execution-envelope/v1'),
   executionId: awknIdSchema('exec'),
   traceId: awknIdSchema('tr'),
-  revision: z.number().int().nonnegative(),
+  revision: SafeNonNegativeIntegerSchema,
   actor: ActorRefSchema,
   scope: ExecutionScopeSchema,
   inputRef: ObjectRefSchema,
