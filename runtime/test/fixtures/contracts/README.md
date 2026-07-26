@@ -58,3 +58,7 @@ AWKN Memory OS 和其他协议实现必须消费本目录的精确版本，不�
 ## 原始 JSON 边界
 
 本目录从对象级 Canonicalization 开始。原始 JSON 中的重复 Key 会在普通 `JSON.parse()` 中被覆盖，必须由 Trusted Input Gateway 的 Duplicate-Key-Aware Parser 处理，见 Issue #40。
+
+## 合并 Gate
+
+Core Contracts 只有在 PR Base 为 `main`，且精确 Head 在 Ubuntu Node 20、Ubuntu Node 22、Windows Node 20 上完成 Architecture、Typecheck、Unit、Contract、Dependency、SBOM 与 Audit 验证后，才允许 Squash Merge。
