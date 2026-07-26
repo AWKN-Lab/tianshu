@@ -28,7 +28,7 @@ Agent OS 3.0 在现有 `Goal / Loop / Gate / Tool / Memory / Evidence / Evolve` 
 
 工程文档入口：[`docs/agent-os-3.0/README.md`](./docs/agent-os-3.0/README.md)
 
-AWKN Memory OS 保持独立项目，可通过 `MemoryBackend` 协议挂载到天枢。GUNDAM、Value、win、Mr.Mont、annie、subtitle 等其他仓库全部独立运行、独立发布、独立演进，不嵌入天枢运行时，不调用天枢服务，不依赖天枢 SDK 或协议。它们可以研究相同机制，并在各自仓库内自行设计和实现。
+AWKN Memory OS 作为独立记忆系统，可通过 `MemoryBackend` 协议挂载到天枢。GUNDAM、Value、win、Mr.Mont、annie、subtitle 等项目按照各自产品定位独立演进，并可选择 Trusted Input、Claim & Context、Policy & Skill、Tool & Model、Evidence Loop、Delivery、Outcome、Memory & Evolve 等机制，在各自仓库形成领域化实现。
 
 ## 快速验证
 
@@ -42,7 +42,7 @@ npm run check
 
 ```bash
 # Windows PowerShell
-$env:AWKN_SKILLS_ROOT='D:\\awkn-lab\\skills'
+$env:AWKN_SKILLS_ROOT='D:\awkn-lab\skills'
 
 # Linux/macOS
 export AWKN_SKILLS_ROOT=/opt/awkn/skills
