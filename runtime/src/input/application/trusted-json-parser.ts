@@ -78,6 +78,11 @@ function decodeInput(input: string | Uint8Array): { bytes: Uint8Array; source?: 
   }
 }
 
+function hasNonZeroMantissa(token: string): boolean {
+  const [mantissa = ''] = token.split(/[eE]/, 1);
+  return /[1-9]/.test(mantissa);
+}
+
 class TrustedJsonParser {
   private index = 0;
   private nodeCount = 0;
@@ -340,6 +345,13 @@ class TrustedJsonParser {
     if (!Number.isFinite(value)) {
       this.fail('AOS_INPUT_JSON_SYNTAX', 'JSON number is not finite', path);
     }
+    if (value === 0 && hasNonZeroMantissa(token)) {
+      this.fail(
+        'AOS_INPUT_JSON_PRECISION_LOSS',
+        'non-zero JSON number underflows to zero; encode high-precision values as strings',
+        path,
+      );
+    }
     if (Number.isInteger(value) && !Number.isSafeInteger(value)) {
       this.fail(
         'AOS_INPUT_JSON_UNSAFE_INTEGER',
@@ -431,14 +443,16 @@ export function parseTrustedJson(
   try {
     const value = new TrustedJsonParser(decoded.source, limits).parse();
     const valueHash = stableHash('awkn-trusted-json-value/v1', value);
-    const document = TrustedJsonDocumentSchema.parse({
+    const document: TrustedJsonDocument = {
       schema: 'awkn-trusted-json-document/v1',
       parserVersion: TRUSTED_JSON_PARSER_VERSION,
       sourceHash,
       valueHash,
       byteLength,
       value,
-    });
+    };
+    TrustedJsonDocumentSchema.parse(document);
+
     const receiptPayload = InputJsonReceiptPayloadSchema.parse({
       schema: 'awkn-input-json-receipt/v1',
       parserVersion: TRUSTED_JSON_PARSER_VERSION,
