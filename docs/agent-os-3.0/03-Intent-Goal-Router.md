@@ -1,19 +1,22 @@
 # Intent & Goal Router 工程设计
 
 > 组件编号：C02  
+> 版本：v0.2 Draft  
 > 工程动作：UPGRADE  
 > 复用：GoalManager、CLI、Cron、Orchestrator、AgentLoop
 
 ## 一、职责
 
-Intent & Goal Router 将可信输入转成执行意图，负责：
+Intent & Goal Router将`TrustedInput`转成天枢内部执行意图，负责：
 
-- 判断 L0、L1、L2、L3 或 L4；
-- 判断是否创建 Goal；
+- 判断L0、L1、L2、L3或L4；
+- 判断是否创建Goal；
 - 识别外部副作用和时间依赖；
 - 判断是否需要补充信息；
 - 建立验收条件、预算和停止策略；
-- 选择领域适配器和运行模板。
+- 选择天枢内部Task Profile和运行模板。
+
+本组件不识别其他业务仓库为运行Adapter，也不把任务路由到其他项目。
 
 ## 二、核心流程
 
@@ -25,7 +28,7 @@ TrustedInput
 → Clarification Value Gate
 → L0—L4 Routing
 → GoalSpec Factory
-→ Domain Adapter Selection
+→ Task Profile Selection
 → Intent Receipt
 ```
 
@@ -42,11 +45,14 @@ export interface IntentDecision {
   deliverableTypes: string[];
   externalSideEffects: boolean;
   timeDependency: 'none' | 'deadline' | 'scheduled' | 'condition_watch';
-  domain: string;
+  taskProfile: string;
   confidence: number;
   assumptions: Assumption[];
   missingFields: MissingField[];
-  clarificationDecision: 'ASK_USER' | 'CONTINUE_WITH_EXPLICIT_ASSUMPTION' | 'CONTINUE';
+  clarificationDecision:
+    | 'ASK_USER'
+    | 'CONTINUE_WITH_EXPLICIT_ASSUMPTION'
+    | 'CONTINUE';
   reasonCodes: string[];
 }
 ```
@@ -59,9 +65,25 @@ export interface IntentDecision {
 | L1 | 一次执行可完成；工具数量有限 | 可选 |
 | L2 | 需要多轮修复；有确定性验收和Gate | 是 |
 | L3 | 有时间、周期或未来条件；需要恢复 | 是 |
-| L4 | 多Agent、多项目或多外部系统；有依赖图 | 是 |
+| L4 | 天枢内部多Agent、多步骤、多外部工具；存在依赖图 | 是 |
 
 路由遵循逐级升级原则。高层级需要更完整的范围、授权、预算和恢复协议。
+
+### 4.1 L4边界
+
+L4可以：
+
+- 调度天枢内部Agent；
+- 调用用户授权的GitHub、邮件、日历、文件和其他工具；
+- 读取外部仓库内容作为数据；
+- 创建跨工具Workflow Graph。
+
+L4不能：
+
+- 启动其他业务项目Runtime；
+- 调用其他业务项目Service；
+- 将其他业务仓库作为子Agent；
+- 继承其他项目的权限、状态机或发布生命周期。
 
 ## 五、Clarification Value Gate
 
@@ -84,11 +106,11 @@ ClarificationValue =
 | 0.40—0.69 | CONTINUE_WITH_EXPLICIT_ASSUMPTION |
 | < 0.40 | CONTINUE |
 
-### 5.3 必须补充信息的场景
+### 5.3 必须补充信息
 
 - 目标收件人、金额、生产环境等不可逆字段缺失；
-- 存在多个同名项目或资源；
-- 用户意图有相互排斥的解释；
+- 存在多个同名仓库、文件、分支或资源；
+- 用户意图存在相互排斥的解释；
 - 高影响工具缺少授权范围；
 - L3任务缺少可解析时间或条件；
 - L4任务缺少目标、边界或验收。
@@ -97,7 +119,7 @@ ClarificationValue =
 
 - 当前对话已经提供；
 - Claim Ledger中存在高权威且有效的字段；
-- 可以从代码、配置或权威系统确定性读取；
+- 可以从天枢代码、配置或授权数据源确定性读取；
 - 缺失字段不会改变结果；
 - 用户要求按现有信息完成。
 
@@ -109,7 +131,10 @@ export interface GoalSpec {
   goalId: string;
   title: string;
   objective: string;
-  scope: { included: string[]; excluded: string[] };
+  scope: {
+    included: string[];
+    excluded: string[];
+  };
   acceptanceCriteria: AcceptanceCriterion[];
   constraints: ClaimRef[];
   assumptions: Assumption[];
@@ -122,6 +147,7 @@ export interface GoalSpec {
   };
   stopPolicy: StopPolicy;
   deliveryExpectation: DeliveryExpectation;
+  taskProfile: string;
   riskLevel: string;
   createdBy: ActorRef;
   createdAt: string;
@@ -132,10 +158,10 @@ export interface GoalSpec {
 
 | 类型 | 示例 | 评估器 |
 |---|---|---|
-| Command | `npm run check` 通过 | Process Evaluator |
+| Command | `npm run check`通过 | Process Evaluator |
 | Schema | JSON符合Schema | Schema Evaluator |
 | File | 文件存在且Hash有效 | Artifact Evaluator |
-| State | PR合并、邮件发送、外部记录创建 | External State Evaluator |
+| State | PR创建、邮件发送、外部记录创建 | External State Evaluator |
 | Numeric | 错误数=0、评分达到阈值 | Metric Evaluator |
 | Human | 用户明确批准 | Human Confirmation Evaluator |
 | Composite | 多条件AND/OR | Composite Evaluator |
@@ -165,30 +191,42 @@ export interface StopPolicy {
 - 用户取消；
 - 输入前提失效。
 
-## 九、领域适配器
+## 九、Task Profile
+
+Task Profile是天枢内部任务模板，提供默认Policy、Skill、Gate、预算和Delivery。它不绑定其他仓库产品。
 
 ```ts
-export interface DomainAdapter {
-  domain: string;
+export interface TaskProfile {
+  schema: 'awkn-task-profile/v1';
+  profileId: string;
+  version: string;
   detect(input: TrustedInput): Promise<number>;
   enrichIntent(intent: IntentDecision): Promise<IntentDecision>;
   buildGoal(intent: IntentDecision): Promise<Partial<GoalSpec>>;
   defaultPolicies(): string[];
   defaultSkills(): string[];
   defaultGates(): string[];
+  defaultDelivery(): string[];
 }
 ```
 
-首批适配器：
+首批Profile：
 
-- engineering
-- investment
-- hotel_decision
-- life_decision
-- fitness
-- media_pipeline
+- `analysis`
+- `research`
+- `engineering`
+- `repository_review`
+- `document_creation`
+- `automation`
+- `scheduled_check`
+- `multi_agent_orchestration`
 
-领域适配器只能提供领域默认值，最终执行仍需经过天枢的 Policy、Broker 和 Gate。
+约束：
+
+- Profile只引用天枢Policy、Skill和Gate；
+- Profile不能声明其他项目Runtime、SDK或Service依赖；
+- Profile变更进入天枢Evolve和发布流程；
+- 外部仓库名称只可以出现在任务参数和Source Ref中。
 
 ## 十、Intent Receipt
 
@@ -198,7 +236,7 @@ export interface DomainAdapter {
   "intentId": "intent_xxx",
   "inputId": "in_xxx",
   "level": "L2",
-  "domain": "engineering",
+  "taskProfile": "engineering",
   "externalSideEffects": false,
   "clarification": "CONTINUE",
   "goalCreated": true,
@@ -224,7 +262,8 @@ export interface DomainAdapter {
 2. CLI入口先调用Intent Router；
 3. `runL2`从GoalSpec读取Acceptance和StopPolicy；
 4. L3任务冻结创建时的Actor、Policy和Authorization；
-5. L4通过Workflow Graph执行。
+5. L4通过天枢内部Workflow Graph执行；
+6. `taskProfile`替代旧设计中的`domain`和`DomainAdapter`。
 
 ### NEW
 
@@ -232,7 +271,14 @@ export interface DomainAdapter {
 - `intent/classifier.ts`
 - `intent/clarification-gate.ts`
 - `intent/goal-factory.ts`
-- `intent/domain-registry.ts`
+- `intent/task-profile-registry.ts`
+
+### DEPRECATE
+
+- `DomainAdapter`运行接口；
+- investment、hotel、fitness等其他产品Profile；
+- 将其他仓库当作L4执行节点；
+- 跨项目Runtime调度。
 
 ## 十二、测试
 
@@ -240,17 +286,20 @@ export interface DomainAdapter {
 2. 单次文件读取路由到L1；
 3. 修复构建并跑测试路由到L2；
 4. 每日巡检路由到L3；
-5. 跨仓库、多Agent、发布任务路由到L4；
+5. 天枢内部多Agent和多工具任务路由到L4；
 6. 已存在信息不能再次询问；
 7. 高影响缺失字段必须询问；
 8. 低影响缺失字段采用显式假设；
 9. L2缺少确定性验收时不得启动；
-10. L4未经完整授权不能运行。
+10. L4未经完整授权不能运行；
+11. 其他业务项目不能被选为Task Profile；
+12. 仓库读取任务只生成外部Source Ref。
 
 ## 十三、验收
 
-- 所有入口产出Intent Receipt；
+- 天枢所有入口产出Intent Receipt；
 - L0—L4契约测试全通过；
 - GoalSpec可以持久化、恢复和重放；
 - Clarification决定带有原因码；
-- Domain Adapter不能跳过通用治理链。
+- Task Profile不能跳过通用治理链；
+- Router无其他业务项目运行依赖。
