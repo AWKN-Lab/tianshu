@@ -28,7 +28,7 @@ Agent OS 3.0 在现有 `Goal / Loop / Gate / Tool / Memory / Evidence / Evolve` 
 
 工程文档入口：[`docs/agent-os-3.0/README.md`](./docs/agent-os-3.0/README.md)
 
-AWKN Memory OS保持独立项目，通过 `MemoryBackend` 协议挂载到天枢；GUNDAM和各垂直项目按组件吸收天枢能力并保留领域实现。
+AWKN Memory OS 保持独立项目，可通过 `MemoryBackend` 协议挂载到天枢。GUNDAM、Value、win、Mr.Mont、annie、subtitle 等其他仓库全部独立运行、独立发布、独立演进，不嵌入天枢运行时，不调用天枢服务，不依赖天枢 SDK 或协议。它们可以研究相同机制，并在各自仓库内自行设计和实现。
 
 ## 快速验证
 
