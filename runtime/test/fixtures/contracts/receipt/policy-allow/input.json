@@ -1,0 +1,25 @@
+{
+  "schema": "awkn-receipt-envelope/v1",
+  "receiptId": "rcpt_55555555555555555555555555555555",
+  "receiptType": "POLICY",
+  "payloadSchema": "awkn-policy-decision/v1",
+  "executionId": "exec_22222222222222222222222222222222",
+  "traceId": "tr_33333333333333333333333333333333",
+  "aggregateType": "execution",
+  "aggregateId": "exec_22222222222222222222222222222222",
+  "producer": {
+    "schema": "awkn-actor-ref/v1",
+    "actorId": "user-1",
+    "actorType": "human",
+    "userId": "user-1",
+    "projectId": "tianshu"
+  },
+  "status": "SUCCESS",
+  "payload": {
+    "decision": "ALLOW",
+    "count": 0
+  },
+  "payloadHash": "3f6304688a68588fb09664d9b70359058679217153537187fef08da057ff7fd0",
+  "artifactRefs": [],
+  "createdAt": "2026-07-26T12:00:00.000Z"
+}

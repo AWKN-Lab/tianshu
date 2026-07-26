@@ -1,0 +1,7 @@
+{
+  "schemaId": "awkn-test/v1",
+  "value": {
+    "b": 1,
+    "a": "e\u0301"
+  }
+}

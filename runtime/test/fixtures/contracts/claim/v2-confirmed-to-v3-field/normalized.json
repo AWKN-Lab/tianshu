@@ -1,0 +1,25 @@
+{
+  "schema": "awkn-claim/v3",
+  "claimId": "clm_11111111111111111111111111111111",
+  "content": "Use contract-first migration.",
+  "contentHash": "d9c942b452e22558dda8acf497491e7c18a3c6446911e57bd1f83647887cac76",
+  "originator": "human",
+  "speaker": "human",
+  "claimType": "decision",
+  "epistemicStatus": "asserted",
+  "sourceRefs": [
+    {
+      "schema": "awkn-source-ref/v1",
+      "sourceKind": "current_human_message",
+      "sourceId": "message-1",
+      "observedAt": "2026-07-26T12:00:00.000Z"
+    }
+  ],
+  "derivedFrom": [],
+  "authority": 1,
+  "confidence": 1,
+  "sensitivityClass": "internal",
+  "projectId": "tianshu",
+  "userId": "user-1",
+  "confirmationLevel": "field"
+}

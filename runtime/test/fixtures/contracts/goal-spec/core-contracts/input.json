@@ -1,0 +1,86 @@
+{
+  "schema": "awkn-goal-spec/v3",
+  "goalId": "goal_44444444444444444444444444444444",
+  "title": "Freeze core contracts",
+  "desiredState": {
+    "description": "Core contracts compile and pass contract tests.",
+    "successSignals": [
+      "npm run check passes"
+    ]
+  },
+  "scope": {
+    "included": [
+      "runtime/src/contracts"
+    ],
+    "excluded": [
+      "runtime/src/core/agent-loop.ts"
+    ]
+  },
+  "acceptanceCriteria": [
+    {
+      "criterionId": "ac-1",
+      "description": "Contract tests pass",
+      "required": true,
+      "evaluator": "deterministic",
+      "evidenceSourceIds": [
+        "test-suite"
+      ]
+    }
+  ],
+  "evidenceSources": [
+    {
+      "sourceId": "test-suite",
+      "sourceType": "test",
+      "required": true,
+      "minimumLevel": 4
+    }
+  ],
+  "constraints": [
+    {
+      "constraintId": "constraint-1",
+      "description": "Do not modify AgentLoop",
+      "severity": "HARD",
+      "evaluator": "deterministic"
+    }
+  ],
+  "assumptions": [],
+  "budget": {
+    "maxCycles": 5,
+    "maxTokens": 100000,
+    "maxDurationMs": 3600000
+  },
+  "stopPolicy": {
+    "noGainCycleLimit": 2,
+    "onBudgetExceeded": "PAUSE",
+    "onBlocked": "ASK_USER",
+    "onUncertain": "PAUSE"
+  },
+  "judgePolicy": {
+    "judgeVersion": "goal-judge/v1",
+    "minimumEvidenceLevel": 4,
+    "requireAllAcceptanceCriteria": true,
+    "requireAllHardConstraints": true,
+    "requiredGateTypes": [
+      "contract-tests"
+    ]
+  },
+  "deliveryExpectation": {
+    "modes": [
+      "CONNECTED_SYSTEM"
+    ],
+    "primaryMode": "CONNECTED_SYSTEM",
+    "successPredicate": {
+      "pullRequestCreated": true
+    }
+  },
+  "taskProfile": "engineering",
+  "riskLevel": "R2",
+  "createdBy": {
+    "schema": "awkn-actor-ref/v1",
+    "actorId": "user-1",
+    "actorType": "human",
+    "userId": "user-1",
+    "projectId": "tianshu"
+  },
+  "createdAt": "2026-07-26T12:00:00.000Z"
+}

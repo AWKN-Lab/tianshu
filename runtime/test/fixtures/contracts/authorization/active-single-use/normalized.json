@@ -1,0 +1,28 @@
+{
+  "schema": "awkn-authorization-token/v1",
+  "authorizationId": "auth_66666666666666666666666666666666",
+  "tokenHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "actor": {
+    "schema": "awkn-actor-ref/v1",
+    "actorId": "user-1",
+    "actorType": "human",
+    "userId": "user-1",
+    "projectId": "tianshu"
+  },
+  "executionId": "exec_22222222222222222222222222222222",
+  "allowedToolIds": [
+    "github.create_file"
+  ],
+  "allowedOperations": [
+    "create"
+  ],
+  "targetConstraints": {
+    "repository": "AWKN-Lab/tianshu"
+  },
+  "riskCeiling": "R3",
+  "maxUses": 1,
+  "usedCount": 0,
+  "status": "ACTIVE",
+  "issuedAt": "2026-07-26T12:00:00.000Z",
+  "expiresAt": "2026-07-26T13:00:00.000Z"
+}

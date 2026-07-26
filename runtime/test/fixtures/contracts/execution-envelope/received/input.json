@@ -1,0 +1,39 @@
+{
+  "schema": "awkn-execution-envelope/v1",
+  "executionId": "exec_22222222222222222222222222222222",
+  "traceId": "tr_33333333333333333333333333333333",
+  "revision": 0,
+  "actor": {
+    "schema": "awkn-actor-ref/v1",
+    "actorId": "user-1",
+    "actorType": "human",
+    "userId": "user-1",
+    "projectId": "tianshu"
+  },
+  "scope": {
+    "schema": "awkn-execution-scope/v1",
+    "projectId": "tianshu",
+    "sessionId": "session-1"
+  },
+  "inputRef": {
+    "schema": "awkn-object-ref/v1",
+    "objectType": "trusted-input",
+    "objectId": "input-1",
+    "schemaId": "awkn-trusted-input/v1",
+    "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "runRefs": [],
+  "deliveryRefs": [],
+  "memoryDecisionRefs": [],
+  "evolutionCandidateRefs": [],
+  "featureFlagsRef": {
+    "schema": "awkn-object-ref/v1",
+    "objectType": "feature-flag-snapshot",
+    "objectId": "flags-1",
+    "schemaId": "awkn-feature-flag-snapshot/v1",
+    "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "state": "RECEIVED",
+  "createdAt": "2026-07-26T12:00:00.000Z",
+  "updatedAt": "2026-07-26T12:00:00.000Z"
+}
