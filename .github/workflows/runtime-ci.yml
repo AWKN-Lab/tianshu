@@ -56,5 +56,6 @@ jobs:
           path: |
             runtime/check-${{ matrix.os }}-node-${{ matrix.node }}.log
             runtime/architecture-scan.json
+            runtime/baseline/agent-os-3.0-baseline.json
           if-no-files-found: warn
           retention-days: 14
