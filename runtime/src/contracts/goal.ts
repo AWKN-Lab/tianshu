@@ -2,9 +2,11 @@ import { z } from 'zod';
 import { ActorRefSchema, ObjectRefSchema } from './actors.js';
 import { awknIdSchema } from './ids.js';
 import { JsonValueSchema } from './json-value.js';
+import { SafeNonNegativeIntegerSchema, SafePositiveIntegerSchema } from './numbers.js';
 import { UtcTimestampSchema } from './time.js';
 
 export const RiskLevelSchema = z.enum(['R0', 'R1', 'R2', 'R3', 'R4', 'R5']);
+const EvidenceLevelSchema = SafeNonNegativeIntegerSchema.max(5);
 
 export const DesiredStateSchema = z.object({
   description: z.string().min(1),
@@ -23,7 +25,7 @@ export const EvidenceSourceSchema = z.object({
   sourceId: z.string().min(1),
   sourceType: z.enum(['test', 'tool', 'artifact', 'external_state', 'human_confirmation', 'model_statement']),
   required: z.boolean(),
-  minimumLevel: z.number().int().min(0).max(5),
+  minimumLevel: EvidenceLevelSchema,
   freshnessClass: z.enum(['STATIC', 'SLOW_CHANGING', 'TIME_SENSITIVE', 'REAL_TIME']).optional(),
 }).strict();
 
@@ -41,14 +43,14 @@ export const AssumptionSchema = z.object({
 }).strict();
 
 export const GoalBudgetSchema = z.object({
-  maxCycles: z.number().int().positive(),
-  maxTokens: z.number().int().positive(),
-  maxDurationMs: z.number().int().positive(),
-  maxCostMinorUnits: z.number().int().nonnegative().optional(),
+  maxCycles: SafePositiveIntegerSchema,
+  maxTokens: SafePositiveIntegerSchema,
+  maxDurationMs: SafePositiveIntegerSchema,
+  maxCostMinorUnits: SafeNonNegativeIntegerSchema.optional(),
 }).strict();
 
 export const StopPolicySchema = z.object({
-  noGainCycleLimit: z.number().int().positive(),
+  noGainCycleLimit: SafePositiveIntegerSchema,
   onBudgetExceeded: z.enum(['PAUSE', 'FAIL', 'ASK_USER']),
   onBlocked: z.enum(['PAUSE', 'FAIL', 'ASK_USER']),
   onUncertain: z.enum(['CONTINUE', 'PAUSE', 'ASK_USER', 'FAIL']),
@@ -56,7 +58,7 @@ export const StopPolicySchema = z.object({
 
 export const GoalJudgePolicySchema = z.object({
   judgeVersion: z.string().min(1),
-  minimumEvidenceLevel: z.number().int().min(0).max(5),
+  minimumEvidenceLevel: EvidenceLevelSchema,
   requireAllAcceptanceCriteria: z.boolean(),
   requireAllHardConstraints: z.boolean(),
   requiredGateTypes: z.array(z.string().min(1)),
@@ -85,6 +87,21 @@ function duplicateValues(values: readonly string[]): string[] {
     seen.add(value);
   }
   return [...duplicates].sort();
+}
+
+function addDuplicateIssue(
+  context: z.RefinementCtx,
+  path: (string | number)[],
+  label: string,
+  values: readonly string[],
+): void {
+  const duplicates = duplicateValues(values);
+  if (duplicates.length === 0) return;
+  context.addIssue({
+    code: z.ZodIssueCode.custom,
+    path,
+    message: `duplicate ${label}: ${duplicates.join(', ')}`,
+  });
 }
 
 export const GoalSpecSchema = z.object({
@@ -117,27 +134,14 @@ export const GoalSpecSchema = z.object({
     });
   }
 
-  const duplicateChecks: Array<{ path: (string | number)[]; label: string; values: string[] }> = [
-    { path: ['scope', 'included'], label: 'included scope', values: value.scope.included },
-    { path: ['scope', 'excluded'], label: 'excluded scope', values: value.scope.excluded },
-    { path: ['acceptanceCriteria'], label: 'criterionId', values: value.acceptanceCriteria.map((item) => item.criterionId) },
-    { path: ['evidenceSources'], label: 'sourceId', values: value.evidenceSources.map((item) => item.sourceId) },
-    { path: ['constraints'], label: 'constraintId', values: value.constraints.map((item) => item.constraintId) },
-    { path: ['assumptions'], label: 'assumptionId', values: value.assumptions.map((item) => item.assumptionId) },
-    { path: ['judgePolicy', 'requiredGateTypes'], label: 'requiredGateTypes', values: value.judgePolicy.requiredGateTypes },
-    { path: ['deliveryExpectation', 'modes'], label: 'delivery modes', values: value.deliveryExpectation.modes },
-  ];
-
-  for (const check of duplicateChecks) {
-    const duplicates = duplicateValues(check.values);
-    if (duplicates.length > 0) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: check.path,
-        message: `duplicate ${check.label}: ${duplicates.join(', ')}`,
-      });
-    }
-  }
+  addDuplicateIssue(context, ['scope', 'included'], 'included scope', value.scope.included);
+  addDuplicateIssue(context, ['scope', 'excluded'], 'excluded scope', value.scope.excluded);
+  addDuplicateIssue(context, ['acceptanceCriteria'], 'criterionId', value.acceptanceCriteria.map((item) => item.criterionId));
+  addDuplicateIssue(context, ['evidenceSources'], 'sourceId', value.evidenceSources.map((item) => item.sourceId));
+  addDuplicateIssue(context, ['constraints'], 'constraintId', value.constraints.map((item) => item.constraintId));
+  addDuplicateIssue(context, ['assumptions'], 'assumptionId', value.assumptions.map((item) => item.assumptionId));
+  addDuplicateIssue(context, ['judgePolicy', 'requiredGateTypes'], 'requiredGateTypes', value.judgePolicy.requiredGateTypes);
+  addDuplicateIssue(context, ['deliveryExpectation', 'modes'], 'delivery modes', value.deliveryExpectation.modes);
 
   const excluded = new Set(value.scope.excluded);
   const overlap = value.scope.included.filter((item) => excluded.has(item));
@@ -166,14 +170,12 @@ export const GoalSpecSchema = z.object({
         message: 'required acceptance criteria need at least one evidence source',
       });
     }
-    const duplicateSourceIds = duplicateValues(criterion.evidenceSourceIds);
-    if (duplicateSourceIds.length > 0) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['acceptanceCriteria', criterionIndex, 'evidenceSourceIds'],
-        message: `duplicate evidence source reference: ${duplicateSourceIds.join(', ')}`,
-      });
-    }
+    addDuplicateIssue(
+      context,
+      ['acceptanceCriteria', criterionIndex, 'evidenceSourceIds'],
+      'evidence source reference',
+      criterion.evidenceSourceIds,
+    );
     for (const sourceId of criterion.evidenceSourceIds) {
       if (!sourceIds.has(sourceId)) {
         context.addIssue({
@@ -248,6 +250,8 @@ export const GoalJudgementSchema = z.object({
   judgeVersion: z.string().min(1),
   judgedAt: UtcTimestampSchema,
 }).strict().superRefine((value, context) => {
+  addDuplicateIssue(context, ['gateReceiptIds'], 'gate receipt ID', value.gateReceiptIds);
+  addDuplicateIssue(context, ['evidenceIds'], 'evidence ID', value.evidenceIds);
   if (value.verdict === 'ACHIEVED' && value.acceptanceResults.length === 0) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
