@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { SafeNonNegativeIntegerSchema } from './numbers.js';
+import { SchemaIdSchema } from './schema-id.js';
 
 const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
 
@@ -26,9 +28,9 @@ export const ObjectRefSchema = z.object({
   schema: z.literal('awkn-object-ref/v1'),
   objectType: z.string().min(1),
   objectId: z.string().min(1),
-  schemaId: z.string().regex(/^awkn-[a-z0-9-]+\/v[1-9][0-9]*$/),
+  schemaId: SchemaIdSchema,
   contentHash: z.string().regex(SHA256_HEX_PATTERN).optional(),
-  revision: z.number().int().nonnegative().optional(),
+  revision: SafeNonNegativeIntegerSchema.optional(),
   externalRef: z.string().min(1).optional(),
 }).strict();
 
