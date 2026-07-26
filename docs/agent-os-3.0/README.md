@@ -1,143 +1,122 @@
 # 天枢 Agent OS 3.0 工程文档集
 
-> 版本：v0.4 Draft  
+> 版本：v1.0 Engineering Draft  
 > 日期：2026-07-26  
-> 状态：架构与工程规划基线  
+> 状态：架构与实施级工程文档已齐备，等待评审  
 > 权威项目：`AWKN-Lab/tianshu`
 
 ## 一、定位
 
 天枢是 AWKN 的核心 Agent 引擎，也是 AWKN Agent OS 总框架、运行时协议、治理规则和进化闭环的权威实现位置。
 
-本轮升级将现有 `Goal / Loop / Gate / Tool / Memory / Evidence / Evolve` 内核扩展为一条完整运行主链：
+Agent OS 3.0 运行主链：
 
 ```text
-用户输入
-   │
-   ▼
 Trusted Input Gateway
-   │
-   ▼
-Intent & Goal Router
-   │
-   ▼
-Context Planner
-   │
-   ▼
-Policy & Skill Compiler
-   │
-   ▼
-Tool & Model Broker
-   │
-   ▼
-Evidence-Gain Loop
-   │
-   ▼
-Delivery Router
-   │
-   ▼
-Evidence & Outcome
-   │
-   ▼
-Memory Write Gate
-   │
-   ▼
-Evolve
+→ Intent & Goal Router
+→ Context Planner
+→ Policy & Skill Compiler
+→ Tool & Model Broker
+→ Evidence-Gain Loop
+→ Delivery Router
+→ Evidence & Outcome
+→ Memory Write Gate
+→ Evolve
 ```
 
-## 二、项目关系与可用能力
+## 二、项目边界
 
 ### 2.1 天枢
 
-天枢集中建设以下能力：
+天枢集中建设：
 
 - 输入治理与身份边界；
-- 意图分类、Goal创建和L0—L4路由；
-- 上下文规划和Claim使用决策；
-- Policy、Skill编译与版本冻结；
-- 模型、工具、供应商与授权调度；
+- 意图分类、Goal、L0—L4 路由；
+- Claim、Context Manifest 和上下文预算；
+- Policy、Skill 编译与版本冻结；
+- 模型、工具、授权和累计风险调度；
 - Evidence-Gain Loop；
-- 交付路由；
-- Run、Step、Evidence、Outcome与Trace；
-- 记忆写入判定；
-- 规则和Skill的评测、晋级、隔离和回滚。
-
-这些能力共同构成天枢Agent OS 3.0运行主链。
+- Delivery、Outcome、Receipt 和 Trace；
+- Memory Write Gate；
+- 规则和 Skill 的评测、晋级、隔离和回滚。
 
 ### 2.2 AWKN Memory OS
 
-AWKN Memory OS作为独立记忆系统，可以：
+AWKN Memory OS 独立部署、独立发布、独立使用，通过 `MemoryBackend` 协议向天枢提供长期 Claim、Experience、Rule、Context Ledger、Immutable Render、持久化事务、Project Grant、CAS、Outbox 和治理能力。
 
-- 独立部署、独立发布、独立使用；
-- 通过`MemoryBackend`协议挂载到天枢；
-- 提供长期Claim、Experience、Rule、Context Ledger、Immutable Render和持久化事务；
-- 支持Project Grant、幂等、CAS、Outbox、Rule治理和删除传播。
-
-天枢保留工作记忆、运行检查点、故障降级缓存、Memory Backend Router、上下文使用门和记忆写入门。
+天枢保留工作记忆、运行检查点、故障降级缓存、Backend Router、Context 使用门和 Memory Write Gate。
 
 ### 2.3 其他项目
 
-`GUNDAM`、`Value`、`win`、`Mr.Mont`、`life-choice`、`annie`、`subtitle`、`awkn-Feel`、`solo-skill-booster`、`CosmoSpark`、`Pri`等项目按照自身产品定位独立演进。
-
-各项目可以从九类机制中选择适合自己的部分：
-
-- Trusted Input；
-- Intent & Goal；
-- Claim & Context；
-- Policy & Skill；
-- Tool & Model；
-- Evidence Loop；
-- Delivery；
-- Outcome；
-- Memory & Evolve。
-
-选择后，在各自仓库形成领域对象、Schema、状态机、Gate、工具路由、模型路由、记忆策略、测试体系和Release Gate。
+`GUNDAM`、`Value`、`win`、`Mr.Mont`、`life-choice`、`annie`、`subtitle`、`awkn-Feel`、`solo-skill-booster`、`CosmoSpark`、`Pri` 等项目按照各自产品定位独立演进。它们可以研究和复用机制，不接入天枢 Runtime，不继承天枢数据库、Feature Flag 或发布生命周期。
 
 ## 三、文档导航
 
+### 3.1 产品与组件设计
+
 | 文档 | 作用 |
 |---|---|
-| [00-天枢AgentOS3.0总PRD.md](./00-天枢AgentOS3.0总PRD.md) | 天枢产品目标、范围、主链、指标和发布规划 |
-| [01-核心架构与领域模型.md](./01-核心架构与领域模型.md) | 天枢内部组件、领域对象、状态机和主链契约 |
-| [02-Trusted-Input-Gateway.md](./02-Trusted-Input-Gateway.md) | 输入脱敏、注入清洗、身份、风险与可信输入封装 |
-| [03-Intent-Goal-Router.md](./03-Intent-Goal-Router.md) | 意图解析、提问价值门、Goal建模和L0—L4路由 |
-| [04-Context-Planner-Claim-Ledger.md](./04-Context-Planner-Claim-Ledger.md) | Claim血缘、上下文预算、时效、权限和Context Manifest |
-| [05-Policy-Skill-Compiler.md](./05-Policy-Skill-Compiler.md) | Policy Pack、Skill Pack、冲突解析、冻结和回放 |
-| [06-Tool-Model-Broker.md](./06-Tool-Model-Broker.md) | 模型与工具选择、供应商选择、授权、累计风险和回执 |
-| [07-Evidence-Gain-Loop.md](./07-Evidence-Gain-Loop.md) | 计划、证据预期、执行、验证、偏差、策略切换和停止条件 |
-| [08-Delivery-Evidence-Memory-Evolve.md](./08-Delivery-Evidence-Memory-Evolve.md) | 交付、结果、记忆写入、归因、校准和进化治理 |
-| [09-AWKN-Memory-OS挂载协议.md](./09-AWKN-Memory-OS挂载协议.md) | Memory OS独立运行与天枢挂载协议 |
-| [10-其他项目独立进化参考.md](./10-其他项目独立进化参考.md) | 各项目可用机制、领域对象和优先实施方向 |
-| [11-实施路线工作包与验收.md](./11-实施路线工作包与验收.md) | 天枢与Memory OS挂载的工作包、依赖和验收 |
-| [19-Loop-Engineering与大型Agent-Prompt迁移启示.md](./19-Loop-Engineering与大型Agent-Prompt迁移启示.md) | Goal外层循环、循环准入、Goal Judge、上下文隔离和长Prompt编译治理 |
+| [00-天枢AgentOS3.0总PRD.md](./00-天枢AgentOS3.0总PRD.md) | 产品目标、范围、主链、指标和发布规划 |
+| [01-核心架构与领域模型.md](./01-核心架构与领域模型.md) | 九个组件、领域对象、状态机和主链契约 |
+| [02-Trusted-Input-Gateway.md](./02-Trusted-Input-Gateway.md) | 输入脱敏、注入清洗、身份、风险和可信输入 |
+| [03-Intent-Goal-Router.md](./03-Intent-Goal-Router.md) | 意图、澄清价值门、Goal 和 L0—L4 路由 |
+| [04-Context-Planner-Claim-Ledger.md](./04-Context-Planner-Claim-Ledger.md) | Claim 血缘、上下文预算、时效、权限和 Manifest |
+| [05-Policy-Skill-Compiler.md](./05-Policy-Skill-Compiler.md) | Policy/Skill、冲突解析、冻结和回放 |
+| [06-Tool-Model-Broker.md](./06-Tool-Model-Broker.md) | 模型、工具、供应商、授权、累计风险和回执 |
+| [07-Evidence-Gain-Loop.md](./07-Evidence-Gain-Loop.md) | 预期证据、执行、偏差、策略切换和停止条件 |
+| [08-Delivery-Evidence-Memory-Evolve.md](./08-Delivery-Evidence-Memory-Evolve.md) | Delivery、Outcome、Memory Write 和 Evolve |
+| [09-AWKN-Memory-OS挂载协议.md](./09-AWKN-Memory-OS挂载协议.md) | Memory OS 独立运行与天枢挂载协议 |
+| [10-其他项目独立进化参考.md](./10-其他项目独立进化参考.md) | 各项目可研究的机制和独立实施方向 |
+| [11-实施路线工作包与验收.md](./11-实施路线工作包与验收.md) | 20 个工作包、依赖、验收和执行顺序 |
 
-## 四、设计原则
+### 3.2 实施级工程文档
+
+| 文档 | 作用 | 关联 Issue |
+|---|---|---|
+| [12-工程实施总设计.md](./12-工程实施总设计.md) | 代码映射、依赖 DAG、Coordinator、PR 拆分和回滚 | #27 |
+| [13-Contracts与Canonical-JSON规范.md](./13-Contracts与Canonical-JSON规范.md) | Schema、Canonical JSON、Stable Hash、ID、核心契约和错误码 | #28 |
+| [14-数据模型与Migration设计.md](./14-数据模型与Migration设计.md) | SQLite DDL、v11—v19 Migration、回填、索引和恢复 | #29 |
+| [15-状态机事件与事务边界.md](./15-状态机事件与事务边界.md) | 状态转换、Event、Receipt、Saga、Replay 和事务边界 | #30 |
+| [16-Adapter-Shadow-FeatureFlag迁移手册.md](./16-Adapter-Shadow-FeatureFlag迁移手册.md) | Engine v2 Adapter、Shadow Diff、灰度、降级和删除条件 | #31 |
+| [17-测试矩阵与Release-Runbook.md](./17-测试矩阵与Release-Runbook.md) | WP 测试矩阵、CI、Golden、RC、发布和回滚 Runbook | #32 |
+| [18-Memory-OS-vNext双仓实施RFC.md](./18-Memory-OS-vNext双仓实施RFC.md) | 双仓协议、Endpoint、CAS、Outbox、兼容和发布顺序 | #33 |
+| [19-Loop-Engineering与大型Agent-Prompt迁移启示.md](./19-Loop-Engineering与大型Agent-Prompt迁移启示.md) | Goal 外层循环、循环准入、Goal Judge、上下文隔离和 Prompt 编译治理 | #34 |
+
+## 四、已冻结的 P0 工程决定
+
+1. 新增 `ExecutionCoordinator` 作为 C01—C09 主链编排器；
+2. `ExecutionEnvelope` 保存 Ref、状态、Hash 和 revision；
+3. Receipt 使用统一 Envelope 和分类 Payload；
+4. EventStore 与业务投影同事务，ReceiptStore 保存证明材料；
+5. Claim 使用 `epistemicStatus + confirmationLevel` 双轴；
+6. Canonical JSON、Stable Hash、ID、时间和 unknown/null/omitted 语义已定义；
+7. Authorization 使用服务端引用令牌、原子预占和撤销；
+8. Goal 只有 `GoalJudgeService` 可以更新为 ACHIEVED；
+9. Shadow 路径禁止外部副作用；
+10. Feature Flag 在 Execution 创建时冻结；
+11. Agent OS 新 Migration 从 v11 开始，统一进入 Registry；
+12. Memory OS 协议拆为 WP17A Contracts 和 WP17B Adapter/Governance；
+13. 401/403、Grant 和协议不兼容禁止 local 降级；
+14. 除 Memory OS 外，不增加任何跨仓运行依赖。
+
+## 五、设计原则
 
 1. **天枢单仓权威**：总框架、运行协议和治理门集中在天枢维护。
-2. **内部组件可替换**：Memory、Model、Tool、Policy、Skill、Delivery通过契约演进。
-3. **Memory OS可插拔**：通过专用协议提供长期记忆能力。
+2. **内部组件可替换**：Memory、Model、Tool、Policy、Skill、Delivery 通过契约演进。
+3. **Memory OS 可插拔**：通过专用协议提供长期记忆能力。
 4. **项目独立演进**：每个业务项目在自身仓库完成领域化实现和发布。
-5. **证据支撑完成声明**：成功终态由fresh evidence和Gate结果共同支撑。
-6. **用户决定与模型建议分层**：关键Claim保留来源、确认范围和派生关系。
+5. **证据支撑完成声明**：成功终态由新鲜 Evidence、Constraint 和 Gate 共同支撑。
+6. **用户决定与模型建议分层**：Claim 保留来源、确认范围和派生关系。
 7. **风险按会话累计**：多步操作形成连续风险判断和授权升级。
-8. **规则经过评测后生效**：候选规则和Skill经过回放、晋级和发布。
-9. **失败可恢复**：Run、Step、授权、Outbox、Memory和Delivery具备幂等与恢复路径。
-10. **循环必须可证明收敛**：进入目标循环前检查证据源、工具覆盖、约束、预算和停止条件。
-11. **外部规则不可直接生效**：外部文档只能产生候选机制，不能直接提升为ACTIVE Policy或Skill。
-
-## 五、证据等级
-
-本设计参考外部系统提示词和二次分析文档时，采用以下等级：
-
-- `OBSERVED`：原文可直接观察到的产品或协议机制；
-- `INFERRED`：从行为规则推导出的架构方向；
-- `HYPOTHESIS`：等待原型验证的内部实现假设。
-
-正式工程基线优先采用`OBSERVED`和经过原型验证的`INFERRED`。`HYPOTHESIS`进入实验清单，通过验证后升级。
+8. **规则经过评测后生效**：候选规则和 Skill 经过回放、晋级和发布。
+9. **失败可恢复**：Run、Step、Authorization、Outbox、Memory 和 Delivery 具备幂等与恢复路径。
+10. **循环必须可证明收敛**：进入 Goal Loop 前检查证据源、工具覆盖、约束、预算和停止条件。
+11. **外部规则不可直接生效**：外部文档只能生成 Candidate，不能直接成为 ACTIVE Policy 或 Skill。
+12. **文档与代码状态分离**：本目录完成工程设计，不代表对应代码工作包已经完成。
 
 ## 六、与现有代码的关系
 
-本设计优先复用天枢当前运行时：
+优先复用：
 
 - `runtime/src/core/agent-loop.ts`
 - `runtime/src/goal/`
@@ -151,27 +130,22 @@ AWKN Memory OS作为独立记忆系统，可以：
 - `runtime/src/observability/`
 - `runtime/src/skills/`
 
-每个组件文档标记：
+迁移动作：
 
-- `REUSE`：天枢内部直接复用；
-- `UPGRADE`：在天枢现有实现上升级；
-- `NEW`：天枢新增模块；
-- `DEPRECATE`：天枢内部迁移目标。
+- `REUSE`：直接复用；
+- `UPGRADE`：基于现有实现升级；
+- `NEW`：新增组件；
+- `DEPRECATE`：迁移完成后的内部退役目标。
 
-其他项目使用同类机制时，在各自仓库重新定义对象和实现路径。
-
-## 七、版本关系
+## 七、实施 Gate
 
 ```text
-天枢 Engine v2
-   ↓
-Agent OS 3.0 架构文档与契约冻结
-   ↓
-Agent OS 3.0 组件增量实现
-   ↓
-Memory OS 挂载协议升级
-   ↓
-Agent OS 3.0 Release Candidate
+Gate 0  工程文档评审与语义冻结
+→ Gate 1  WP-AOS-00 Baseline Freeze
+→ Gate 2  WP-AOS-01 Core Contracts
+→ Gate 3  分段 Shadow
+→ Gate 4  分段 Enforce
+→ Gate 5  Compatibility、Hardening 与 RC
 ```
 
-其他项目分别维护自己的进化计划、代码实现和版本发布。本目录聚焦天枢实现路线，并提供各项目可用机制参考。
+PR #25 当前只承载文档基线。代码开发应使用独立短分支和独立 PR，禁止把 20 个工作包放入一个长期开发分支。
