@@ -13,7 +13,7 @@
     "lint": "tsc --noEmit",
     "test": "node scripts/run-tests.mjs unit",
     "test:contracts": "node scripts/run-tests.mjs contracts",
-    "test:all": "node scripts/run-tests.mjs all",
+    "test:all": "npm run test && npm run test:contracts",
     "check:architecture": "node scripts/architecture-scan.mjs",
     "check": "npm run check:architecture && npm run typecheck && npm run lint && npm run test:all",
     "test:vitest": "vitest run",
