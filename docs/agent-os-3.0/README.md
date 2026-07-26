@@ -1,6 +1,6 @@
 # 天枢 Agent OS 3.0 工程文档集
 
-> 版本：v0.3 Draft  
+> 版本：v0.4 Draft  
 > 日期：2026-07-26  
 > 状态：架构与工程规划基线  
 > 权威项目：`AWKN-Lab/tianshu`
@@ -109,6 +109,7 @@ AWKN Memory OS作为独立记忆系统，可以：
 | [09-AWKN-Memory-OS挂载协议.md](./09-AWKN-Memory-OS挂载协议.md) | Memory OS独立运行与天枢挂载协议 |
 | [10-其他项目独立进化参考.md](./10-其他项目独立进化参考.md) | 各项目可用机制、领域对象和优先实施方向 |
 | [11-实施路线工作包与验收.md](./11-实施路线工作包与验收.md) | 天枢与Memory OS挂载的工作包、依赖和验收 |
+| [19-Loop-Engineering与大型Agent-Prompt迁移启示.md](./19-Loop-Engineering与大型Agent-Prompt迁移启示.md) | Goal外层循环、循环准入、Goal Judge、上下文隔离和长Prompt编译治理 |
 
 ## 四、设计原则
 
@@ -121,6 +122,8 @@ AWKN Memory OS作为独立记忆系统，可以：
 7. **风险按会话累计**：多步操作形成连续风险判断和授权升级。
 8. **规则经过评测后生效**：候选规则和Skill经过回放、晋级和发布。
 9. **失败可恢复**：Run、Step、授权、Outbox、Memory和Delivery具备幂等与恢复路径。
+10. **循环必须可证明收敛**：进入目标循环前检查证据源、工具覆盖、约束、预算和停止条件。
+11. **外部规则不可直接生效**：外部文档只能产生候选机制，不能直接提升为ACTIVE Policy或Skill。
 
 ## 五、证据等级
 
