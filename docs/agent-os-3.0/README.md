@@ -1,8 +1,8 @@
 # 天枢 Agent OS 3.0 工程文档集
 
-> 版本：v1.1 Engineering Draft  
+> 版本：v1.2 Engineering Draft  
 > 日期：2026-07-26  
-> 状态：架构与实施级工程文档已齐备，等待评审  
+> 状态：工程文档与总开发计划已齐备；R0 已完成，R1 进入合并 Gate  
 > 权威项目：`AWKN-Lab/tianshu`
 
 ## 一、定位
@@ -69,7 +69,8 @@ AWKN Memory OS 独立部署、独立发布、独立使用，通过 `MemoryBacken
 | [17-测试矩阵与Release-Runbook.md](./17-测试矩阵与Release-Runbook.md) | WP 测试矩阵、CI、Golden、RC、发布和回滚 Runbook | #32 |
 | [18-Memory-OS-vNext双仓实施RFC.md](./18-Memory-OS-vNext双仓实施RFC.md) | 双仓协议、Endpoint、CAS、Outbox、兼容和发布顺序 | #33 |
 | [19-Loop-Engineering与大型Agent-Prompt迁移启示.md](./19-Loop-Engineering与大型Agent-Prompt迁移启示.md) | Goal 外层循环、循环准入、Goal Judge、上下文隔离和 Prompt 编译治理 | #34 |
-| [20-组件金字塔与模块职责边界.md](./20-组件金字塔与模块职责边界.md) | 六层金字塔、C01—C09 有界模块、数据 Owner、Port/Adapter、架构适应性测试 | #26 |
+| [20-组件金字塔与模块职责边界.md](./20-组件金字塔与模块职责边界.md) | 六层金字塔、C01—C09 有界模块、数据 Owner、Port/Adapter、架构适应性测试 | #35 |
+| [21-Agent-OS-3.0总开发计划.md](./21-Agent-OS-3.0总开发计划.md) | R0—R6 发布里程碑、WP 调度、关键路径、并行流、WIP、DoD 和当前执行看板 | #43 |
 
 ## 四、工程文档完成状态
 
@@ -81,9 +82,10 @@ AWKN Memory OS 独立部署、独立发布、独立使用，通过 `MemoryBacken
 - [x] 测试矩阵与 Release Runbook；
 - [x] Memory OS vNext 双仓 RFC；
 - [x] Loop Engineering 与大型 Agent Prompt 迁移研究；
-- [x] 组件金字塔与模块职责边界。
+- [x] 组件金字塔与模块职责边界；
+- [x] R0—R6 总开发计划、关键路径和完成定义。
 
-文档交付已经完成。代码、Migration、CI、Protocol 和 RC 仍按 WP-AOS-00—19 独立实施和验收。
+文档交付已经完成。代码、Migration、CI、Protocol 和 RC 按总开发计划及 WP-AOS-00—19 独立实施和验收。
 
 ## 五、已冻结的 P0 工程决定
 
@@ -106,15 +108,16 @@ AWKN Memory OS 独立部署、独立发布、独立使用，通过 `MemoryBacken
 17. 401/403、Grant 和协议不兼容禁止 local 降级；
 18. 除 Memory OS 外，不增加跨仓运行依赖。
 
-## 六、实施 Gate
+## 六、发布里程碑 Gate
 
 ```text
-Gate 0  工程文档评审与语义冻结
-→ Gate 1  WP-AOS-00 Baseline Freeze
-→ Gate 2  WP-AOS-01 Core Contracts
-→ Gate 3  分段 Shadow
-→ Gate 4  分段 Enforce
-→ Gate 5  Compatibility、Hardening 与 RC
+R0 Baseline                已完成：PR #39 已合并 main
+→ R1 Contract Kernel       当前：PR #38 切回 main 后最终复验
+→ R2 Trusted Decision Core WP02—05
+→ R3 Governed Execution    WP06—10
+→ R4 Outcome & Memory      WP11—14 + WP17A
+→ R5 Shadow Beta           WP15—18 + WP17B
+→ R6 Production Candidate  WP19
 ```
 
-PR #25 当前只承载文档基线。代码开发使用独立短分支和独立 PR，禁止把 20 个工作包放入一个长期开发分支。
+PR #25 承载产品、工程和开发计划文档基线。代码开发使用独立短分支和独立 PR，禁止把多个发布里程碑放入一个长期开发分支。
