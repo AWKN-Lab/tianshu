@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { JsonValue } from './json-value.js';
+import { parseSchemaId } from './schema-id.js';
 
 const HASH_DOMAIN = 'awkn-canonical-json/v1\n';
 
@@ -124,10 +125,10 @@ export function stableHash(
   value: JsonValue | unknown,
   options: CanonicalizeOptions = {},
 ): string {
-  if (!schemaId.trim()) throw new CanonicalJsonError('schemaId is required', '/schemaId');
+  const normalizedSchemaId = parseSchemaId(normalizeString(schemaId, '/schemaId')).normalize('NFC');
   const hash = createHash('sha256');
   hash.update(HASH_DOMAIN, 'utf8');
-  hash.update(schemaId.normalize('NFC'), 'utf8');
+  hash.update(normalizedSchemaId, 'utf8');
   hash.update('\n', 'utf8');
   hash.update(canonicalJsonBytes(value, options));
   return hash.digest('hex');
