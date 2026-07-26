@@ -82,7 +82,20 @@ AWKN Memory OS 独立部署、独立发布、独立使用，通过 `MemoryBacken
 | [18-Memory-OS-vNext双仓实施RFC.md](./18-Memory-OS-vNext双仓实施RFC.md) | 双仓协议、Endpoint、CAS、Outbox、兼容和发布顺序 | #33 |
 | [19-Loop-Engineering与大型Agent-Prompt迁移启示.md](./19-Loop-Engineering与大型Agent-Prompt迁移启示.md) | Goal 外层循环、循环准入、Goal Judge、上下文隔离和 Prompt 编译治理 | #34 |
 
-## 四、已冻结的 P0 工程决定
+## 四、工程文档完成状态
+
+- [x] 工程实施总设计；
+- [x] Contracts 与 Canonical JSON；
+- [x] 数据模型与 Migration；
+- [x] 状态机、事件与事务边界；
+- [x] Adapter、Shadow Mode 与 Feature Flag；
+- [x] 测试矩阵与 Release Runbook；
+- [x] Memory OS vNext 双仓 RFC；
+- [x] Loop Engineering 与大型 Agent Prompt 迁移研究。
+
+上述状态代表文档交付完成。代码、Migration、CI、Protocol 和 RC 仍按 WP-AOS-00—19 独立实施和验收。
+
+## 五、已冻结的 P0 工程决定
 
 1. 新增 `ExecutionCoordinator` 作为 C01—C09 主链编排器；
 2. `ExecutionEnvelope` 保存 Ref、状态、Hash 和 revision；
@@ -99,7 +112,7 @@ AWKN Memory OS 独立部署、独立发布、独立使用，通过 `MemoryBacken
 13. 401/403、Grant 和协议不兼容禁止 local 降级；
 14. 除 Memory OS 外，不增加任何跨仓运行依赖。
 
-## 五、设计原则
+## 六、设计原则
 
 1. **天枢单仓权威**：总框架、运行协议和治理门集中在天枢维护。
 2. **内部组件可替换**：Memory、Model、Tool、Policy、Skill、Delivery 通过契约演进。
@@ -114,7 +127,7 @@ AWKN Memory OS 独立部署、独立发布、独立使用，通过 `MemoryBacken
 11. **外部规则不可直接生效**：外部文档只能生成 Candidate，不能直接成为 ACTIVE Policy 或 Skill。
 12. **文档与代码状态分离**：本目录完成工程设计，不代表对应代码工作包已经完成。
 
-## 六、与现有代码的关系
+## 七、与现有代码的关系
 
 优先复用：
 
@@ -137,7 +150,7 @@ AWKN Memory OS 独立部署、独立发布、独立使用，通过 `MemoryBacken
 - `NEW`：新增组件；
 - `DEPRECATE`：迁移完成后的内部退役目标。
 
-## 七、实施 Gate
+## 八、实施 Gate
 
 ```text
 Gate 0  工程文档评审与语义冻结
