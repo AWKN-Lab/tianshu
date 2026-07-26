@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: runtime-ci-${{ github.ref }}-${{ matrix.os }}-node-${{ matrix.node }}
+  group: runtime-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
