@@ -1,0 +1,166 @@
+{
+  "schema": "awkn-agent-os-baseline/v1",
+  "baselineId": "aos3-main-1d72e26b",
+  "source": {
+    "repository": "AWKN-Lab/tianshu",
+    "branch": "main",
+    "commitSha": "1d72e26b1cc0468c07d145be2f0b7b81dc61bb96",
+    "runtimeRoot": "runtime"
+  },
+  "evidence": {
+    "branch": "chore/aos-00-baseline-ci",
+    "commitSha": "d241e4848ef705b69606c9df9a01a6c3c7b85089",
+    "workflow": "runtime-ci",
+    "workflowRunId": 30201554716,
+    "workflowRunNumber": 55,
+    "conclusion": "success",
+    "matrix": [
+      {
+        "os": "ubuntu-latest",
+        "node": "20",
+        "conclusion": "success",
+        "artifactDigest": "sha256:5edfbaacfb570934e1b39bb06852a0e885d7ff354448c187c58c7b4ac7ed4459"
+      },
+      {
+        "os": "ubuntu-latest",
+        "node": "22",
+        "conclusion": "success",
+        "artifactDigest": "sha256:310151dba984343ec3b90ed57c7e1d0c9482576607f0455b1011c387ddb78dce"
+      },
+      {
+        "os": "windows-latest",
+        "node": "20",
+        "conclusion": "success",
+        "artifactDigest": "sha256:ef68771afa0483dd5b05df47fd4f5bd744570ca2bb3a38ab9d7c24ce54eccbbd"
+      }
+    ],
+    "ubuntuNode22": {
+      "architectureReportSha256": "41d5abd5bce0c4d0d851b7a32d8096034b37f2e8d9844388d1b6a9f7addb3814",
+      "checkLogSha256": "8f0c1f73a936d4886506cd1a98186369282ce324bc5d951f6f37a3180457d62f"
+    }
+  },
+  "runtime": {
+    "package": "awkn-engine-runtime@0.1.0",
+    "nodeEngine": ">=20.0.0",
+    "checkCommand": "npm run check",
+    "checkStages": [
+      "architecture",
+      "typecheck",
+      "lint",
+      "unit-tests",
+      "contract-tests"
+    ]
+  },
+  "tests": {
+    "unitFiles": 5,
+    "unitSuites": 27,
+    "unitTests": 84,
+    "unitPassed": 84,
+    "contractFiles": 20,
+    "contractSuites": 20,
+    "contractTests": 56,
+    "contractPassed": 56,
+    "totalFiles": 25,
+    "totalSuites": 47,
+    "totalTests": 140,
+    "totalPassed": 140,
+    "totalFailed": 0
+  },
+  "architecture": {
+    "scannedTypeScriptFiles": 69,
+    "directDbImports": 20,
+    "moduleSingletons": 12,
+    "crossComponentImports": 22,
+    "processEnvInDomainOrApplication": 0,
+    "blockingViolations": 0,
+    "legacyExceptions": [
+      {
+        "rule": "ARCH-004",
+        "file": "skills/manager.ts",
+        "removalWorkPackage": "WP-AOS-07"
+      }
+    ]
+  },
+  "capabilities": {
+    "primaryCliCommandGroups": [
+      "goal",
+      "loop",
+      "hook",
+      "skill",
+      "cron",
+      "orchestrate",
+      "evolve"
+    ],
+    "auxiliaryCliEntries": [
+      "approval",
+      "evolution",
+      "memory"
+    ],
+    "llmProviders": [
+      "trae",
+      "codex",
+      "minimax"
+    ],
+    "builtinTools": [
+      "read",
+      "write",
+      "exec",
+      "grep",
+      "glob",
+      "skill",
+      "memory_search",
+      "memory_write",
+      "memory_versions",
+      "memory_invalidate",
+      "memory_rollback",
+      "memory_compress"
+    ],
+    "qualityGates": [
+      "typecheckGate",
+      "testGate",
+      "lintGate",
+      "reviewGate",
+      "securityGate",
+      "verificationGate",
+      "budgetGate"
+    ],
+    "memoryBackendModes": [
+      "local",
+      "memory-os",
+      "auto"
+    ]
+  },
+  "migrations": {
+    "mainRegistry": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "sideEntries": [
+      {
+        "version": 8,
+        "name": "operational-evolution-loop"
+      },
+      {
+        "version": 9,
+        "name": "historical-replay-success-target"
+      },
+      {
+        "version": 10,
+        "name": "memory-os-authority-projection"
+      }
+    ],
+    "requiredAction": "unify versions 8-10 into the authoritative migration registry before Agent OS v11"
+  },
+  "knownP0Risks": [
+    "MemoryBackendRouter catch-all fallback can incorrectly downgrade authorization and protocol failures",
+    "GoalManager still permits legacy model actor to request achieved state",
+    "EventStore directly triggers MemoryService on terminal runs",
+    "ToolRegistry combines catalog, policy, approval, execution, sandbox and audit",
+    "AgentLoop remains the Engine v2 orchestration authority"
+  ]
+}
