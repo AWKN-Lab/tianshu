@@ -14,8 +14,9 @@ interface GoldenInput {
 }
 
 describe('contract golden fixtures', () => {
-  it('matches frozen canonical bytes and stable hash', () => {
+  it('matches normalized value, frozen canonical bytes and stable hash', () => {
     const input = JSON.parse(readFileSync(join(fixtureRoot, 'input.json'), 'utf8')) as GoldenInput;
+    const normalized = JSON.parse(readFileSync(join(fixtureRoot, 'normalized.json'), 'utf8')) as unknown;
     const canonical = readFileSync(join(fixtureRoot, 'canonical.json'), 'utf8');
     const expectedHash = readFileSync(join(fixtureRoot, 'sha256.txt'), 'utf8').trim();
     const expectedValidation = JSON.parse(
@@ -23,6 +24,7 @@ describe('contract golden fixtures', () => {
     ) as { valid: boolean };
 
     assert.equal(expectedValidation.valid, true);
+    assert.deepEqual(JSON.parse(canonicalizeJson(input.value)), normalized);
     assert.equal(canonicalizeJson(input.value), canonical);
     assert.equal(stableHash(input.schemaId, input.value), expectedHash);
   });
