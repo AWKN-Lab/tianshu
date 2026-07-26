@@ -43,6 +43,17 @@ const strictRoots = new Set([
   'outcome',
 ]);
 
+/**
+ * Every exception must name its removal work package. New exceptions require
+ * architecture review; this list is a debt register, not a wildcard bypass.
+ */
+const legacyExceptions = new Map([
+  ['ARCH-004:skills/manager.ts', {
+    workPackage: 'WP-AOS-07',
+    reason: 'Engine v2 SkillsManager compatibility singleton; remove after Skill Registry composition-root migration',
+  }],
+]);
+
 function toPosix(value) {
   return value.split(sep).join('/');
 }
@@ -86,6 +97,16 @@ const findings = {
   crossComponentImports: [],
 };
 const violations = [];
+const legacyExceptionsUsed = [];
+
+function registerViolation(violation) {
+  const exception = legacyExceptions.get(`${violation.rule}:${violation.file}`);
+  if (exception) {
+    legacyExceptionsUsed.push({ ...violation, ...exception });
+    return;
+  }
+  violations.push(violation);
+}
 
 for (const file of files) {
   const source = readFileSync(file, 'utf8');
@@ -99,7 +120,7 @@ for (const file of files) {
     const directDb = /(?:^|\/)store\/db(?:\.js)?$/.test(specifier);
     if (directDb) {
       findings.directDbImports.push({ file: relativePath, specifier });
-      if (strict) violations.push({ rule: 'ARCH-003', file: relativePath, specifier, message: 'strict component imports store/db directly' });
+      if (strict) registerViolation({ rule: 'ARCH-003', file: relativePath, specifier, message: 'strict component imports store/db directly' });
     }
 
     const targetPath = resolveRelativeImport(file, specifier);
@@ -109,7 +130,7 @@ for (const file of files) {
 
     findings.crossComponentImports.push({ file: relativePath, sourceComponent, targetComponent, targetPath });
     if (strict && !isAllowedCrossComponentTarget(targetPath)) {
-      violations.push({
+      registerViolation({
         rule: 'ARCH-002',
         file: relativePath,
         targetPath,
@@ -120,12 +141,12 @@ for (const file of files) {
 
   if (/\blet\s+instance\s*(?::|=)/.test(source)) {
     findings.moduleSingletons.push({ file: relativePath });
-    if (strict) violations.push({ rule: 'ARCH-004', file: relativePath, message: 'strict component declares a mutable module singleton' });
+    if (strict) registerViolation({ rule: 'ARCH-004', file: relativePath, message: 'strict component declares a mutable module singleton' });
   }
 
   if ((relativePath.includes('/domain/') || relativePath.includes('/application/')) && /\bprocess\.env\b/.test(source)) {
     findings.processEnvInCoreLayers.push({ file: relativePath });
-    violations.push({ rule: 'ARCH-006', file: relativePath, message: 'Domain/Application reads process.env directly' });
+    registerViolation({ rule: 'ARCH-006', file: relativePath, message: 'Domain/Application reads process.env directly' });
   }
 
   if (sourceComponent === 'contracts') {
@@ -134,7 +155,7 @@ for (const file of files) {
       if (!specifier.startsWith('.')) continue;
       const targetPath = resolveRelativeImport(file, specifier);
       if (targetPath !== null && componentOf(targetPath) !== 'contracts') {
-        violations.push({ rule: 'ARCH-001', file: relativePath, targetPath, message: 'contracts depend on runtime implementation' });
+        registerViolation({ rule: 'ARCH-001', file: relativePath, targetPath, message: 'contracts depend on runtime implementation' });
       }
     }
   }
@@ -155,15 +176,21 @@ const report = {
     moduleSingletons: findings.moduleSingletons.length,
     processEnvInCoreLayers: findings.processEnvInCoreLayers.length,
     crossComponentImports: findings.crossComponentImports.length,
+    legacyExceptionsUsed: legacyExceptionsUsed.length,
     blockingViolations: violations.length,
   },
   findings,
+  legacyExceptionsUsed,
   violations,
 };
 
 writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 console.log(JSON.stringify(report.summary, null, 2));
 console.log(`Architecture report: ${reportPath}`);
+
+for (const exception of legacyExceptionsUsed) {
+  console.warn(`${exception.rule} legacy exception ${exception.file} → ${exception.workPackage}`);
+}
 
 if (violations.length > 0) {
   for (const violation of violations) console.error(`${violation.rule} ${violation.file}: ${violation.message}`);
