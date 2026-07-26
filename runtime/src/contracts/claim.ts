@@ -92,7 +92,7 @@ export const ClaimSchema = z.object({
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['epistemicStatus'],
-        message: 'observed claims require a tool/system producer and an observation source',
+        message: 'observed claims require a tool speaker or system originator and an observation source',
       });
     }
   }
