@@ -8,7 +8,7 @@ export const RiskLevelSchema = z.enum(['R0', 'R1', 'R2', 'R3', 'R4', 'R5']);
 
 export const DesiredStateSchema = z.object({
   description: z.string().min(1),
-  successSignals: z.array(z.string().min(1)),
+  successSignals: z.array(z.string().min(1)).min(1),
 }).strict();
 
 export const AcceptanceCriterionSchema = z.object({
@@ -42,7 +42,7 @@ export const AssumptionSchema = z.object({
 
 export const GoalBudgetSchema = z.object({
   maxCycles: z.number().int().positive(),
-  maxTokens: z.number().int().nonnegative(),
+  maxTokens: z.number().int().positive(),
   maxDurationMs: z.number().int().positive(),
   maxCostMinorUnits: z.number().int().nonnegative().optional(),
 }).strict();
@@ -77,13 +77,23 @@ export const DeliveryExpectationSchema = z.object({
   successPredicate: JsonValueSchema,
 }).strict();
 
+function duplicateValues(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value)) duplicates.add(value);
+    seen.add(value);
+  }
+  return [...duplicates].sort();
+}
+
 export const GoalSpecSchema = z.object({
   schema: z.literal('awkn-goal-spec/v3'),
   goalId: awknIdSchema('goal'),
   title: z.string().min(1),
   desiredState: DesiredStateSchema,
   scope: z.object({
-    included: z.array(z.string().min(1)),
+    included: z.array(z.string().min(1)).min(1),
     excluded: z.array(z.string().min(1)),
   }).strict(),
   acceptanceCriteria: z.array(AcceptanceCriterionSchema).min(1),
@@ -107,8 +117,63 @@ export const GoalSpecSchema = z.object({
     });
   }
 
+  const duplicateChecks: Array<{ path: (string | number)[]; label: string; values: string[] }> = [
+    { path: ['scope', 'included'], label: 'included scope', values: value.scope.included },
+    { path: ['scope', 'excluded'], label: 'excluded scope', values: value.scope.excluded },
+    { path: ['acceptanceCriteria'], label: 'criterionId', values: value.acceptanceCriteria.map((item) => item.criterionId) },
+    { path: ['evidenceSources'], label: 'sourceId', values: value.evidenceSources.map((item) => item.sourceId) },
+    { path: ['constraints'], label: 'constraintId', values: value.constraints.map((item) => item.constraintId) },
+    { path: ['assumptions'], label: 'assumptionId', values: value.assumptions.map((item) => item.assumptionId) },
+    { path: ['judgePolicy', 'requiredGateTypes'], label: 'requiredGateTypes', values: value.judgePolicy.requiredGateTypes },
+    { path: ['deliveryExpectation', 'modes'], label: 'delivery modes', values: value.deliveryExpectation.modes },
+  ];
+
+  for (const check of duplicateChecks) {
+    const duplicates = duplicateValues(check.values);
+    if (duplicates.length > 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: check.path,
+        message: `duplicate ${check.label}: ${duplicates.join(', ')}`,
+      });
+    }
+  }
+
+  const excluded = new Set(value.scope.excluded);
+  const overlap = value.scope.included.filter((item) => excluded.has(item));
+  if (overlap.length > 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['scope'],
+      message: `scope cannot be both included and excluded: ${[...new Set(overlap)].join(', ')}`,
+    });
+  }
+
+  if (!value.evidenceSources.some((source) => source.required)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['evidenceSources'],
+      message: 'at least one required evidence source is required',
+    });
+  }
+
   const sourceIds = new Set(value.evidenceSources.map((source) => source.sourceId));
   for (const [criterionIndex, criterion] of value.acceptanceCriteria.entries()) {
+    if (criterion.required && criterion.evidenceSourceIds.length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['acceptanceCriteria', criterionIndex, 'evidenceSourceIds'],
+        message: 'required acceptance criteria need at least one evidence source',
+      });
+    }
+    const duplicateSourceIds = duplicateValues(criterion.evidenceSourceIds);
+    if (duplicateSourceIds.length > 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['acceptanceCriteria', criterionIndex, 'evidenceSourceIds'],
+        message: `duplicate evidence source reference: ${duplicateSourceIds.join(', ')}`,
+      });
+    }
     for (const sourceId of criterion.evidenceSourceIds) {
       if (!sourceIds.has(sourceId)) {
         context.addIssue({
@@ -143,6 +208,29 @@ export const LoopEligibilityDecisionSchema = z.object({
       message: 'eligible loop decisions must be RUN',
     });
   }
+  if (!value.eligible && value.decision === 'RUN') {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['decision'],
+      message: 'ineligible loop decisions cannot be RUN',
+    });
+  }
+  if (value.eligible && ['L2', 'L3', 'L4'].includes(value.targetLevel)) {
+    if (value.unresolvedHighImpactFields.length > 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['unresolvedHighImpactFields'],
+        message: 'eligible L2-L4 loops cannot retain unresolved high-impact fields',
+      });
+    }
+    if (value.evidenceAvailability <= 0 || value.stopConditionDeterminism <= 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['eligible'],
+        message: 'eligible L2-L4 loops require evidence and deterministic stop conditions',
+      });
+    }
+  }
 });
 
 export type LoopEligibilityDecision = z.infer<typeof LoopEligibilityDecisionSchema>;
@@ -159,6 +247,21 @@ export const GoalJudgementSchema = z.object({
   deliveryPreconditionResults: z.array(ObjectRefSchema),
   judgeVersion: z.string().min(1),
   judgedAt: UtcTimestampSchema,
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (value.verdict === 'ACHIEVED' && value.acceptanceResults.length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['acceptanceResults'],
+      message: 'ACHIEVED requires acceptance evaluation results',
+    });
+  }
+  if (value.verdict === 'ACHIEVED' && value.evidenceIds.length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['evidenceIds'],
+      message: 'ACHIEVED requires verified evidence',
+    });
+  }
+});
 
 export type GoalJudgement = z.infer<typeof GoalJudgementSchema>;
