@@ -30,12 +30,24 @@ export const EvidenceRecordSchema = z.object({
   producer: ActorRefSchema,
   verifiedBy: z.array(ActorRefSchema),
 }).strict().superRefine((value, context) => {
-  if (value.type === 'model_statement' && value.level > 1 && value.verifiedBy.length === 0) {
+  const verifierIds = value.verifiedBy.map((actor) => actor.actorId);
+  if (new Set(verifierIds).size !== verifierIds.length) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['level'],
-      message: 'model statements above evidence level 1 require an independent verifier',
+      path: ['verifiedBy'],
+      message: 'verifiedBy cannot contain duplicate actors',
     });
+  }
+
+  if (value.type === 'model_statement' && value.level > 1) {
+    const independentVerifiers = value.verifiedBy.filter((actor) => actor.actorId !== value.producer.actorId);
+    if (independentVerifiers.length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['level'],
+        message: 'model statements above evidence level 1 require an independent verifier',
+      });
+    }
   }
 });
 
