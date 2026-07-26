@@ -1,9 +1,9 @@
 # 天枢 Agent OS 3.0 总开发计划
 
 > 文档编号：TS-AOS-PLAN-021  
-> 版本：v1.0 Draft  
+> 版本：v1.1 Draft  
 > 日期：2026-07-26  
-> 关联：PR #25、#38、#39，Issue #26、#35、#36、#37、#40、#41、#42  
+> 关联：PR #25、#38、#39，Issue #26、#35、#36、#37、#40、#41、#42、#43  
 > 权威范围：`AWKN-Lab/tianshu` Agent OS 3.0 代码开发、迁移、测试与发布调度
 
 ## 一、计划目标
@@ -66,8 +66,8 @@ L4 交付单元
 | WP | 调度名称 | 主要交付 | 前置依赖 | 当前状态 |
 |---|---|---|---|---|
 | WP-AOS-00 | Baseline & Architecture Gate | 架构扫描、跨平台 CI、依赖/SBOM/Audit、Baseline Manifest | 无 | **已合并 main，PR #39** |
-| WP-AOS-01 | Core Contracts | Canonical JSON、Stable Hash、Goal/Claim/Evidence/Receipt/Event/Auth 契约与 Golden | WP00 | **PR #38 待切回 main 复验** |
-| WP-AOS-02 | Trusted Input Gateway | Duplicate-Key Parser、Identity Scope、DLP、Injection Guard、Input Receipt | WP01 | **下一主线，Issue #40** |
+| WP-AOS-01 | Core Contracts | Canonical JSON、Stable Hash、Goal/Claim/Evidence/Receipt/Event/Auth 契约与 Golden | WP00 | **已合并 main，PR #38** |
+| WP-AOS-02 | Trusted Input Gateway | Duplicate-Key Parser、Identity Scope、DLP、Injection Guard、Input Receipt | WP01 | **当前主线，Issue #40** |
 | WP-AOS-03 | Intent & Goal Router | Intent、Execution Level、Task Profile、GoalSpec Factory、Loop Eligibility | WP01、WP02 | 未开始 |
 | WP-AOS-04 | Claim Ledger | Claim Repository、Source Registry、Authority/Freshness/Conflict | WP01、WP02 | 未开始 |
 | WP-AOS-05 | Context Planner | Utility、Token Allocator、Manifest、Render Binder | WP04 | 未开始 |
@@ -104,13 +104,13 @@ L4 交付单元
 - npm Audit Evidence；
 - Legacy DB、Singleton、跨组件导入债务计数。
 
-退出证据：PR #39 Squash Merge 到 `main`。
+退出证据：PR #39 Squash Merge，`main@f86506a45adc43d7c47499d5728dbdc5c5c4e27d`。
 
-### R1：Contract Kernel — 当前阶段
+### R1：Contract Kernel — 已完成
 
 范围：WP-AOS-01。
 
-必须完成：
+已完成：
 
 - Core Contract Surface；
 - Canonical JSON 与 Stable Hash；
@@ -120,16 +120,16 @@ L4 交付单元
 - 跨平台、跨语言 Golden Fixture；
 - Contract Architecture Boundary。
 
-退出条件：
+退出证据：
 
-1. PR #38 Base 为 `main`；
+1. PR #38 Base 切回 `main`；
 2. 精确 Head 在 Ubuntu Node 20/22 与 Windows Node 20 全部通过；
-3. Diff 仅包含 Contracts、Tests、Fixtures；
-4. 0 Architecture Blocking；
-5. Squash Merge；
-6. `main` Push CI 成功。
+3. 181 项测试、0 失败；
+4. Diff 仅包含 Contracts、Tests、Fixtures；
+5. Architecture Blocking 为 0；
+6. PR #38 Squash Merge，`main@17cbda273aeed121f81f281ae9c7088e2565c00f`。
 
-### R2：Trusted Decision Core
+### R2：Trusted Decision Core — 当前阶段
 
 范围：WP-AOS-02—05。
 
@@ -319,7 +319,7 @@ test/aos-<wp>-<topic>
 7. Feature Flag 与 Rollback 明确；
 8. CI Artifact 可追溯；
 9. Issue 验收项全部勾选；
-10. PR 已合并且 `main` CI 成功。
+10. PR 已合并且合并前精确 Head CI 成功；可观察到 `main` Push CI 时一并归档。
 
 仅完成设计、仅提交代码、仅通过本地测试或仅关闭 Issue 均不构成 WP Done。
 
@@ -352,23 +352,23 @@ P0 风险必须绑定明确 WP 和删除条件，禁止以“Legacy”作为长�
 
 | 项目 | 状态 | 下一动作 |
 |---|---|---|
-| PR #39 / WP00 | **已 Squash Merge** | 观察 `main` Push CI |
-| PR #38 / WP01 | Draft，堆叠 Base 已失效 | Base 切回 `main`，精确 Head 复验，Squash Merge |
-| PR #25 / 文档体系 | Draft | 加入本文，完成术语一致性审查后合并 |
-| WP02 / #40 | Ready to Start | 从 Duplicate-Key-Aware Parser 和 Input Receipt 开始 |
-| WP08/18 / #41 | Planned | 等 WP01 后建立 Fake Provider Port |
-| WP17A / #42 | Planned | WP01 合并后冻结跨仓 Fixture Version |
+| PR #39 / WP00 | **已 Squash Merge，main@f86506a4** | 作为 R0 基线持续监测 |
+| PR #38 / WP01 | **已 Squash Merge，main@17cbda27** | Fixtures 转入 WP17A 跨仓验证 |
+| PR #25 / 文档体系 | Draft | 完成术语一致性审查后合并 |
+| WP02 / #40 | **当前开发入口** | Duplicate-Key-Aware Parser、Input Contract、Input Receipt |
+| WP08/18 / #41 | Planned | R2 期间可准备 Fake Provider Port，不接 Runtime 主链 |
+| WP17A / #42 | Ready for Protocol Work | 冻结跨仓 Fixture Version |
 | #35 | Open | 按 WP 清零六个聚合点与架构债务 |
-| #36 | Open | 作为总实施 Epic 跟踪 R0—R6 |
+| #36 / #43 | Open | 跟踪 R0—R6 和 WIP/DoD |
 
 ## 十一、最近三个执行动作
 
 严格按以下顺序：
 
 ```text
-1. PR #38 切回 main 并完成最终复验、Squash Merge
-2. 更新 PR #25：加入总开发计划、当前代码状态和 R0/R1 结果
-3. 启动 WP-AOS-02：Trusted Input Gateway，首个 PR 只做可信 JSON Parser + Input Contract/Receipt
+1. 更新并审查 PR #25 的总开发计划、当前代码状态和术语一致性
+2. 启动 WP-AOS-02：首个 PR 只做 Duplicate-Key-Aware Parser + Input Contract/Receipt
+3. 在 WP17A / #42 冻结 WP01 Golden Fixtures 的跨仓版本
 ```
 
 WP-AOS-02 首个 PR 明确不包含 Intent Router、Goal Router、Claim Ledger 或 Runtime 主链切换。
