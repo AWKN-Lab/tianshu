@@ -1,14 +1,24 @@
 # AWKN Memory OS 挂载协议
 
 > 文档编号：TS-AOS-MEM-009  
-> 版本：v0.1 Draft  
-> 关系：独立项目 + 天枢可插拔组件
+> 版本：v0.2 Draft  
+> 关系：独立项目 + 天枢唯一允许的跨仓挂载模块
 
 ## 一、定位
 
-AWKN Memory OS保持独立仓库、独立发布和独立服务能力。天枢通过Memory Backend协议挂载Memory OS，并保留本地工作记忆、检查点和故障降级能力。
+AWKN Memory OS保持独立仓库、独立发布、独立测试和独立服务能力。天枢可以通过`MemoryBackend`协议挂载Memory OS，并保留本地工作记忆、检查点和故障降级能力。
 
-目标关系：
+本协议只适用于：
+
+```text
+AWKN-Lab/tianshu
+↕ MemoryBackend Protocol
+AWKN-Lab/AWKN-Memory-OS
+```
+
+它不属于通用AWKN项目接入协议，也不授权GUNDAM、Value、win、Mr.Mont、annie、subtitle等项目接入天枢。
+
+## 二、目标关系
 
 ```text
 Tianshu Runtime
@@ -23,30 +33,30 @@ Tianshu Runtime
        AWKN Memory OS
 ```
 
-## 二、权威边界
+## 三、权威边界
 
-### 2.1 天枢权威
+### 3.1 天枢权威
 
 - 当前Execution、Goal、Run、Step和Checkpoint；
 - Context选择决策；
 - Policy和Skill运行版本；
-- 工具与模型路由；
+- 工具和模型路由；
 - Memory Write Decision；
-- Evolve回放与本地候选状态；
+- Evolve回放和本地候选状态；
 - Memory OS不可用时的降级决策。
 
-### 2.2 Memory OS权威
+### 3.2 Memory OS权威
 
 - 跨会话长期Claim；
 - Experience与Rule；
 - Context Ledger；
 - Immutable Render；
 - Consumption、Citation和Outcome Attribution；
-- 持久化事务与版本；
-- 跨项目授权；
+- 持久化事务和版本；
+- Project Grant；
 - Rule治理状态。
 
-### 2.3 双方共享
+### 3.3 双方共享
 
 - 协议版本；
 - Project Identity；
@@ -57,7 +67,18 @@ Tianshu Runtime
 - Context Receipt和Render ID；
 - Outcome和Authority Projection。
 
-## 三、运行模式
+### 3.4 明确排除
+
+- 其他业务项目Runtime；
+- 其他项目数据库；
+- 其他项目Policy和Skill Registry；
+- 其他项目Feature Flag；
+- 其他项目发布生命周期；
+- 其他项目通过Memory OS间接调用天枢。
+
+Memory OS可以独立服务其他客户或项目，但这些关系不属于本协议，也不能建立到天枢的传递依赖。
+
+## 四、运行模式
 
 ```text
 local
@@ -67,24 +88,24 @@ auto
 
 ### local
 
-- 只使用天枢本地MemoryService；
+- 只使用天枢Local Memory；
 - 适合离线、开发和故障恢复；
-- 长期跨项目能力受限。
+- 不依赖Memory OS。
 
 ### memory-os
 
-- Memory OS是持久化权威；
-- 协议或服务不可用时按Policy决定失败或等待；
+- Memory OS为持久化权威；
+- 协议或服务不可用时按Policy失败或等待；
 - 适合正式环境。
 
 ### auto
 
 - 优先Memory OS；
 - Transport或Core 5xx时允许本地降级；
-- 降级上下文必须标记`stale=true`；
-- 4xx、权限错误和协议不兼容不能静默降级。
+- 降级上下文标记`stale=true`；
+- 4xx、权限错误和协议不兼容禁止静默降级。
 
-## 四、协议协商
+## 五、协议协商
 
 天枢启动或首次调用时执行：
 
@@ -116,7 +137,29 @@ Agent OS 3.0建议新增：
 - `outcome-attribution-v2`；
 - `policy-skill-authority-v1`。
 
-## 五、Context读取主链
+## 六、Project Grant
+
+```ts
+export interface MemoryProjectGrant {
+  projectId: string;
+  clientId: 'tianshu';
+  allowedOperations: string[];
+  allowedMemoryClasses: string[];
+  actorScopes: string[];
+  expiresAt?: string;
+  grantHash: string;
+}
+```
+
+规则：
+
+- 天枢使用独立`projectId`和`clientId`；
+- 其他项目Grant不能被天枢复用；
+- 天枢Grant不能授权访问其他项目私有数据；
+- Memory OS检索结果必须经过Project Grant过滤；
+- Grant变化需要重新协商并生成Receipt。
+
+## 七、Context读取主链
 
 ```text
 Context Planner
@@ -130,17 +173,17 @@ Context Planner
 → Citation/Usage/Consumption
 ```
 
-### 5.1 空上下文
+### 7.1 空上下文
 
 当Receipt有效且`item_count=0`：
 
 - 保留Receipt ID；
-- 不创建虚假Render；
+- 不创建Render；
 - 不进入stale fallback；
 - Context Manifest记录健康空结果；
 - 后续模型正常执行。
 
-### 5.2 非空上下文
+### 7.2 非空上下文
 
 必须：
 
@@ -148,9 +191,10 @@ Context Planner
 - Render内容Hash固定；
 - Claim和Source Ref可追溯；
 - Consumption绑定本次Execution；
-- Citation只引用实际使用项。
+- Citation只引用实际使用项；
+- 结果全部处于天枢Project Grant范围。
 
-## 六、写入主链
+## 八、写入主链
 
 ```text
 Memory Write Gate
@@ -164,11 +208,9 @@ Memory Write Gate
 → Authority Projection
 ```
 
-Memory OS不能替代天枢的Write Gate。Memory OS负责持久化验证和治理，天枢负责当前任务语义、用户确认范围和写入理由。
+Memory OS不替代天枢Write Gate。天枢负责当前任务语义、用户确认范围和写入理由；Memory OS负责持久化验证和长期治理。
 
-## 七、Memory Transaction v2
-
-建议协议：
+## 九、Memory Transaction v2
 
 ```json
 {
@@ -176,6 +218,7 @@ Memory OS不能替代天枢的Write Gate。Memory OS负责持久化验证和治�
   "transaction_id": "mt_xxx",
   "idempotency_key": "...",
   "project_id": "tianshu",
+  "client_id": "tianshu",
   "actor_id": "u_xxx",
   "expected_revision": 6,
   "operations": [
@@ -202,18 +245,17 @@ Memory OS不能替代天枢的Write Gate。Memory OS负责持久化验证和治�
 }
 ```
 
-## 八、并发与冲突
+## 十、并发与冲突
 
 - 所有更新带Expected Revision；
 - 冲突返回当前版本和冲突字段；
 - 天枢重新读取并执行Merge Policy；
 - 不同字段可以采用字段级CAS；
 - 同一消息通过Idempotency Key去重；
-- 冲突是正常协作状态，禁止覆盖式重试。
+- 冲突禁止覆盖式重试；
+- 跨Project Claim禁止进入同一事务。
 
-## 九、删除与依赖
-
-删除流程：
+## 十一、删除与依赖
 
 ```text
 User Delete Request
@@ -230,19 +272,20 @@ User Delete Request
 - 审计事件保留最小Hash和时间；
 - 有效上下文不再返回已删除内容；
 - 完全依赖删除事实的派生项同步失效；
-- Policy和Rule删除需要独立治理流程；
-- 删除失败进入Outbox或人工处理。
+- Policy和Rule删除使用独立治理流程；
+- 删除失败进入Outbox或人工处理；
+- 删除范围不能跨越天枢Project Grant。
 
-## 十、Authority Outbox
+## 十二、Authority Outbox
 
-天枢将以下事件写入Authority Outbox：
+天枢写入：
 
 - Run终态；
 - Step关键证据；
 - Outcome Record；
 - Memory Write Decision；
-- Evolve Candidate与评测；
-- Policy/Skill激活、隔离和回滚。
+- Evolve Candidate和评测；
+- 天枢Policy/Skill激活、隔离和回滚。
 
 Outbox要求：
 
@@ -252,11 +295,10 @@ Outbox要求：
 - 损坏记录进入Quarantine；
 - 4xx不无限重试；
 - 5xx和Transport错误按退避重试；
-- 本地成功和远端权威未同步分开显示。
+- 本地成功和远端权威未同步分开显示；
+- 不接收其他业务项目Event。
 
-## 十一、Rule治理
-
-建议继续保持单活：
+## 十三、Rule治理
 
 ```text
 PROPOSED
@@ -266,7 +308,7 @@ PROPOSED
 → PAUSED / RETIRED
 ```
 
-天枢本地Candidate进入ACTIVE前，远端Rule必须ACTIVE。切换顺序：
+天枢本地Candidate进入ACTIVE前，远端Rule必须ACTIVE。
 
 ```text
 pause old remote
@@ -277,7 +319,14 @@ pause old remote
 
 任一步失败执行反向补偿。
 
-## 十二、降级语义
+Rule Scope必须限定：
+
+- `client_id=tianshu`；
+- `project_id=tianshu或明确的天枢项目空间`；
+- 天枢Policy和Skill类型；
+- 禁止影响其他业务仓库。
+
+## 十四、降级语义
 
 | 场景 | 行为 |
 |---|---|
@@ -288,10 +337,11 @@ pause old remote
 | 协议不兼容 | 停止，输出诊断 |
 | Project Grant缺失 | 停止，等待配置 |
 | Outbox积压 | 允许本地执行，明确权威同步状态 |
+| 返回其他项目私有Claim | 拒绝并记录Scope Violation |
 
-## 十三、独立运行能力
+## 十五、Memory OS独立运行能力
 
-Memory OS独立项目需要保留：
+Memory OS独立项目保留：
 
 - Core API；
 - Python SDK；
@@ -307,31 +357,27 @@ Memory OS独立项目需要保留：
 
 天枢不复制这些实现，只通过协议消费。
 
-## 十四、配置
+## 十六、配置
 
 ```text
 AWKN_MEMORY_BACKEND=local|memory-os|auto
 AWKN_MEMORY_OS_URL=http://127.0.0.1:8765
 AWKN_MEMORY_OS_TOKEN=...
 AWKN_MEMORY_OS_TOKEN_PATH=...
-AWKN_PROJECT_ID=...
+AWKN_PROJECT_ID=tianshu
+AWKN_MEMORY_CLIENT_ID=tianshu
 AWKN_MEMORY_SESSION_ID=...
 AWKN_MEMORY_OS_OUTBOX=...
 AWKN_MEMORY_OS_AUTO_GOVERNANCE=0|1
-```
-
-Agent OS 3.0建议增加：
-
-```text
 AWKN_MEMORY_PROTOCOL_MIN=awkn-core-sdk/1.0
 AWKN_MEMORY_CLAIM_SCHEMA=awkn-claim/v2
 AWKN_MEMORY_TRANSACTION_SCHEMA=awkn-memory-transaction/v2
 AWKN_MEMORY_REQUIRE_AUTHORITY=0|1
 ```
 
-## 十五、测试
+## 十七、测试
 
-1. 本地、远端、auto三模式；
+1. local、memory-os、auto三模式；
 2. 协议协商成功和失败；
 3. 空Receipt不创建Render；
 4. 非空Receipt强制Render；
@@ -344,13 +390,18 @@ AWKN_MEMORY_REQUIRE_AUTHORITY=0|1
 11. 远端Rule单活；
 12. 激活失败反向补偿；
 13. Context Consumption和Outcome Attribution；
-14. Clean Install环境真实握手。
+14. Clean Install环境真实握手；
+15. 其他项目Grant不能被天枢使用；
+16. 其他项目Claim返回时被Scope Gate拒绝；
+17. Memory OS不能作为其他项目调用天枢的中转通道。
 
-## 十六、验收
+## 十八、验收
 
 - Memory OS可以独立发布和运行；
 - 天枢可以通过统一协议挂载；
-- 天枢本地模式不依赖Memory OS；
+- 天枢local模式不依赖Memory OS；
 - auto降级语义准确；
 - 每次远端上下文和写入都有Receipt；
-- 权威规则单活、可回滚、可诊断。
+- 权威规则单活、可回滚、可诊断；
+- 本协议是天枢唯一跨仓运行协议；
+- 其他业务项目无法通过本协议接入天枢。
