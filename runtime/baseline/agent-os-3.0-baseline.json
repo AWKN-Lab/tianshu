@@ -8,35 +8,39 @@
     "runtimeRoot": "runtime"
   },
   "evidence": {
+    "snapshotKind": "prior-successful-workflow-run",
     "branch": "chore/aos-00-baseline-ci",
-    "commitSha": "d241e4848ef705b69606c9df9a01a6c3c7b85089",
+    "commitSha": "758f40c5f582ffb80f8e997429b0de4362991746",
     "workflow": "runtime-ci",
-    "workflowRunId": 30201554716,
-    "workflowRunNumber": 55,
+    "workflowRunId": 30203391750,
+    "workflowRunNumber": 94,
     "conclusion": "success",
     "matrix": [
       {
         "os": "ubuntu-latest",
         "node": "20",
         "conclusion": "success",
-        "artifactDigest": "sha256:5edfbaacfb570934e1b39bb06852a0e885d7ff354448c187c58c7b4ac7ed4459"
+        "artifactDigest": "sha256:0834943ab195cb3924e88b2c2df398d175623770101e33ed48997d3131ae7264"
       },
       {
         "os": "ubuntu-latest",
         "node": "22",
         "conclusion": "success",
-        "artifactDigest": "sha256:310151dba984343ec3b90ed57c7e1d0c9482576607f0455b1011c387ddb78dce"
+        "artifactDigest": "sha256:3de9d0267a0ec7e38c0d247e736cbdec672d228cef7cacf77708150b73e364e7"
       },
       {
         "os": "windows-latest",
         "node": "20",
         "conclusion": "success",
-        "artifactDigest": "sha256:ef68771afa0483dd5b05df47fd4f5bd744570ca2bb3a38ab9d7c24ce54eccbbd"
+        "artifactDigest": "sha256:dba437f4d67a9a7f7698c59d6847049e7988e98ae26b394b1afb4aebd0dc0984"
       }
     ],
     "ubuntuNode22": {
-      "architectureReportSha256": "41d5abd5bce0c4d0d851b7a32d8096034b37f2e8d9844388d1b6a9f7addb3814",
-      "checkLogSha256": "8f0c1f73a936d4886506cd1a98186369282ce324bc5d951f6f37a3180457d62f"
+      "architectureReportSha256": "c3a6fcccd12688e29fe87ed12d114edd159680b640a92414b39a7a4cdfb5ca9c",
+      "checkLogSha256": "9db15fde42e314f3ceb56a102e8e5d28bb57392e4e4a279bf1657f3dc0017398",
+      "dependencyManifestSha256": "732c28b041f704ccb56ed514110396ae745d3964d64557edbc5f30b791ffe017",
+      "cycloneDxSbomSha256": "6580ecba4086d946a91639868bb5cf2605583079111e5193e5b4b608dd5ee6a0",
+      "npmAuditSha256": "4673693cc3000dc96cdba45890591ff383c4e28c7f402fc1e7fde6edfd74caec"
     }
   },
   "runtime": {
@@ -80,6 +84,38 @@
         "removalWorkPackage": "WP-AOS-07"
       }
     ]
+  },
+  "dependencies": {
+    "lockfilePackageEntries": 147,
+    "directRuntime": 3,
+    "directDevelopment": 5,
+    "transitive": 139,
+    "missingIntegrity": 0,
+    "missingLicense": 0,
+    "cycloneDx": {
+      "specVersion": "1.5",
+      "components": 93
+    },
+    "npmAudit": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "directRuntimePackages": {
+      "better-sqlite3": "^11.7.0",
+      "cron-parser": "^5.5.0",
+      "zod": "^3.24.0"
+    },
+    "directDevelopmentPackages": {
+      "@types/better-sqlite3": "^7.6.12",
+      "@types/node": "^22.0.0",
+      "tsx": "^4.19.0",
+      "typescript": "^5.6.0",
+      "vitest": "^4.1.7"
+    }
   },
   "capabilities": {
     "primaryCliCommandGroups": [
@@ -156,11 +192,19 @@
     ],
     "requiredAction": "unify versions 8-10 into the authoritative migration registry before Agent OS v11"
   },
+  "pendingEvidence": [
+    {
+      "type": "provider-independent-token-and-latency-baseline",
+      "issue": 41,
+      "reason": "current LlmRouter hardcodes providers, memory enrichment and usage persistence"
+    }
+  ],
   "knownP0Risks": [
     "MemoryBackendRouter catch-all fallback can incorrectly downgrade authorization and protocol failures",
     "GoalManager still permits legacy model actor to request achieved state",
     "EventStore directly triggers MemoryService on terminal runs",
     "ToolRegistry combines catalog, policy, approval, execution, sandbox and audit",
-    "AgentLoop remains the Engine v2 orchestration authority"
+    "AgentLoop remains the Engine v2 orchestration authority",
+    "raw JSON duplicate keys require a duplicate-aware Trusted Input parser tracked by issue 40"
   ]
 }
