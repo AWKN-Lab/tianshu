@@ -1,6 +1,6 @@
 # 天枢 Agent OS 3.0 工程文档集
 
-> 版本：v1.0 Engineering Draft  
+> 版本：v1.1 Engineering Draft  
 > 日期：2026-07-26  
 > 状态：架构与实施级工程文档已齐备，等待评审  
 > 权威项目：`AWKN-Lab/tianshu`
@@ -69,6 +69,7 @@ AWKN Memory OS 独立部署、独立发布、独立使用，通过 `MemoryBacken
 | [17-测试矩阵与Release-Runbook.md](./17-测试矩阵与Release-Runbook.md) | WP 测试矩阵、CI、Golden、RC、发布和回滚 Runbook | #32 |
 | [18-Memory-OS-vNext双仓实施RFC.md](./18-Memory-OS-vNext双仓实施RFC.md) | 双仓协议、Endpoint、CAS、Outbox、兼容和发布顺序 | #33 |
 | [19-Loop-Engineering与大型Agent-Prompt迁移启示.md](./19-Loop-Engineering与大型Agent-Prompt迁移启示.md) | Goal 外层循环、循环准入、Goal Judge、上下文隔离和 Prompt 编译治理 | #34 |
+| [20-组件金字塔与模块职责边界.md](./20-组件金字塔与模块职责边界.md) | 六层金字塔、C01—C09 有界模块、数据 Owner、Port/Adapter、架构适应性测试 | #26 |
 
 ## 四、工程文档完成状态
 
@@ -79,26 +80,31 @@ AWKN Memory OS 独立部署、独立发布、独立使用，通过 `MemoryBacken
 - [x] Adapter、Shadow Mode 与 Feature Flag；
 - [x] 测试矩阵与 Release Runbook；
 - [x] Memory OS vNext 双仓 RFC；
-- [x] Loop Engineering 与大型 Agent Prompt 迁移研究。
+- [x] Loop Engineering 与大型 Agent Prompt 迁移研究；
+- [x] 组件金字塔与模块职责边界。
 
 文档交付已经完成。代码、Migration、CI、Protocol 和 RC 仍按 WP-AOS-00—19 独立实施和验收。
 
 ## 五、已冻结的 P0 工程决定
 
 1. 新增 `ExecutionCoordinator` 作为 C01—C09 主链编排器；
-2. `ExecutionEnvelope` 保存 Ref、状态、Hash 和 revision；
-3. Receipt 使用统一 Envelope 和分类 Payload；
-4. EventStore 与业务投影同事务，ReceiptStore 保存证明材料；
-5. Claim 使用 `epistemicStatus + confirmationLevel` 双轴；
-6. Canonical JSON、Stable Hash、ID、时间和 unknown/null/omitted 语义已定义；
-7. Authorization 使用服务端引用令牌、原子预占和撤销；
-8. Goal 只有 `GoalJudgeService` 可以更新为 ACHIEVED；
-9. Shadow 路径禁止外部副作用；
-10. Feature Flag 在 Execution 创建时冻结；
-11. Agent OS 新 Migration 从 v11 开始，统一进入 Registry；
-12. Memory OS 协议拆为 WP17A Contracts 和 WP17B Adapter/Governance；
-13. 401/403、Grant 和协议不兼容禁止 local 降级；
-14. 除 Memory OS 外，不增加跨仓运行依赖。
+2. C01—C09 是一级能力组件组，二级有界模块是代码隔离、数据归属和独立测试的最小单元；
+3. 每个有界模块统一区分 Domain、Application、Ports、Adapters、Persistence、Observability；
+4. 跨组件调用只允许经过 Contracts、`public.ts`、Inbound Port、Domain Event 和 Receipt Ref；
+5. 新 Agent OS 核心禁止直接导入兄弟组件实现、直接访问 SQLite 和使用模块级可变单例；
+6. `ExecutionEnvelope` 保存 Ref、状态、Hash 和 revision；
+7. Receipt 使用统一 Envelope 和分类 Payload；
+8. EventStore 与业务投影同事务，ReceiptStore 保存证明材料；
+9. Claim 使用 `epistemicStatus + confirmationLevel` 双轴；
+10. Canonical JSON、Stable Hash、ID、时间和 unknown/null/omitted 语义已定义；
+11. Authorization 使用服务端引用令牌、原子预占和撤销；
+12. Goal 只有 `GoalJudgeService` 可以更新为 ACHIEVED；
+13. Shadow 路径禁止外部副作用；
+14. Feature Flag 在 Execution 创建时冻结；
+15. Agent OS 新 Migration 从 v11 开始，统一进入 Registry；
+16. Memory OS 协议拆为 WP17A Contracts 和 WP17B Adapter/Governance；
+17. 401/403、Grant 和协议不兼容禁止 local 降级；
+18. 除 Memory OS 外，不增加跨仓运行依赖。
 
 ## 六、实施 Gate
 
