@@ -3,6 +3,7 @@ import { ActorRefSchema } from './actors.js';
 import { awknIdSchema } from './ids.js';
 import { JsonValueSchema } from './json-value.js';
 import { RiskLevelSchema } from './goal.js';
+import { SafeNonNegativeIntegerSchema, SafePositiveIntegerSchema } from './numbers.js';
 import { UtcTimestampSchema } from './time.js';
 
 const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
@@ -27,8 +28,8 @@ export const AuthorizationRecordSchema = z.object({
   allowedOperations: z.array(z.string().min(1)).min(1),
   targetConstraints: z.record(JsonValueSchema),
   riskCeiling: RiskLevelSchema,
-  maxUses: z.number().int().positive(),
-  usedCount: z.number().int().nonnegative(),
+  maxUses: SafePositiveIntegerSchema,
+  usedCount: SafeNonNegativeIntegerSchema,
   status: z.enum(['PENDING', 'ACTIVE', 'CONSUMED', 'REVOKED', 'EXPIRED']),
   issuedAt: UtcTimestampSchema,
   expiresAt: UtcTimestampSchema,
