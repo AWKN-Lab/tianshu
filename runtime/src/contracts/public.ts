@@ -6,6 +6,7 @@ export * from './claim-migration.js';
 export * from './claim-repository.js';
 export * from './claim-resolution.js';
 export * from './context.js';
+export * from './context-render.js';
 export * from './errors.js';
 export * from './events.js';
 export * from './evidence.js';
