@@ -88,8 +88,8 @@ export function judgeGoal(value: GoalJudgeInput): GoalJudgement {
   }
 
   const deliveryPreconditionResults: ObjectRef[] = [];
-  for (const precondition of input.deliveryPreconditions.filter((candidate) => candidate.required)) {
-    const evaluation = deliveryById.get(precondition.preconditionId);
+  for (const preconditionId of input.requiredDeliveryPreconditionIds) {
+    const evaluation = deliveryById.get(preconditionId);
     checks.push({ status: evaluation?.status ?? 'MISSING' });
     if (evaluation !== undefined) deliveryPreconditionResults.push(evaluation.resultRef);
   }
