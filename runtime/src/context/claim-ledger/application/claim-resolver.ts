@@ -146,7 +146,7 @@ function resolveGroup(
       },
       transitions: superseded.map((candidate) => ({
         claimId: candidate.claim.claimId,
-        toStatus: 'superseded',
+        toStatus: 'superseded' as const,
         reasonCode: 'SUPERSEDED_BY_DOMINANT_CLAIM',
       })).sort((left, right) => left.claimId.localeCompare(right.claimId)),
       usableClaimIds: [first.claim.claimId],
