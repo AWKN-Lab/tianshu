@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { applyClaimLedgerMigrationV12 } from './claim-ledger-migration-v12.js';
 import { runAllMigrations as runLegacyAndCompatibilityMigrations } from './migration-registry-v2.js';
 
 interface AgentOsMigration {
@@ -107,6 +108,11 @@ const AGENT_OS_MIGRATIONS: readonly AgentOsMigration[] = [
           ON domain_events(aggregate_id, aggregate_revision);
       `);
     },
+  },
+  {
+    version: 12,
+    name: 'agent-os-claim-ledger-v3',
+    up: applyClaimLedgerMigrationV12,
   },
 ] as const;
 
