@@ -19,11 +19,46 @@ export class MigrationBackupError extends Error {
 }
 
 /**
+ * Retries a synchronous file read on Windows transient lock errors (EBUSY/EACCES).
+ *
+ * Windows may briefly hold a file handle after `copyFileSync` completes, causing
+ * the immediate `readFileSync` to fail with EBUSY. This is a known filesystem
+ * race that does not indicate data corruption. We retry a bounded number of
+ * times with backoff before surfacing the error.
+ *
+ * Only EBUSY/EACCES are retried — other errno codes (ENOENT, EISDIR, etc.)
+ * propagate immediately so real errors are not masked.
+ */
+function readFileWithTransientLockRetry(filePath: string): Buffer {
+  const MAX_RETRIES = 3;
+  const BASE_DELAY_MS = 50;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      return readFileSync(filePath);
+    } catch (cause) {
+      const err = cause as NodeJS.ErrnoException;
+      if (err.code !== 'EBUSY' && err.code !== 'EACCES') {
+        throw cause;
+      }
+      lastError = cause;
+      // Synchronous sleep via Atomics.wait (no event loop, no timer cleanup).
+      // Only sleep between retries, not after the last attempt.
+      if (attempt < MAX_RETRIES - 1) {
+        const buf = new Int32Array(new SharedArrayBuffer(4));
+        Atomics.wait(buf, 0, 0, BASE_DELAY_MS * (attempt + 1));
+      }
+    }
+  }
+  throw lastError;
+}
+
+/**
  * Computes SHA256 hash of a file.
  * Used for backup integrity verification before and after restore.
  */
 export function computeFileHash(filePath: string): string {
-  const content = readFileSync(filePath);
+  const content = readFileWithTransientLockRetry(filePath);
   return createHash('sha256').update(content).digest('hex');
 }
 
