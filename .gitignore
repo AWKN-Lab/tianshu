@@ -69,10 +69,19 @@ out/
 # ===== runtime 内部状态（数据库、缓存、上下文快照）=====
 runtime/data/*.db
 runtime/data/*.db-journal
+runtime/data/*.db-wal
+runtime/data/*.db-shm
 runtime/data/cron-contexts/
 runtime/data/llm-bridge/
 runtime/data/drafts/
 runtime/data/*.log
+runtime/data/*.jsonl
+
+# ===== runtime 构建产物（architecture-scan / baseline 报告）=====
+runtime/architecture-scan.json
+
+# ===== 本地临时开发工具（不发布）=====
+runtime/scripts/run-l2-memory-os.mjs
 
 # ===== 测试临时产物 =====
 *.test.log
