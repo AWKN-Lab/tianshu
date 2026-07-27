@@ -16,6 +16,7 @@ import {
   ContextRenderError,
   bindContextRender,
   planContext,
+  verifyImmutableRender,
 } from '../../src/context/public.js';
 
 const id = (prefix: string, digit: string): string => `${prefix}_${digit.repeat(32)}`;
@@ -220,5 +221,85 @@ describe('Immutable Context Render Binder', () => {
       () => bindContextRender({ ...input, sources: changed }),
       'MANIFEST_REF_HASH_MISMATCH',
     );
+  });
+});
+
+describe('verifyImmutableRender (read-time integrity)', () => {
+  it('verifies a valid ImmutableContextRender', () => {
+    const render = bindContextRender(renderInput());
+    verifyImmutableRender(render);
+  });
+
+  it('rejects a tampered renderHash', () => {
+    const render = bindContextRender(renderInput());
+    const tampered = { ...render, renderHash: '0'.repeat(64) };
+    assert.throws(
+      () => verifyImmutableRender(tampered),
+      (error: unknown) => error instanceof ContextRenderError && error.code === 'RENDER_HASH_MISMATCH',
+    );
+  });
+
+  it('rejects a tampered section payload (hash mismatch)', () => {
+    const render = bindContextRender(renderInput());
+    const tamperedSections = render.sections.map((section, index) =>
+      index === 0 ? { ...section, items: [{ ...section.items[0], content: { tampered: true } }] } : section);
+    const tampered = { ...render, sections: tamperedSections };
+    assert.throws(
+      () => verifyImmutableRender(tampered),
+      (error: unknown) => error instanceof ContextRenderError && error.code === 'RENDER_HASH_MISMATCH',
+    );
+  });
+});
+
+describe('Unicode Code Point Comparator', () => {
+  it('sorts ASCII itemIds deterministically (localeCompare independent)', () => {
+    const sources = [
+      source('zebra1', { z: 1 }),
+      source('apple2', { a: 1 }),
+      source('mango3', { m: 1 }),
+      source('Apple4', { A: 1 }),
+    ];
+    const candidates = [
+      candidate('mango3', 'KNOWLEDGE', sources[2]),
+      candidate('zebra1', 'KNOWLEDGE', sources[0]),
+      candidate('apple2', 'KNOWLEDGE', sources[1]),
+      candidate('Apple4', 'KNOWLEDGE', sources[3]),
+    ];
+    const manifest = planContext({
+      schema: 'awkn-context-planner-input/v1',
+      plan: {
+        schema: 'awkn-context-query-plan/v1',
+        contextId: id('ctx', '7'),
+        executionId: id('exec', '8'),
+        query: 'code point sort test',
+        tokenBudget: 200,
+        allowStale: false,
+        allowedSensitivityClasses: ['internal'],
+        policyVersion: 'context-policy/v1',
+        plannerVersion: 'context-planner/v1',
+        createdAt: now,
+      },
+      candidates,
+    });
+    assert.equal(manifest.status, 'READY');
+    const render = bindContextRender({
+      schema: 'awkn-context-render-input/v1',
+      renderId: id('rnd', '9'),
+      manifest,
+      sources,
+      binderVersion: 'context-render-binder/v1',
+      createdAt: now,
+    });
+    assert.deepEqual(render.sections[0].items.map((item) => item.itemId), ['Apple4', 'apple2', 'mango3', 'zebra1']);
+  });
+
+  it('produces identical hash on Windows and Linux (no locale dependency)', () => {
+    const input = renderInput();
+    const first = bindContextRender(input);
+    const second = bindContextRender(input);
+    assert.equal(first.renderHash, second.renderHash);
+    assert.equal(first.renderedText, second.renderedText);
+    verifyImmutableRender(first);
+    verifyImmutableRender(second);
   });
 });

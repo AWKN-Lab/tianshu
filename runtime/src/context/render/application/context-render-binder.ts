@@ -19,7 +19,11 @@ export type ContextRenderErrorCode =
   | 'MANIFEST_HASH_MISMATCH'
   | 'SOURCE_SET_MISMATCH'
   | 'SOURCE_HASH_MISMATCH'
-  | 'MANIFEST_REF_HASH_MISMATCH';
+  | 'MANIFEST_REF_HASH_MISMATCH'
+  | 'RENDER_HASH_MISMATCH'
+  | 'SECTION_ORDER_VIOLATION'
+  | 'ITEM_DUPLICATE_ACROSS_SECTIONS'
+  | 'ITEMS_NOT_SORTED';
 
 export class ContextRenderError extends Error {
   constructor(readonly code: ContextRenderErrorCode, message: string) {
@@ -35,6 +39,27 @@ const SECTION_ORDER: readonly ContextSection[] = [
   'KNOWLEDGE',
   'TOOL_SKILL',
 ];
+
+/**
+ * Deterministic Unicode Code Point Comparator.
+ *
+ * Replaces localeCompare() which depends on runtime locale and may produce
+ * different orderings on Windows vs Linux, breaking cross-platform Hash
+ * determinism. This comparator iterates by Unicode code point (not UTF-16
+ * code unit), ensuring consistent ordering for all valid itemId strings
+ * including those with astral-plane characters.
+ */
+function compareByCodePoint(a: string, b: string): number {
+  const aPoints = [...a];
+  const bPoints = [...b];
+  const len = Math.min(aPoints.length, bPoints.length);
+  for (let i = 0; i < len; i++) {
+    const aCode = aPoints[i].codePointAt(0)!;
+    const bCode = bPoints[i].codePointAt(0)!;
+    if (aCode !== bCode) return aCode - bCode;
+  }
+  return aPoints.length - bPoints.length;
+}
 
 function assertManifestHash(input: ContextRenderInput): void {
   const { manifestHash, ...projection } = input.manifest;
@@ -68,7 +93,7 @@ export function bindContextRender(value: ContextRenderInput): ImmutableContextRe
   );
   const orderedIncluded = [...input.manifest.included].sort((left, right) => {
     const section = SECTION_ORDER.indexOf(left.section) - SECTION_ORDER.indexOf(right.section);
-    return section !== 0 ? section : left.itemId.localeCompare(right.itemId);
+    return section !== 0 ? section : compareByCodePoint(left.itemId, right.itemId);
   });
 
   for (const included of orderedIncluded) {
@@ -104,9 +129,10 @@ export function bindContextRender(value: ContextRenderInput): ImmutableContextRe
   const sections: ContextRenderSection[] = SECTION_ORDER
     .map((section) => ContextRenderSectionSchema.parse({
       section,
-      items: (itemsBySection.get(section) ?? []).sort((left, right) => left.itemId.localeCompare(right.itemId)),
+      items: (itemsBySection.get(section) ?? []).sort((left, right) => compareByCodePoint(left.itemId, right.itemId)),
     }))
     .filter((section) => section.items.length > 0);
+  assertCrossFieldInvariants(sections);
   const renderedText = contextRenderText(sections);
   const base = {
     schema: 'awkn-immutable-context-render/v1' as const,
@@ -123,4 +149,80 @@ export function bindContextRender(value: ContextRenderInput): ImmutableContextRe
     ...base,
     renderHash: immutableContextRenderHash(base),
   });
+}
+
+/**
+ * Verifies cross-field invariants after Render binding.
+ *
+ * Ensures:
+ * - Sections follow SECTION_ORDER (no out-of-order sections)
+ * - itemId is unique across all sections (no duplicates)
+ * - Each section's items are sorted by Unicode code point
+ *
+ * These invariants protect the Render Hash: if any invariant is violated,
+ * the rendered text would differ from a canonical re-rendering, breaking
+ * cross-platform replayability.
+ */
+function assertCrossFieldInvariants(sections: readonly ContextRenderSection[]): void {
+  let lastIndex = -1;
+  for (const section of sections) {
+    const currentIndex = SECTION_ORDER.indexOf(section.section);
+    if (currentIndex === -1) {
+      throw new ContextRenderError(
+        'SECTION_ORDER_VIOLATION',
+        `unknown section: ${section.section}`,
+      );
+    }
+    if (currentIndex <= lastIndex) {
+      throw new ContextRenderError(
+        'SECTION_ORDER_VIOLATION',
+        `section ${section.section} appears out of order (index ${currentIndex} after ${lastIndex})`,
+      );
+    }
+    lastIndex = currentIndex;
+  }
+
+  const seenItemIds = new Set<string>();
+  for (const section of sections) {
+    for (let i = 1; i < section.items.length; i++) {
+      if (compareByCodePoint(section.items[i - 1].itemId, section.items[i].itemId) >= 0) {
+        throw new ContextRenderError(
+          'ITEMS_NOT_SORTED',
+          `items in section ${section.section} are not sorted by code point: ${section.items[i - 1].itemId} >= ${section.items[i].itemId}`,
+        );
+      }
+    }
+    for (const item of section.items) {
+      if (seenItemIds.has(item.itemId)) {
+        throw new ContextRenderError(
+          'ITEM_DUPLICATE_ACROSS_SECTIONS',
+          `itemId ${item.itemId} appears in multiple sections`,
+        );
+      }
+      seenItemIds.add(item.itemId);
+    }
+  }
+}
+
+/**
+ * Verifies an ImmutableContextRender on read/load.
+ *
+ * Call this when deserializing or loading a previously-stored Render to
+ * ensure its integrity has not been tampered with. This recomputes the
+ * renderHash and validates cross-field invariants, providing fail-closed
+ * protection against partial corruption or malicious tampering.
+ *
+ * Throws ContextRenderError with code RENDER_HASH_MISMATCH if the stored
+ * hash does not match the recomputed hash.
+ */
+export function verifyImmutableRender(render: ImmutableContextRender): void {
+  const { renderHash, ...projection } = render;
+  const computedHash = immutableContextRenderHash(projection);
+  if (computedHash !== renderHash) {
+    throw new ContextRenderError(
+      'RENDER_HASH_MISMATCH',
+      'ImmutableContextRender hash does not match its projection (possible tampering or corruption)',
+    );
+  }
+  assertCrossFieldInvariants(render.sections);
 }
