@@ -4,6 +4,7 @@ import { z } from 'zod';
 export const AWKN_ID_PREFIXES = {
   input: 'in',
   intent: 'intent',
+  context: 'ctx',
   execution: 'exec',
   trace: 'tr',
   goal: 'goal',
