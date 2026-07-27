@@ -31,7 +31,6 @@ export type GateEvaluation = z.infer<typeof GateEvaluationSchema>;
 
 export const DeliveryPreconditionEvaluationSchema = z.object({
   preconditionId: z.string().min(1),
-  required: z.boolean(),
   status: EvaluationStatusSchema,
   resultRef: ObjectRefSchema,
 }).strict();
@@ -75,6 +74,7 @@ export const GoalJudgeInputSchema = z.object({
   acceptanceEvaluations: z.array(AcceptanceEvaluationSchema),
   constraintEvaluations: z.array(ConstraintEvaluationSchema),
   gateEvaluations: z.array(GateEvaluationSchema),
+  requiredDeliveryPreconditionIds: z.array(z.string().min(1)),
   deliveryPreconditions: z.array(DeliveryPreconditionEvaluationSchema),
   evidenceRecords: z.array(EvidenceRecordSchema),
   evidenceBindings: z.array(EvidenceSourceBindingSchema),
@@ -107,8 +107,14 @@ export const GoalJudgeInputSchema = z.object({
   );
   rejectDuplicates(
     context,
+    ['requiredDeliveryPreconditionIds'],
+    'required delivery precondition',
+    value.requiredDeliveryPreconditionIds,
+  );
+  rejectDuplicates(
+    context,
     ['deliveryPreconditions'],
-    'delivery precondition',
+    'delivery precondition evaluation',
     value.deliveryPreconditions.map((item) => item.preconditionId),
   );
   rejectDuplicates(
