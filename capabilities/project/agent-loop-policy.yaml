@@ -1,0 +1,58 @@
+version: 1
+global:
+  service_enabled: true
+  default_policy: deny
+  max_nesting_depth: 1
+  warning_at: 0.70
+  require_acceptance: true
+  require_fresh_evidence: true
+  resume_after_restart: true
+profiles:
+  prd_spec:
+    maxCycles: 2
+    maxTurnsPerCycle: 4
+    maxTokens: 20000
+    maxDurationMinutes: 20
+  build:
+    maxCycles: 3
+    maxTurnsPerCycle: 6
+    maxTokens: 40000
+    maxDurationMinutes: 30
+  bugfix:
+    maxCycles: 4
+    maxTurnsPerCycle: 6
+    maxTokens: 50000
+    maxDurationMinutes: 45
+  cicd_repair:
+    maxCycles: 3
+    maxTurnsPerCycle: 4
+    maxTokens: 30000
+    maxDurationMinutes: 30
+  audit_remediation:
+    maxCycles: 2
+    maxTurnsPerCycle: 4
+    maxTokens: 20000
+    maxDurationMinutes: 20
+  deploy_observe:
+    maxCycles: 3
+    maxTurnsPerCycle: 4
+    maxTokens: 20000
+    maxDurationMinutes: 20
+  explicit_long_run:
+    maxCycles: 10
+    maxTurnsPerCycle: 6
+    maxTokens: 150000
+    maxDurationMinutes: 120
+capabilities:
+  tianhuo: { mode: orchestrator }
+  tianjie: { mode: orchestrator }
+  execution-check: { mode: gate }
+  engineer: { mode: bounded, profile: build }
+  bugfix: { mode: bounded, profile: bugfix }
+  audit: { mode: independent_gate }
+  cicd: { mode: bounded, profile: cicd_repair }
+  deploy: { mode: action_level, profile: deploy_observe }
+  prd: { mode: conditional, profile: prd_spec }
+  spec: { mode: conditional, profile: prd_spec }
+  engineering-docs: { mode: single }
+  retrospective: { mode: single }

@@ -1,0 +1,122 @@
+version: 1
+capabilities:
+  - id: tianhuo
+    version: 1.0.0
+    canonical_skill: tianhuo
+    aliases: [天火]
+    visibility: public
+    card: project/tianhuo/card.md
+    full_reference: project/tianhuo/reference.md
+    loop_profile: orchestrator
+    allowed_tools: []
+    content_hash: generated
+  - id: tianjie
+    version: 1.0.0
+    canonical_skill: awkn-程序员天阶功法
+    aliases: [天阶功法, 程序员天阶功法]
+    visibility: public
+    card: project/tianjie/card.md
+    full_reference: project/tianjie/reference.md
+    loop_profile: orchestrator
+    allowed_tools: []
+    content_hash: generated
+  - id: execution-check
+    version: 1.0.1
+    canonical_skill: awkn-执行检查
+    aliases: [执行检查, 改前检查]
+    visibility: public
+    card: project/execution-check/card.md
+    full_reference: project/execution-check/reference.md
+    loop_profile: gate
+    allowed_tools: []
+    content_hash: generated
+  - id: engineer
+    version: 1.0.0
+    canonical_skill: awkn-工程师
+    aliases: [工程师, 开发, 编码]
+    visibility: public
+    card: project/engineer/card.md
+    full_reference: project/engineer/reference.md
+    loop_profile: build
+    allowed_tools: []
+    content_hash: generated
+  - id: bugfix
+    version: 1.0.0
+    canonical_skill: awkn-bug修复大法
+    aliases: [BUG修复, Bug修复, 故障修复]
+    visibility: public
+    card: project/bugfix/card.md
+    full_reference: project/bugfix/reference.md
+    loop_profile: bugfix
+    allowed_tools: []
+    content_hash: generated
+  - id: audit
+    version: 1.0.1
+    canonical_skill: awkn-审核
+    aliases: [审核, 代码审查, QA]
+    visibility: public
+    card: project/audit/card.md
+    full_reference: project/audit/reference.md
+    loop_profile: independent_gate
+    allowed_tools: []
+    content_hash: generated
+  - id: cicd
+    version: 1.0.1
+    canonical_skill: awkn-cicd
+    aliases: [CICD, CI/CD, 测试构建]
+    visibility: public
+    card: project/cicd/card.md
+    full_reference: project/cicd/reference.md
+    loop_profile: cicd_repair
+    allowed_tools: []
+    content_hash: generated
+  - id: deploy
+    version: 1.0.1
+    canonical_skill: awkn-部署
+    aliases: [部署, 发布, 上线]
+    visibility: public
+    card: project/deploy/card.md
+    full_reference: project/deploy/reference.md
+    loop_profile: deploy_observe
+    allowed_tools: []
+    content_hash: generated
+  - id: prd
+    version: 1.0.0
+    canonical_skill: awkn-prd
+    aliases: [PRD, 产品需求]
+    visibility: public
+    card: project/prd/card.md
+    full_reference: project/prd/reference.md
+    loop_profile: prd_spec
+    allowed_tools: []
+    content_hash: generated
+  - id: spec
+    version: 1.0.0
+    canonical_skill: awkn-spec
+    aliases: [Spec, 规格]
+    visibility: public
+    card: project/spec/card.md
+    full_reference: project/spec/reference.md
+    loop_profile: prd_spec
+    allowed_tools: []
+    content_hash: generated
+  - id: engineering-docs
+    version: 1.0.0
+    canonical_skill: awkn-工程文档
+    aliases: [工程文档, 技术方案]
+    visibility: public
+    card: project/engineering-docs/card.md
+    full_reference: project/engineering-docs/reference.md
+    loop_profile: single
+    allowed_tools: []
+    content_hash: generated
+  - id: retrospective
+    version: 1.0.0
+    canonical_skill: AWKN 复盘总结
+    aliases: [复盘, 复盘总结]
+    visibility: public
+    card: project/retrospective/card.md
+    full_reference: project/retrospective/reference.md
+    loop_profile: single
+    allowed_tools: []
+    content_hash: generated
