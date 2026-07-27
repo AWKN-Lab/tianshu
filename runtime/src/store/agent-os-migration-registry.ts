@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import { applyClaimLedgerMigrationV12 } from './claim-ledger-migration-v12.js';
+import { backupBeforeMigration, type MigrationBackup } from './migration-backup.js';
 import { runAllMigrations as runLegacyAndCompatibilityMigrations } from './migration-registry-v2.js';
 
 interface AgentOsMigration {
@@ -116,13 +117,44 @@ const AGENT_OS_MIGRATIONS: readonly AgentOsMigration[] = [
   },
 ] as const;
 
+/**
+ * Last backup created by runAgentOsMigrations.
+ * Accessible for restore operations and tests.
+ */
+let lastMigrationBackup: MigrationBackup | null = null;
+
+export function getLastMigrationBackup(): MigrationBackup | null {
+  return lastMigrationBackup;
+}
+
+/**
+ * Resets the lastMigrationBackup state. Intended for test isolation only.
+ * Production code should never call this.
+ */
+export function resetLastMigrationBackup(): void {
+  lastMigrationBackup = null;
+}
+
 function applyAgentOsMigrations(db: Database.Database, maximumVersion = Number.MAX_SAFE_INTEGER): void {
   const applied = new Set(
     db.prepare('SELECT version FROM schema_migrations').all()
       .map((row) => (row as { version: number }).version),
   );
-  for (const migration of AGENT_OS_MIGRATIONS) {
-    if (migration.version > maximumVersion || applied.has(migration.version)) continue;
+
+  const pending = AGENT_OS_MIGRATIONS.filter(
+    (m) => m.version <= maximumVersion && !applied.has(m.version),
+  );
+
+  if (pending.length === 0) return;
+
+  // Create backup before applying migrations (safety net for migration failures)
+  // Skip for in-memory databases (tests) or when path is not a file
+  const dbPath = db.name;
+  if (dbPath && dbPath !== ':memory:' && dbPath !== '') {
+    lastMigrationBackup = backupBeforeMigration(db, dbPath, pending.map((m) => m.version));
+  }
+
+  for (const migration of pending) {
     const apply = db.transaction(() => {
       migration.up(db);
       db.prepare('INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)')
