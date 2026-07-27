@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ClaimSchema } from './claim.js';
+import { ClaimEpistemicStatusSchema, ClaimSchema } from './claim.js';
 import { awknIdSchema } from './ids.js';
 import { SafeNonNegativeIntegerSchema } from './numbers.js';
 import { UtcTimestampSchema } from './time.js';
@@ -81,8 +81,8 @@ export type ClaimAppendedEvent = z.infer<typeof ClaimAppendedEventSchema>;
 
 export const ClaimStatusChangedEventSchema = ClaimLedgerEventBaseSchema.extend({
   eventType: z.literal('CLAIM_STATUS_CHANGED'),
-  fromStatus: ClaimSchema.shape.epistemicStatus,
-  toStatus: ClaimSchema.shape.epistemicStatus,
+  fromStatus: ClaimEpistemicStatusSchema,
+  toStatus: ClaimEpistemicStatusSchema,
   reasonCode: z.string().min(1),
 }).strict();
 export type ClaimStatusChangedEvent = z.infer<typeof ClaimStatusChangedEventSchema>;
@@ -96,6 +96,6 @@ export type ClaimLedgerEvent = z.infer<typeof ClaimLedgerEventSchema>;
 export const ClaimRepositoryQuerySchema = z.object({
   projectId: z.string().min(1).optional(),
   userId: z.string().min(1).optional(),
-  statuses: z.array(ClaimSchema.shape.epistemicStatus),
+  statuses: z.array(ClaimEpistemicStatusSchema),
 }).strict();
 export type ClaimRepositoryQuery = z.infer<typeof ClaimRepositoryQuerySchema>;
