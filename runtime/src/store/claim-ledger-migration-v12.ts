@@ -89,13 +89,20 @@ export function applyClaimLedgerMigrationV12(db: Database.Database): void {
       revision INTEGER NOT NULL CHECK (revision >= 0),
       payload_schema TEXT NOT NULL,
       payload_json TEXT NOT NULL,
-      idempotency_key TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL UNIQUE,
       created_at TEXT NOT NULL,
       FOREIGN KEY (claim_id) REFERENCES claims(id) ON DELETE CASCADE,
-      UNIQUE (claim_id, revision),
-      UNIQUE (idempotency_key, claim_id)
+      UNIQUE (claim_id, revision)
     );
     CREATE INDEX idx_claim_events_claim_revision
       ON claim_events(claim_id, revision);
+
+    CREATE TABLE claim_command_idempotency (
+      idempotency_key TEXT PRIMARY KEY,
+      command_schema TEXT NOT NULL,
+      command_hash TEXT NOT NULL,
+      claim_ids_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
 }
