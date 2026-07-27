@@ -2,10 +2,7 @@ import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runHistoricalReplayTargetMigration } from './historical-replay-target-migration.js';
-import { runMemoryAuthorityMigration } from './memory-authority-migration.js';
-import { runMigrations } from './migrations.js';
-import { runOperationalEvolutionMigration } from './operational-evolution-migration.js';
+import { runAllMigrations } from './migration-registry-v2.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -19,10 +16,7 @@ export function getDb(dbPath: string = DEFAULT_DB_PATH): Database.Database {
   dbInstance = new Database(dbPath);
   dbInstance.pragma('journal_mode = WAL');
   dbInstance.pragma('foreign_keys = ON');
-  runMigrations(dbInstance);
-  runOperationalEvolutionMigration(dbInstance);
-  runHistoricalReplayTargetMigration(dbInstance);
-  runMemoryAuthorityMigration(dbInstance);
+  runAllMigrations(dbInstance);
   return dbInstance;
 }
 
