@@ -8,6 +8,7 @@ export * from './events.js';
 export * from './evidence.js';
 export * from './execution-envelope.js';
 export * from './goal.js';
+export * from './goal-routing.js';
 export * from './hash-projections.js';
 export * from './ids.js';
 export * from './input.js';
