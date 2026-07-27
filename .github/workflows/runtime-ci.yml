@@ -48,6 +48,9 @@ jobs:
         run: |
           set -o pipefail
           npm run check 2>&1 | tee "check-${{ matrix.os }}-node-${{ matrix.node }}.log"
+      - name: Verify TypeScript build
+        shell: bash
+        run: npm run build 2>&1 | tee "build-${{ matrix.os }}-node-${{ matrix.node }}.log"
       - name: Generate deterministic dependency manifest
         if: matrix.os == 'ubuntu-latest' && matrix.node == 22
         run: node scripts/dependency-evidence.mjs
@@ -66,6 +69,7 @@ jobs:
           name: runtime-evidence-${{ matrix.os }}-node-${{ matrix.node }}
           path: |
             runtime/check-${{ matrix.os }}-node-${{ matrix.node }}.log
+            runtime/build-${{ matrix.os }}-node-${{ matrix.node }}.log
             runtime/architecture-scan.json
             runtime/baseline/agent-os-3.0-baseline.json
             runtime/baseline/dependency-manifest.json

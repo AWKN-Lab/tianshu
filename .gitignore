@@ -78,6 +78,8 @@ runtime/data/*.log
 *.test.log
 coverage/
 .nyc_output/
+# 架构扫描产物（CI 生成，本地运行也会产生）
+runtime/architecture-scan.json
 # runtime 测试残留目录与数据库（test-bridge-*/test-derived-*/test-cron-*/test-corrections-*.db 等）
 runtime/data/test-*/
 runtime/data/verify-*/
