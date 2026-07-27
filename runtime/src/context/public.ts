@@ -4,3 +4,4 @@ export * from './claim-ledger/application/claim-resolver.js';
 export * from './claim-ledger/ports/outbound/claim-repository-port.js';
 export * from './planner/application/context-planner.js';
 export * from './planner/domain/context-utility.js';
+export * from './render/application/context-render-binder.js';

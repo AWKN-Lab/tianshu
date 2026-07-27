@@ -5,6 +5,7 @@ export const AWKN_ID_PREFIXES = {
   input: 'in',
   intent: 'intent',
   context: 'ctx',
+  contextRender: 'rnd',
   execution: 'exec',
   trace: 'tr',
   goal: 'goal',
