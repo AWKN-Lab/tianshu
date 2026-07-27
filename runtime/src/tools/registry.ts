@@ -26,8 +26,9 @@ export class ToolRegistry {
       .sort((a, b) => (PRIORITY_ORDER[a.priority ?? 'normal'] ?? 3) - (PRIORITY_ORDER[b.priority ?? 'normal'] ?? 3));
   }
 
-  toFunctionDefinitions(): Array<{ name: string; description: string; parameters: Record<string, unknown> }> {
-    return this.list().map((tool) => {
+  toFunctionDefinitions(excludedNames: Iterable<string> = []): Array<{ name: string; description: string; parameters: Record<string, unknown> }> {
+    const excluded = new Set(excludedNames);
+    return this.list().filter((tool) => !excluded.has(tool.name)).map((tool) => {
       const resolved = resolveToolDefaults(tool);
       return { name: resolved.name, description: resolved.description, parameters: resolved.parameters };
     });

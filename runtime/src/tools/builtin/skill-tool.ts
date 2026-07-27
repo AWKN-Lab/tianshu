@@ -49,6 +49,7 @@ export const skillTool: ToolHandler = {
       enableL2: false,
       callSource: 'skill_tool',
       systemPrompt: body,
+      excludedTools: ['skill'],
     });
     const result = await loop.runL1(input);
 

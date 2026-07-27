@@ -25,6 +25,20 @@ const execTool: ToolHandler = {
 afterEach(() => setSandboxExecutorForTests(null));
 
 describe('ToolRegistry sandbox routing', () => {
+  it('omits tools excluded by a nested loop', () => {
+    const registry = new ToolRegistry();
+    registry.register(execTool);
+    registry.register({
+      name: 'skill', description: 'skill', source: 'builtin', parameters: {},
+      execute: async () => 'nested',
+    });
+
+    assert.deepEqual(
+      registry.toFunctionDefinitions(['skill']).map((tool) => tool.name),
+      ['exec'],
+    );
+  });
+
   it('routes exec through SandboxExecutor', async () => {
     setSandboxExecutorForTests(fake);
     const registry = new ToolRegistry();
