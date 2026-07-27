@@ -11,6 +11,7 @@ export * from './goal.js';
 export * from './hash-projections.js';
 export * from './ids.js';
 export * from './input.js';
+export * from './intent.js';
 export * from './json-value.js';
 export * from './numbers.js';
 export * from './receipts.js';
