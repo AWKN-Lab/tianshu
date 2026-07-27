@@ -13,14 +13,12 @@ import { ReplayEvaluator } from '../../src/evolve/replay-evaluator.js';
 import { MemoryAuthorityOutboxProcessor } from '../../src/memory/authority-outbox.js';
 import type { CaptureMemoryEventInput } from '../../src/memory/backend.js';
 import type { GovernCandidateInput, GovernCandidateResult } from '../../src/memory/authority.js';
-import { runMigrations } from '../../src/store/migrations.js';
-import { runOperationalEvolutionMigration } from '../../src/store/operational-evolution-migration.js';
+import { runAllMigrations } from '../../src/store/migration-registry-v2.js';
 
 function setup(): Database.Database {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  runMigrations(db);
-  runOperationalEvolutionMigration(db);
+  runAllMigrations(db);
   return db;
 }
 
