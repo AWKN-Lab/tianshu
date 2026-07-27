@@ -30,11 +30,26 @@ describe('trusted JSON parser', () => {
     assert.equal(result.receiptPayload.status, 'ACCEPTED');
     assert.equal(result.document.sourceHash, result.receiptPayload.sourceHash);
     assert.equal(result.document.valueHash, result.receiptPayload.valueHash);
-    assert.deepEqual(result.document.value, {
-      name: 'café',
-      nested: { ok: true },
-      items: [1, 2, 3],
-    });
+
+    const value = result.document.value as Record<string, unknown>;
+    assert.equal(Object.getPrototypeOf(value), null);
+    assert.equal(value.name, 'café');
+    assert.deepEqual(value.items, [1, 2, 3]);
+
+    const nested = value.nested as Record<string, unknown>;
+    assert.equal(Object.getPrototypeOf(nested), null);
+    assert.equal(nested.ok, true);
+  });
+
+  it('keeps prototype-like keys as inert own properties', () => {
+    const result = parseTrustedJson('{"__proto__":{"polluted":true}}');
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+
+    const value = result.document.value as Record<string, unknown>;
+    assert.equal(Object.getPrototypeOf(value), null);
+    assert.equal(Object.hasOwn(value, '__proto__'), true);
+    assert.equal(({} as { polluted?: boolean }).polluted, undefined);
   });
 
   it('rejects duplicate decoded keys before an object model is created', () => {
@@ -104,6 +119,12 @@ describe('trusted JSON parser', () => {
     const result = parseTrustedJson('9007199254740992');
     assert.equal(result.ok, false);
     assert.equal(result.receiptPayload.diagnostics[0]?.code, 'AOS_INPUT_JSON_UNSAFE_INTEGER');
+  });
+
+  it('rejects non-zero numbers that underflow to zero', () => {
+    const result = parseTrustedJson('1e-4000');
+    assert.equal(result.ok, false);
+    assert.equal(result.receiptPayload.diagnostics[0]?.code, 'AOS_INPUT_JSON_PRECISION_LOSS');
   });
 
   it('rejects trailing commas, leading zeroes and trailing content', () => {
