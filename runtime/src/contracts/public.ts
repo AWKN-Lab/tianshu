@@ -3,6 +3,7 @@ export * from './authorization.js';
 export * from './canonical-json.js';
 export * from './claim.js';
 export * from './claim-migration.js';
+export * from './claim-repository.js';
 export * from './claim-resolution.js';
 export * from './errors.js';
 export * from './events.js';

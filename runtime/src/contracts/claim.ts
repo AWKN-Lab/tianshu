@@ -18,6 +18,17 @@ export const ClaimTypeSchema = z.enum([
   'observation',
 ]);
 
+export const ClaimEpistemicStatusSchema = z.enum([
+  'proposed',
+  'asserted',
+  'derived',
+  'observed',
+  'disputed',
+  'superseded',
+  'expired',
+]);
+export type ClaimEpistemicStatus = z.infer<typeof ClaimEpistemicStatusSchema>;
+
 export function claimContentHash(content: string): string {
   return stableHash('awkn-claim-content/v1', content);
 }
@@ -30,15 +41,7 @@ export const ClaimSchema = z.object({
   originator: z.enum(['human', 'assistant', 'system', 'external']),
   speaker: z.enum(['human', 'assistant', 'system', 'tool']),
   claimType: ClaimTypeSchema,
-  epistemicStatus: z.enum([
-    'proposed',
-    'asserted',
-    'derived',
-    'observed',
-    'disputed',
-    'superseded',
-    'expired',
-  ]),
+  epistemicStatus: ClaimEpistemicStatusSchema,
   confirmationLevel: z.enum(['none', 'direction', 'option', 'field']),
   sourceRefs: z.array(SourceRefSchema).min(1),
   derivedFrom: z.array(awknIdSchema('clm')),
