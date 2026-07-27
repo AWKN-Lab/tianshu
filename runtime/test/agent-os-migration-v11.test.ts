@@ -48,7 +48,7 @@ function insertExecution(db: Database.Database, id = 'exec_111111111111111111111
 describe('Agent OS migration v11', () => {
   it('applies versions 1 through 11 from the startup registry', () => {
     withDatabase((db) => {
-      runAgentOsMigrations(db);
+      runAgentOsMigrations(db, 11);
       assert.deepEqual(versions(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       const tables = objectNames(db, 'table');
       for (const table of ['executions', 'execution_snapshots', 'receipts', 'domain_events']) {
@@ -73,8 +73,8 @@ describe('Agent OS migration v11', () => {
     withDatabase((db) => {
       runAllMigrations(db);
       assert.deepEqual(versions(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-      runAgentOsMigrations(db);
-      runAgentOsMigrations(db);
+      runAgentOsMigrations(db, 11);
+      runAgentOsMigrations(db, 11);
       assert.deepEqual(versions(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     });
   });

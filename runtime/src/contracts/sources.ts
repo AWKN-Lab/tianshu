@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { awknIdSchema } from './ids.js';
+import { JsonValueSchema } from './json-value.js';
 import { UtcTimestampSchema } from './time.js';
 
 const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
@@ -27,6 +28,7 @@ export const SourceRefSchema = z.object({
   uri: z.string().min(1).optional(),
   version: z.string().min(1).optional(),
   contentHash: z.string().regex(SHA256_HEX_PATTERN).optional(),
+  span: JsonValueSchema.optional(),
   observedAt: UtcTimestampSchema.optional(),
   publishedAt: UtcTimestampSchema.optional(),
   accessReceiptId: awknIdSchema('rcpt').optional(),
