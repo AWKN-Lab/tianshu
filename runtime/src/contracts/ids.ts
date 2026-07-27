@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 export const AWKN_ID_PREFIXES = {
+  input: 'in',
+  intent: 'intent',
   execution: 'exec',
   trace: 'tr',
   goal: 'goal',
