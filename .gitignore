@@ -84,6 +84,14 @@ runtime/data/verify-*/
 runtime/data/test-*.db
 runtime/data/verify-*.db
 
+# ===== Migration backup 产物（哈希、备份文件、WAL/SHM 快照）=====
+runtime/data/*.sha256
+runtime/data/.migration-backup-*
+runtime/test/data/
+
+# ===== Shadow Reports 产物（R2 Exit Report 生成的 JSON/Markdown，每次执行唯一）=====
+runtime/data/shadow-reports/
+
 # ===== 临时与备份 =====
 *.tmp
 *.bak

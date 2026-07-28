@@ -20,6 +20,8 @@ export const AWKN_ID_PREFIXES = {
   memoryTransaction: 'mtx',
   candidate: 'cand',
   event: 'evt',
+  flagSnapshot: 'fsnap',
+  shadowDiff: 'sdiff',
 } as const;
 
 export type AwknIdKind = keyof typeof AWKN_ID_PREFIXES;

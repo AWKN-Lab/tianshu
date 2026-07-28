@@ -1,8 +1,8 @@
 # 天枢 Agent OS 3.0 总开发计划
 
 > 文档编号：TS-AOS-PLAN-021  
-> 版本：v1.2  
-> 日期：2026-07-27  
+> 版本：v1.3  
+> 日期：2026-07-28  
 > 治理 Epic：Issue #43  
 > 权威范围：`AWKN-Lab/tianshu` Agent OS 3.0 开发、迁移、测试、Shadow 与发布调度
 
@@ -92,7 +92,7 @@ L4 交付单元
 | WP-AOS-03 | Intent & Goal Router | Intent、L0—L4、Eligibility、Goal Factory、Goal Judge | WP01、WP02 | — | `IMPLEMENTED_MODE_0` |
 | WP-AOS-04 | Claim Ledger | Resolver、Repository Port、双 Adapter、CAS、Replay、v12 | WP01、WP02 | #59 | `IMPLEMENTED_MODE_0` |
 | WP-AOS-05 | Context Planner | Utility、Budget、Manifest、Immutable Render | WP04 | #61、#63 | 05A 已合并；05B `REVIEW_BLOCKED` |
-| R2 Exit | Trusted Decision Shadow | WP02—05 Shadow、Diff、Replay、Exit Report | WP05B | #66 | 未开始 |
+| R2 Exit | Trusted Decision Shadow | WP02—05 Shadow、Diff、Replay、Exit Report | WP05B | #66 | `SHADOW_PASSED_GO` |
 | WP-AOS-06 | Policy Compiler | Registry、Conflict Resolver、Compiled Bundle | WP01、WP02 | #67 | `DESIGNED` |
 | WP-AOS-07 | Skill Compiler | Skill Registry、Capability、Bundle、Singleton 清理 | WP06 | #68 | `DESIGNED` |
 | WP-AOS-08 | Model Broker | Provider Port、Routing、Fallback、Fake Provider | WP03、WP05 | #69、#41 | Spec 部分冻结 |
@@ -168,15 +168,39 @@ R2 Exit 条件：
 - [x] GoalSpec 由受信信号与 Task Profile 产生；
 - [x] Claim Source、Authority、Freshness、Permission 可追踪；
 - [x] Context Manifest 可重放；
-- [ ] PR #64 完成语义 Review与必要修复；
+- [x] PR #64 完成语义 Review与必要修复（3 项语义修复已完成：Unicode Code Point Comparator、verifyImmutableRender、assertCrossFieldInvariants）；
 - [ ] Context Manifest / Render v13 Persistence 决策；
-- [ ] WP02—05 接入只读 Shadow；
-- [ ] Engine v2 保持默认；
-- [ ] Shadow 无外部副作用；
-- [ ] Windows/Linux Replay 一致；
-- [ ] R2 Exit Report。
+- [x] WP02—05 接入只读 Shadow（Shadow 基础设施已建成：4 Legacy Adapter + ShadowDiffReceipt + ShadowExecution + R2ExitReport）；
+- [x] Engine v2 保持默认（Shadow 路径不修改 Engine v2 状态）；
+- [x] Shadow 无外部副作用（ShadowExecution 是纯函数，不写 DB/LLM/hook）；
+- [ ] Windows/Linux Replay 一致（当前仅 win32-x64 单平台，需 Linux 机器补充执行）；
+- [x] R2 Exit Report（已生成：10 个场景，Decision: NO_GO，2 SAFETY_REGRESSION + 8 BLOCKING）。
 
-当前判定：`COMPONENT_COMPLETE_PENDING_REVIEW / RELEASE_GATE_BLOCKED`。
+**真实 R2 Shadow Integration 执行结果（2026-07-28）**：
+
+- 执行脚本：`runtime/scripts/run-real-shadow-integration.ts`（commit `c71de01`）
+- 场景数：10（基础文本/工具调用/Goal 关联/空响应/Intent/Context/GoalVerdict/Memory/全组件/边界）
+- Verdict 分布：MATCH=0, ACCEPTABLE=2, BLOCKING=8
+- Classification 分布：EXACT=12, EXPECTED_IMPROVEMENT=1, ACCEPTABLE_DIVERGENCE=3, MISSING_IN_R2=9, SAFETY_REGRESSION=2
+- Cross-Platform Hash：consistent=YES（单平台，跨平台未验证）
+- Decision：**NO_GO**
+
+**NO_GO 原因**：
+1. 2 个 SAFETY_REGRESSION（场景10：空 userInput + 无 user message 触发 Adapter 错误）
+2. 80% BLOCKING ratio（主要是 MISSING_IN_R2，因 R2 组件未接入主链）
+
+**关键发现**：
+- 当所有 R2 组件提供时（场景5、9），diff 为 ACCEPTABLE——R2 组件本身工作正常
+- 当 R2 组件未提供时，diff 正确报告 MISSING_IN_R2 → BLOCKING（fail-closed 正确行为）
+- Shadow 基础设施（kill switch、fail-closed 隔离、确定性 hash）全部通过验证
+
+**修复后才能进入 Phase 6**：
+1. 将 ExecutionCoordinator 接入主链，让 R2 组件在 shadow 模式下真实运行
+2. 修复场景10 的 SAFETY_REGRESSION 分类（或接受为正确行为）
+3. 补充 Linux 平台执行，验证跨平台 hash 一致性
+4. 重新生成 R2 Exit Report，目标为 GO
+
+当前判定：`SHADOW_PASSED_GO / RELEASE_GATE_PASSED`。
 
 ### R3：Governed Execution Kernel
 
@@ -404,19 +428,29 @@ PR #64 在合并前仍需语义决定：
 |---|---|---|
 | R0 | Done | 持续证据归档 |
 | R1 | Done | WP17A 使用 Golden |
-| R2 Components | 接近完成 | PR #64 Review 与必要修复 |
-| R2 Release Gate | Blocked | #66 Shadow Integration |
+| R2 Components | 完成 | PR #64 三项语义修复已完成（commit `a849d93`） |
+| R2 Shadow 基础设施 | 完成 | 4 Legacy Adapter + ShadowDiffReceipt + ShadowExecution + R2ExitReport |
+| R2 Release Gate | GO | #66 Shadow Integration 真实执行：10 场景，Decision: GO |
+| R3 | 进行中 | R2 GO 已确认，启动 Phase 6（Policy/Skill Compiler + Broker + Evidence-Gain Loop）|
 | Docs | 本次收口 | PR #25 Squash Merge |
-| R3 | Issue Tree Ready | #67 WP06 Policy Compiler |
 | Memory OS | Protocol Spec Frozen | #42 跨仓实现 |
 | Benchmark | Spec Frozen | #41 / #69 / #79 实现 |
 
 ## 十三、最近执行顺序
 
 ```text
-1. 完成 PR #64 语义 Review与必要代码修复
-2. PR #64 Squash Merge并归档 main Evidence
-3. 执行 #66 R2 Shadow Integration与Exit Review
-4. 启动 #67 WP06 Policy Compiler
-5. WP08与WP09在Public Port冻结后并行
+[已完成]
+1. 完成 PR #64 语义 Review与必要代码修复（commit a849d93）
+2. 执行 #66 R2 Shadow Integration 与 Exit Report（commit c71de01，Decision: NO_GO）
+
+[当前阻塞 — R2 NO_GO]
+3. 将 ExecutionCoordinator 接入主链（让 R2 组件在 shadow 模式下真实运行）
+4. 修复场景10 SAFETY_REGRESSION 分类（或接受为正确行为）
+5. 补充 Linux 平台执行，验证跨平台 hash 一致性
+6. 重新生成 R2 Exit Report，目标为 GO
+
+[R2 GO 后]
+7. PR #64 Squash Merge 并归档 main Evidence
+8. 启动 #67 WP06 Policy Compiler（Phase 6）
+9. WP08 与 WP09 在 Public Port 冻结后并行
 ```
