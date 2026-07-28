@@ -27,6 +27,9 @@ export const AWKN_ID_PREFIXES = {
   toolCall: 'tc',
   policyBundle: 'pb',
   skillBundle: 'sb',
+  cycle: 'cyc',
+  evidenceDelta: 'ed',
+  strategyAttempt: 'sa',
 } as const;
 
 export type AwknIdKind = keyof typeof AWKN_ID_PREFIXES;

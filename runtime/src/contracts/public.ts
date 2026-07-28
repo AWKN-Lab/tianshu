@@ -11,6 +11,7 @@ export * from './context-render.js';
 export * from './errors.js';
 export * from './events.js';
 export * from './evidence.js';
+export * from './evidence-loop.js';
 export * from './execution-envelope.js';
 export * from './feature-flag.js';
 export * from './goal.js';

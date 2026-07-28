@@ -52,28 +52,3 @@ export const EvidenceRecordSchema = z.object({
 });
 
 export type EvidenceRecord = z.infer<typeof EvidenceRecordSchema>;
-
-export const EvidenceDeltaSchema = z.object({
-  schema: z.literal('awkn-evidence-delta/v1'),
-  cycleId: z.string().min(1),
-  components: z.object({
-    acceptanceProgress: z.number().min(0).max(1),
-    uncertaintyReduction: z.number().min(0).max(1),
-    newVerifiedEvidence: z.number().min(0).max(1),
-    strategyElimination: z.number().min(0).max(1),
-    riskReduction: z.number().min(0).max(1),
-    regression: z.number().min(0).max(1),
-  }).strict(),
-  deltaScore: z.number().min(-1).max(1),
-  gainType: z.enum([
-    'progress',
-    'root_cause',
-    'constraint_discovery',
-    'strategy_elimination',
-    'none',
-    'regression',
-  ]),
-  calculatorVersion: z.string().min(1),
-}).strict();
-
-export type EvidenceDelta = z.infer<typeof EvidenceDeltaSchema>;
