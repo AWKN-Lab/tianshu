@@ -18,6 +18,8 @@ export const AWKN_ID_PREFIXES = {
   delivery: 'dlv',
   outcome: 'out',
   memoryTransaction: 'mtx',
+  memoryCandidate: 'mc',
+  memoryWrite: 'mw',
   candidate: 'cand',
   event: 'evt',
   flagSnapshot: 'fsnap',
@@ -27,6 +29,7 @@ export const AWKN_ID_PREFIXES = {
   toolCall: 'tc',
   policyBundle: 'pb',
   skillBundle: 'sb',
+  evolveCandidateV2: 'ecv',
 } as const;
 
 export type AwknIdKind = keyof typeof AWKN_ID_PREFIXES;
