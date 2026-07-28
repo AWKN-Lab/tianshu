@@ -34,3 +34,4 @@
 
 export * from './shadow-diff-receipt.js';
 export * from './shadow-diff-evaluator.js';
+export * from './shadow-execution.js';
