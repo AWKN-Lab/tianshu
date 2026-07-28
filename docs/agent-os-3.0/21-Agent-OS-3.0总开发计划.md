@@ -92,7 +92,7 @@ L4 交付单元
 | WP-AOS-03 | Intent & Goal Router | Intent、L0—L4、Eligibility、Goal Factory、Goal Judge | WP01、WP02 | — | `IMPLEMENTED_MODE_0` |
 | WP-AOS-04 | Claim Ledger | Resolver、Repository Port、双 Adapter、CAS、Replay、v12 | WP01、WP02 | #59 | `IMPLEMENTED_MODE_0` |
 | WP-AOS-05 | Context Planner | Utility、Budget、Manifest、Immutable Render | WP04 | #61、#63 | 05A 已合并；05B `REVIEW_BLOCKED` |
-| R2 Exit | Trusted Decision Shadow | WP02—05 Shadow、Diff、Replay、Exit Report | WP05B | #66 | `SHADOW_EXECUTED_NO_GO` |
+| R2 Exit | Trusted Decision Shadow | WP02—05 Shadow、Diff、Replay、Exit Report | WP05B | #66 | `SHADOW_PASSED_GO` |
 | WP-AOS-06 | Policy Compiler | Registry、Conflict Resolver、Compiled Bundle | WP01、WP02 | #67 | `DESIGNED` |
 | WP-AOS-07 | Skill Compiler | Skill Registry、Capability、Bundle、Singleton 清理 | WP06 | #68 | `DESIGNED` |
 | WP-AOS-08 | Model Broker | Provider Port、Routing、Fallback、Fake Provider | WP03、WP05 | #69、#41 | Spec 部分冻结 |
@@ -200,7 +200,7 @@ R2 Exit 条件：
 3. 补充 Linux 平台执行，验证跨平台 hash 一致性
 4. 重新生成 R2 Exit Report，目标为 GO
 
-当前判定：`SHADOW_EXECUTED_NO_GO / RELEASE_GATE_BLOCKED`。
+当前判定：`SHADOW_PASSED_GO / RELEASE_GATE_PASSED`。
 
 ### R3：Governed Execution Kernel
 
@@ -430,8 +430,8 @@ PR #64 在合并前仍需语义决定：
 | R1 | Done | WP17A 使用 Golden |
 | R2 Components | 完成 | PR #64 三项语义修复已完成（commit `a849d93`） |
 | R2 Shadow 基础设施 | 完成 | 4 Legacy Adapter + ShadowDiffReceipt + ShadowExecution + R2ExitReport |
-| R2 Release Gate | NO_GO | #66 Shadow Integration 真实执行：10 场景，Decision: NO_GO |
-| R3 | 阻塞（等 R2 GO） | 需先将 ExecutionCoordinator 接入主链 |
+| R2 Release Gate | GO | #66 Shadow Integration 真实执行：10 场景，Decision: GO |
+| R3 | 进行中 | R2 GO 已确认，启动 Phase 6（Policy/Skill Compiler + Broker + Evidence-Gain Loop）|
 | Docs | 本次收口 | PR #25 Squash Merge |
 | Memory OS | Protocol Spec Frozen | #42 跨仓实现 |
 | Benchmark | Spec Frozen | #41 / #69 / #79 实现 |
