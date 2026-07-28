@@ -87,11 +87,16 @@ runtime/scripts/run-l2-memory-os.mjs
 *.test.log
 coverage/
 .nyc_output/
-# runtime 测试残留目录与数据库（test-bridge-*/test-derived-*/test-cron-*/test-corrections-*.db 等）
+# ===== runtime 测试残留目录与数据库（test-bridge-*/test-derived-*/test-cron-*/test-corrections-*.db 等）=====
 runtime/data/test-*/
 runtime/data/verify-*/
 runtime/data/test-*.db
 runtime/data/verify-*.db
+
+# ===== Migration backup 产物（哈希、备份文件、WAL/SHM 快照）=====
+runtime/data/*.sha256
+runtime/data/.migration-backup-*
+runtime/test/data/
 
 # ===== 临时与备份 =====
 *.tmp
@@ -101,3 +106,11 @@ runtime/data/verify-*.db
 *~
 .cache/
 .tmp/
+
+# ===== runtime 临时脚本与证据文件 =====
+runtime/.tmp-*
+runtime/tmp-*
+runtime/scripts/mark-*-passed.ts
+
+# ===== 经验文件（自动生成，不入仓）=====
+agents/tianhuo/04-记忆与知识/EXPERIENCE/derived/

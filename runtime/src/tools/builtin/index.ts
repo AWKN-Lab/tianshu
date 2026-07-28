@@ -23,6 +23,7 @@ export const readTool: ToolHandler = {
   },
   async execute(args) {
     const path = args.path as string;
+    // M3 进阶-25：错误路径必须 throw（不再返回字符串），让 agent-loop catch 记录 isError + recordLoopFailure
     if (!existsSync(path)) throw new Error(`File not found: ${path}`);
     return readFileSync(path, 'utf-8');
   },
@@ -80,6 +81,7 @@ export const execTool: ToolHandler = {
       });
       return (stdout + stderr).slice(0, 50000);
     } catch (err) {
+      // M3 进阶-24：catch 块必须 throw enriched error（含 stdout/stderr），不再 return `[error]` 字符串
       const error = err as Error & { stdout?: string; stderr?: string };
       const combined = (error.stderr ?? '') + (error.stdout ?? '');
       throw new Error(combined

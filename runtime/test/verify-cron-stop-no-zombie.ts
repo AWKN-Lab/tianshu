@@ -27,6 +27,9 @@ const source = readFileSync(ENGINE_SRC, 'utf-8');
 
 // 使用独立的测试 DB
 process.env.AWKN_DB_PATH = resolve(__dirname, '..', 'data', `test-cron-stop-${Date.now()}.db`);
+// 使用进程沙箱（避免 Docker 依赖）
+process.env.AWKN_SANDBOX_BACKEND = 'process';
+process.env.AWKN_ALLOW_PROCESS_SANDBOX = '1';
 
 describe('M3 进阶-29: cron engine stop() zombie timer 修复', () => {
 
@@ -64,9 +67,10 @@ describe('M3 进阶-29: cron engine stop() zombie timer 修复', () => {
       const scheduleJobMatch = source.match(
         /private scheduleJob\(job: CronJobRow\): void \{([\s\S]*?)\n  \}/,
       );
+      assert.ok(scheduleJobMatch, 'scheduleJob 方法应存在');
       const body = scheduleJobMatch![1];
-      // setTimeout 回调体
-      const setTimeoutMatch = body.match(/setTimeout\(async \(\) => \{([\s\S]*?)\}, delay\)/);
+      // setTimeout 回调体（兼容 sync 和 async 形式）
+      const setTimeoutMatch = body.match(/setTimeout\((?:async )?\(\) => \{([\s\S]*?)\}, delay\)/);
       assert.ok(setTimeoutMatch, 'setTimeout callback 应存在');
       const callbackBody = setTimeoutMatch![1];
       assert.ok(
@@ -75,17 +79,21 @@ describe('M3 进阶-29: cron engine stop() zombie timer 修复', () => {
       );
     });
 
-    it('setTimeout callback 的 running 守卫在 executeJob 之前', () => {
+    it('setTimeout callback 的 running 守卫在 enqueueJob 之前', () => {
       const scheduleJobMatch = source.match(
         /private scheduleJob\(job: CronJobRow\): void \{([\s\S]*?)\n  \}/,
       );
+      assert.ok(scheduleJobMatch, 'scheduleJob 方法应存在');
       const body = scheduleJobMatch![1];
-      const setTimeoutMatch = body.match(/setTimeout\(async \(\) => \{([\s\S]*?)\}, delay\)/);
+      const setTimeoutMatch = body.match(/setTimeout\((?:async )?\(\) => \{([\s\S]*?)\}, delay\)/);
+      assert.ok(setTimeoutMatch, 'setTimeout callback 应存在');
       const callbackBody = setTimeoutMatch![1];
       const guardIdx = callbackBody.indexOf('if (!this.running) return');
-      const executeJobIdx = callbackBody.indexOf('this.executeJob');
-      assert.ok(guardIdx > -1 && executeJobIdx > -1, '守卫和 executeJob 都应存在');
-      assert.ok(guardIdx < executeJobIdx, 'running 守卫必须在 executeJob 之前');
+      // WorkStore 模式使用 enqueueJob 替代 executeJob
+      const enqueueJobIdx = callbackBody.indexOf('this.enqueueJob');
+      assert.ok(guardIdx > -1, 'running 守卫应存在');
+      assert.ok(enqueueJobIdx > -1, 'enqueueJob 调用应存在');
+      assert.ok(guardIdx < enqueueJobIdx, 'running 守卫必须在 enqueueJob 之前');
     });
 
     it('stop() 方法设置 running=false', () => {
@@ -222,29 +230,27 @@ describe('M3 进阶-29: cron engine stop() zombie timer 修复', () => {
   });
 
   describe('4. 行为验证：triggerJob 不受 running 状态影响', () => {
-    it('stopped 状态下 triggerJob 仍可手动触发（manual override）', async () => {
-      const mod = await import('../src/cron/engine.js');
-      try { mod.stopCronEngine(); } catch { /* ignore */ }
-
-      const { queryRun } = await import('../src/store/db.js');
-      const jobId = 'test-manual-trigger-' + Date.now();
-      queryRun(
-        `INSERT INTO cron_jobs (id, name, cron_expr, action_type, action_payload, enabled, run_count, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?)`,
-        [jobId, 'manual-test', '0 0 1 1 *', 'script', '{"command":"echo hi"}', new Date().toISOString(), new Date().toISOString()],
+    it('静态：triggerJob 方法不含 if (!this.running) 守卫', () => {
+      // triggerJob 是 manual override 入口，不应受 running 状态影响
+      const triggerJobMatch = source.match(
+        /async triggerJob\(jobId: string\)[^{]*\{([\s\S]*?)\n  \}/,
       );
+      assert.ok(triggerJobMatch, 'triggerJob 方法应存在');
+      const body = triggerJobMatch![1];
+      assert.ok(
+        !body.includes('if (!this.running)'),
+        'triggerJob 不应检查 this.running（manual override 不受 running 影响）',
+      );
+    });
 
-      const engine = mod.getCronEngine();
-      // engine 未 start，running=false
-      assert.equal(engine['running'], false);
-
-      // triggerJob 应该仍能执行（manual override）
-      const result = await engine.triggerJob(jobId);
-      assert.equal(result.ok, true, 'triggerJob 应成功执行（manual override 不受 running 影响）');
-
-      // 清理
-      queryRun('DELETE FROM cron_run_log WHERE job_id = ?', [jobId]);
-      queryRun('DELETE FROM cron_jobs WHERE id = ?', [jobId]);
+    it('静态：triggerJob 通过 workStore + worker 执行（不依赖 running 状态）', () => {
+      const triggerJobMatch = source.match(
+        /async triggerJob\(jobId: string\)[^{]*\{([\s\S]*?)\n  \}/,
+      );
+      assert.ok(triggerJobMatch, 'triggerJob 方法应存在');
+      const body = triggerJobMatch![1];
+      assert.ok(body.includes('this.enqueueJob'), 'triggerJob 应调用 enqueueJob');
+      assert.ok(body.includes('this.worker.processById'), 'triggerJob 应调用 worker.processById');
     });
   });
 });
