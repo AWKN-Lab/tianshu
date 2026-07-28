@@ -1,9 +1,9 @@
 # STATUS.md - 天火状态
 
-版本: v6.1
-状态: 人格化升级完成 + 技能接入架构就绪
+版本: v6.2
+状态: 人格化升级完成 + 技能接入架构就绪 + SkillDeck 桥接接入
 角色: CTO / 技术执行者 + 人格化协作能力
-最后更新: 2026-05-23
+最后更新: 2026-07-28
 
 ---
 
@@ -32,6 +32,7 @@
 | 能力评分 | 待重建（旧脚本已清理） |
 | 敏感配置 | 使用环境变量占位，已清理旧框架配置 |
 | 健康检查 | 待重建（旧脚本已清理） |
+| SkillDeck 桥接 | 仓库外独立 Web 控制台（D:\awkn-lab\TRAE练习\skilldeck，端口 4177），通过 AWKN_SKILLS_ROOT 指向本仓库 skills/，仅读 registry.json，不进 runtime |
 
 ---
 
@@ -66,3 +67,32 @@
 - 改动核心文档后做人工审查。
 - 改动入口/配置/核心流程后做人工验证。
 - 改动 gate/card/packet/协作边界后做端到端验证。
+
+---
+
+## SkillDeck 桥接影响范围
+
+**位置**：`D:\awkn-lab\TRAE练习\skilldeck`（仓库外独立项目，不属于 awkn引擎 runtime）
+
+**与 awkn引擎 的关系**：
+
+- 通过环境变量 `AWKN_SKILLS_ROOT` 指向 `d:\awkn-lab\awkn引擎\skills\`，读取本地 Skill 卡片墙
+- 通过 `/api/experts/registry` 接口读取 `skills/awkn-技能治理/registry.json` 的 `experts[]` 字段（只读）
+- 专家数据写入由 `skills/awkn-技能治理/skill-cli.py expert` 命令完成，避免双写冲突
+
+**架构边界**：
+
+- SkillDeck 是独立 Node.js 零依赖 Web 服务（默认端口 4177），不引入 MCP SDK 到 runtime
+- SkillDeck 故障不影响 awkn引擎 runtime、天火调度和 Skill 触发
+- SkillDeck 不修改 registry.json，仅展示；专家写入必须经 skill-cli.py
+- 桥接技术文档：`skills/.system/skilldeck-bridge/SKILL.md`
+
+**SkillDeck 双形态**：
+
+1. 独立 Web 控制台（server.js + public/，端口 4177）
+2. Codex MCP 插件（mcp/server.mjs，依赖 @modelcontextprotocol/sdk，仅用于 Codex 集成）
+
+**天火调度影响**：
+
+- 天火不直接调用 SkillDeck，但用户可通过 SkillDeck 生成的「调用口令」粘贴到对话中触发 Skill
+- SkillDeck 提供的「专家打包」会写入 registry.json experts[]，被 skill-cli.py 治理，不影响天火 P0/P1 文件

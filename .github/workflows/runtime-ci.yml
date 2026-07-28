@@ -53,8 +53,7 @@ jobs:
         run: |
           set -o pipefail
           npm run build 2>&1 | tee "build-${{ matrix.os }}-node-${{ matrix.node }}.log"
-      - name: Run verify tests (non-blocking, reports only)
-        continue-on-error: true
+      - name: Run verify tests (blocking with known-failures whitelist)
         shell: bash
         run: |
           set -o pipefail

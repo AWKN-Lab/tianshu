@@ -34,7 +34,8 @@ export class TraeProvider implements LlmProviderInterface {
         if (!result.success || !result.llmResponse) continue;
         const content = result.llmResponse.content ?? '';
         const toolCalls = result.llmResponse.toolCalls;
-        if (!content.trim() && !toolCalls?.length) continue;
+        // M3 进阶-19: fail-closed — empty llmResponse.content (skip, don't treat as success)
+        if (content.trim() === '' && !toolCalls?.length) continue;
         return {
           content,
           toolCalls,
@@ -58,46 +59,51 @@ export class TraeProvider implements LlmProviderInterface {
     mkdirSync(BRIDGE_DIR, { recursive: true });
     const reqPath = resolve(BRIDGE_DIR, `req-${id}.json`);
     const respPath = resolve(BRIDGE_DIR, `resp-${id}.json`);
-    const cleanup = (): void => {
+    // M3 进阶-20: cleanupBridge 统一清理 req+resp，所有出口调用
+    const cleanupBridge = (): void => {
       try { unlinkSync(reqPath); } catch { /* noop */ }
       try { unlinkSync(respPath); } catch { /* noop */ }
     };
 
     try {
-      writeFileSync(reqPath, JSON.stringify(buildBridgeRequest(id, req, req.model ?? TRAE_DEFAULT_MODEL)), 'utf-8');
-    } catch (err) {
-      cleanup();
-      logger.error(`Failed to write bridge request: ${String(err)}`);
-      return null;
-    }
-
-    const maxPolls = BRIDGE_TIMEOUT_MS / BRIDGE_POLL_INTERVAL_MS;
-    for (let i = 0; i < maxPolls; i++) {
-      await new Promise((resolvePoll) => setTimeout(resolvePoll, BRIDGE_POLL_INTERVAL_MS));
-      if (!existsSync(respPath)) continue;
       try {
-        const parsed = JSON.parse(readFileSync(respPath, 'utf-8')) as BridgeResponse;
-        const toolCalls = parsed.toolCalls ?? parsed.tool_calls;
-        const content = parsed.content ?? '';
-        if (!content.trim() && !toolCalls?.length) throw new Error('bridge response has empty content and no tool calls');
-        cleanup();
-        return {
-          content,
-          toolCalls,
-          usage: parsed.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-          provider: 'trae',
-          model: req.model ?? TRAE_DEFAULT_MODEL,
-          finishReason: parsed.finishReason ?? (parsed.finish_reason === 'tool_calls' || toolCalls?.length ? 'tool_calls' : 'stop'),
-        };
+        writeFileSync(reqPath, JSON.stringify(buildBridgeRequest(id, req, req.model ?? TRAE_DEFAULT_MODEL)), 'utf-8');
       } catch (err) {
-        logger.error(`Failed to parse bridge response: ${String(err)}`);
-        cleanup();
+        cleanupBridge();
+        logger.error(`Failed to write bridge request: ${String(err)}`);
         return null;
       }
-    }
 
-    cleanup();
-    return null;
+      const maxPolls = BRIDGE_TIMEOUT_MS / BRIDGE_POLL_INTERVAL_MS;
+      for (let i = 0; i < maxPolls; i++) {
+        await new Promise((resolvePoll) => setTimeout(resolvePoll, BRIDGE_POLL_INTERVAL_MS));
+        if (!existsSync(respPath)) continue;
+        try {
+          const parsed = JSON.parse(readFileSync(respPath, 'utf-8')) as BridgeResponse;
+          const toolCalls = parsed.toolCalls ?? parsed.tool_calls;
+          const content = parsed.content ?? '';
+          if (!content.trim() && !toolCalls?.length) throw new Error('bridge response has empty content and no tool calls');
+          cleanupBridge();
+          return {
+            content,
+            toolCalls,
+            usage: parsed.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            provider: 'trae',
+            model: req.model ?? TRAE_DEFAULT_MODEL,
+            finishReason: parsed.finishReason ?? (parsed.finish_reason === 'tool_calls' || toolCalls?.length ? 'tool_calls' : 'stop'),
+          };
+        } catch (err) {
+          logger.error(`Failed to parse bridge response: ${String(err)}`);
+          cleanupBridge();
+          return null;
+        }
+      }
+
+      cleanupBridge();
+      return null;
+    } finally {
+      cleanupBridge();
+    }
   }
 
   async isAvailable(): Promise<boolean> {

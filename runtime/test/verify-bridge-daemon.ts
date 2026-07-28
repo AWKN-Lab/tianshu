@@ -43,6 +43,38 @@ async function waitForFile(path: string, timeoutMs: number): Promise<boolean> {
   return false;
 }
 
+/**
+ * 等待 daemon 启动就绪（监听 stdout 出现 "Press Ctrl+C to stop"）
+ *
+ * npx tsx 启动需要 1-3 秒（TS 编译 + 模块加载），单纯 sleep 1s 不可靠。
+ * 通过监听 daemon 的 stdout 输出 "Press Ctrl+C to stop" 判断已进入主循环。
+ */
+async function waitForDaemonReady(
+  daemon: { stdout: NodeJS.EventEmitter; stderr: NodeJS.EventEmitter },
+  timeoutMs = 10000,
+): Promise<boolean> {
+  let output = '';
+  const collect = (d: Buffer | string): void => {
+    output += d.toString();
+  };
+  daemon.stdout.on('data', collect);
+  daemon.stderr.on('data', collect);
+
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (output.includes('Press Ctrl+C to stop')) {
+      // 移除监听器避免内存泄漏
+      daemon.stdout.removeListener('data', collect);
+      daemon.stderr.removeListener('data', collect);
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  daemon.stdout.removeListener('data', collect);
+  daemon.stderr.removeListener('data', collect);
+  return false;
+}
+
 async function main(): Promise<void> {
   console.log('=== M1 验证：bridge-daemon.ts 端到端（mock 模式）===\n');
 
@@ -90,8 +122,9 @@ async function main(): Promise<void> {
     daemon.stdout.on('data', (d) => { daemonOutput += d.toString(); });
     daemon.stderr.on('data', (d) => { daemonOutput += d.toString(); });
 
-    // 等 daemon 启动
-    await new Promise((r) => setTimeout(r, 1000));
+    // 等 daemon 启动就绪（监听 "Press Ctrl+C to stop"）
+    const ready = await waitForDaemonReady(daemon, 10000);
+    assert(ready, 'daemon 应在 10s 内启动就绪');
 
     // 写 req 文件
     const reqId = randomUUID();
@@ -142,7 +175,7 @@ async function main(): Promise<void> {
       shell: true,
     });
 
-    await new Promise((r) => setTimeout(r, 1000));
+    await waitForDaemonReady(daemon, 10000);
 
     // 写无效 JSON 的 req 文件
     const reqId = randomUUID();
@@ -182,7 +215,7 @@ async function main(): Promise<void> {
       shell: true,
     });
 
-    await new Promise((r) => setTimeout(r, 1000));
+    await waitForDaemonReady(daemon, 10000);
 
     // 写 3 个 req 文件
     const ids = [randomUUID(), randomUUID(), randomUUID()];

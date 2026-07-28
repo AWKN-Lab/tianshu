@@ -1,0 +1,62 @@
+version: 1
+capabilities:
+  - id: engineer
+    version: "1.0.0"
+    canonical_skill: engineer
+    aliases:
+      - engineer
+      - 工程师
+      - build
+    visibility: public
+    card: project/cards/engineer.md
+    loop_profile: default
+    allowed_tools: []
+    content_hash: generated
+  - id: cicd
+    version: "1.0.0"
+    canonical_skill: cicd
+    aliases:
+      - cicd
+      - release
+      - 发布
+    visibility: public
+    card: project/cards/cicd.md
+    loop_profile: default
+    allowed_tools: []
+    content_hash: generated
+  - id: bugfix
+    version: "1.0.0"
+    canonical_skill: bugfix
+    aliases:
+      - bugfix
+      - 修复
+      - fix
+    visibility: public
+    card: project/cards/bugfix.md
+    loop_profile: default
+    allowed_tools: []
+    content_hash: generated
+  - id: audit
+    version: "1.0.0"
+    canonical_skill: awkn-审核
+    aliases:
+      - audit
+      - 审核
+      - review
+    visibility: public
+    card: project/cards/audit.md
+    loop_profile: default
+    allowed_tools: []
+    content_hash: generated
+  - id: deploy
+    version: "1.0.0"
+    canonical_skill: awkn-部署
+    aliases:
+      - deploy
+      - 部署
+      - 上线
+    visibility: public
+    card: project/cards/deploy.md
+    loop_profile: default
+    allowed_tools: []
+    content_hash: generated

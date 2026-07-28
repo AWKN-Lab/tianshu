@@ -18,15 +18,26 @@
 import { existsSync, readFileSync, readdirSync, rmSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { writeExperience, patternToMarkdown, resolveExperienceId } from '../src/evolve/experience-writer.js';
+import { getDb, closeDb } from '../src/store/db.js';
 import type { DetectedPattern } from '../src/evolve/pattern-detector.js';
 
-// ─── 测试隔离：临时 derived 目录 ───────────────────────────────────
+// ─── 测试隔离：临时 DB + 临时 derived 目录 ─────────────────────────
+const TMP_DB = resolve(process.cwd(), 'data', `test-evolve-full-loop-${Date.now()}.db`);
 const TMP_DERIVED = resolve(process.cwd(), 'data', 'test-evolve-full-loop');
+process.env.AWKN_DB_PATH = TMP_DB;
 if (existsSync(TMP_DERIVED)) {
   rmSync(TMP_DERIVED, { recursive: true, force: true });
 }
 mkdirSync(TMP_DERIVED, { recursive: true });
 process.env.AWKN_DERIVED_DIR = TMP_DERIVED;
+
+// 初始化 DB 并清理所有 evolution 表（避免 stale candidate 污染）
+const db = getDb();
+db.exec('DELETE FROM evolution_activation_history');
+db.exec('DELETE FROM evolution_evaluations');
+db.exec('DELETE FROM evolution_candidate_corrections');
+db.exec('DELETE FROM evolution_candidates');
+db.exec('DELETE FROM corrections_ledger');
 
 // SKILL.md 路径（项目根下）
 const SKILL_MD = resolve(process.cwd(), '..', 'skills', 'awkn-复盘总结', 'SKILL.md');
@@ -195,7 +206,9 @@ assert(
 );
 
 // ─── 清理 ─────────────────────────────────────────────────────────
+closeDb();
 rmSync(TMP_DERIVED, { recursive: true, force: true });
+try { rmSync(TMP_DB, { force: true }); } catch { /* ignore */ }
 
 // ─── 汇总 ─────────────────────────────────────────────────────────
 console.log('\n=== 汇总 ===');

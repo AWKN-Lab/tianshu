@@ -3,13 +3,7 @@ import { resolve } from 'node:path';
 import { AgentLoop } from '../core/agent-loop.js';
 import { collectArtifactBundle } from '../evidence/artifact-bundle.js';
 import {
-  budgetGate,
-  cicdTesterGate,
-  lintGate,
-  recordGateFailures,
-  testGate,
-  typecheckGate,
-  type GateResult,
+  evaluateTianhuoCicdStop,
 } from '../gates/quality-gates.js';
 import { getGoalManager } from '../goal/goal-manager.js';
 import type { LlmProvider } from '../llm/types.js';
@@ -35,15 +29,8 @@ export interface TianhuoCicdLoopResult {
   reason?: string;
 }
 
-function summarize(results: GateResult[]): string {
-  const failed = results.filter((result) => !result.passed);
-  return failed.length === 0
-    ? `全部 ${results.length} 项停止条件通过`
-    : `${failed.length}/${results.length} 项未通过：${failed.map((result) => result.name).join(', ')}`;
-}
-
 export async function runTianhuoCicdLoop(config: TianhuoCicdLoopConfig): Promise<TianhuoCicdLoopResult> {
-  const goalManager = getGoalManager();
+  const gm = getGoalManager();
   const tianhuoPrompt = readFileSync(resolve(config.cwd, config.tianhuoPromptPath), 'utf-8');
   const cicdPrompt = readFileSync(resolve(config.cwd, config.cicdTesterPromptPath), 'utf-8');
 
@@ -55,7 +42,7 @@ export async function runTianhuoCicdLoop(config: TianhuoCicdLoopConfig): Promise
 
   while (cycle < config.maxCycles) {
     cycle++;
-    const goal = goalManager.read(config.goalId);
+    const goal = gm.read(config.goalId);
     if (!goal) return { achieved: false, cycles: cycle, finalText: '', lastSummary, totalTokens, reason: `goal ${config.goalId} 不存在` };
     if (goal.state !== 'active') return { achieved: false, cycles: cycle, finalText: lastFinalText, lastSummary, totalTokens, reason: `goal state=${goal.state}` };
 
@@ -79,17 +66,10 @@ export async function runTianhuoCicdLoop(config: TianhuoCicdLoopConfig): Promise
       return { achieved: false, cycles: cycle, finalText: lastFinalText, lastSummary, totalTokens, reason: `天火 L1 终止：${tianhuoResult.terminationReason}` };
     }
 
-    const gateContext = { cwd: config.cwd, goalId: config.goalId };
-    const deterministicGates = await Promise.all([
-      typecheckGate({ ...gateContext, typecheckCmd: 'npm run typecheck' }),
-      testGate({ ...gateContext, testCmd: 'npm run test:all' }),
-      lintGate({ ...gateContext, lintCmd: 'npm run lint' }),
-    ]);
-
     const artifactBundle = await collectArtifactBundle({
       cwd: config.cwd,
       finalText: tianhuoResult.finalText,
-      gates: deterministicGates,
+      gates: [],
     });
 
     const reviewResult = await new AgentLoop({
@@ -106,26 +86,28 @@ export async function runTianhuoCicdLoop(config: TianhuoCicdLoopConfig): Promise
       return { achieved: false, cycles: cycle, finalText: lastFinalText, lastSummary, totalTokens, reason: `cicd-tester L1 终止：${reviewResult.terminationReason}` };
     }
 
-    goalManager.recordCycle(
+    const cycleDurationMs = Date.now() - cycleStartedAt;
+    gm.recordCycle(
       config.goalId,
       tianhuoResult.totalTokens + reviewResult.totalTokens,
-      Date.now() - cycleStartedAt,
+      cycleDurationMs,
     );
 
-    const reviewerResult = await cicdTesterGate({ ...gateContext, cicdTesterVerdict: reviewResult.finalText });
-    const budgetResult = await budgetGate(gateContext);
-    const results = [...deterministicGates, reviewerResult, budgetResult];
-    recordGateFailures(config.goalId, results);
-    lastSummary = summarize(results);
+    const stopResult = await evaluateTianhuoCicdStop({
+      cwd: config.cwd,
+      goalId: config.goalId,
+      cicdTesterVerdict: reviewResult.finalText,
+    });
+    lastSummary = stopResult.summary;
 
-    if (results.every((result) => result.passed)) {
-      goalManager.updateGoal(config.goalId, { state: 'achieved' }, 'model');
+    if (stopResult.achieved) {
+      gm.updateGoal(config.goalId, { state: 'achieved' }, 'model');
       return { achieved: true, cycles: cycle, finalText: lastFinalText, lastSummary, totalTokens };
     }
 
     feedback = [
       reviewResult.finalText,
-      ...results.filter((result) => !result.passed)
+      ...stopResult.results.filter((result) => !result.passed)
         .map((result) => `[${result.name}] ${result.details ?? 'failed'}${result.suggestion ? `\n建议：${result.suggestion}` : ''}`),
     ].join('\n\n');
   }

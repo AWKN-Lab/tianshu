@@ -67,11 +67,11 @@ describe('M3 进阶-14: loop_state 检查点恢复（断点恢复）', () => {
     assert.ok(src.includes('saveCheckpoint();'),
       '应在工具执行后调用 saveCheckpoint');
     // 所有 return 路径清除 checkpoint
-    assert.ok(src.includes("clearCheckpoint(true, 'LLM 连续失败 3 次')"),
+    assert.ok(src.includes("terminate('LLM 连续失败 3 次')"),
       'LLM 失败 return 前应 clearCheckpoint');
-    assert.ok(src.includes("clearCheckpoint(true, 'repeating pattern')"),
+    assert.ok(src.includes("terminate('repeating pattern'"),
       'repeating pattern return 前应 clearCheckpoint');
-    assert.ok(src.includes('clearCheckpoint(true, reachedMax'),
+    assert.ok(src.includes('clearCheckpoint(reachedMax'),
       '循环结束后应 clearCheckpoint（区分 maxTurns）');
     // resume 时跳过 session_start hook
     assert.ok(src.includes('if (!resumeFrom)'),

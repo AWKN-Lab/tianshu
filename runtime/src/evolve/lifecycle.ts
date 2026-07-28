@@ -98,11 +98,19 @@ export class EvolutionLifecycle {
 
   linkCorrections(candidateId: string, correctionIds: string[]): number {
     if (correctionIds.length === 0) return 0;
+    // Filter out correction IDs that don't exist in corrections_ledger (FK constraint safety)
+    const placeholders = correctionIds.map(() => '?').join(',');
+    const existingIds = this.db.prepare(
+      `SELECT id FROM corrections_ledger WHERE id IN (${placeholders})`,
+    ).all(...correctionIds) as Array<{ id: string }>;
+    const existingSet = new Set(existingIds.map((r) => r.id));
+    const validIds = correctionIds.filter((id) => existingSet.has(id));
+    if (validIds.length === 0) return 0;
     const insert = this.db.prepare(
       `INSERT OR IGNORE INTO evolution_candidate_corrections
        (candidate_id, correction_id, created_at) VALUES (?, ?, ?)`,
     );
-    return this.db.transaction(() => correctionIds.reduce((count, correctionId) =>
+    return this.db.transaction(() => validIds.reduce((count, correctionId) =>
       count + insert.run(candidateId, correctionId, new Date().toISOString()).changes, 0))();
   }
 

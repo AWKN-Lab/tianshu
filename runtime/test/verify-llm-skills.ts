@@ -21,7 +21,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseSkillFile } from '../src/skills/parser.js';
+import { parseSkillFile } from '../src/skills/manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -66,7 +66,7 @@ describe('M3 进阶-19/20/21: LLM providers + skills parser 隐藏 bug 修复', 
 
   it('静态：parser.ts 含 \\r?\\n 正则（CRLF 支持，M3 进阶-21）', () => {
     const src = readFileSync(
-      resolve(__dirname, '..', 'src', 'skills', 'parser.ts'),
+      resolve(__dirname, '..', 'src', 'skills', 'manager.ts'),
       'utf-8',
     );
     assert.ok(src.includes('M3 进阶-21'), '应含 M3 进阶-21 注释');

@@ -184,6 +184,7 @@ export interface PendingDraft {
   pendingMarkerCount: number;
 }
 
+// M3 进阶-18：scanPendingDrafts + completePendingDrafts 实现 derived 草稿扫描与补全闭环
 export function scanPendingDrafts(): PendingDraft[] {
   const dir = getDerivedDir();
   if (!existsSync(dir)) return [];

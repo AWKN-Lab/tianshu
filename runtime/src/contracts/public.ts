@@ -24,6 +24,7 @@ export * from './numbers.js';
 // Phase 6 / C04 Policy & Skill Compiler Contracts
 export * from './policy.js';
 export * from './receipts.js';
+export * from './review.js';
 export * from './schema-id.js';
 // Phase 6 / C04 Skill Compiler Contracts
 export * from './skill.js';

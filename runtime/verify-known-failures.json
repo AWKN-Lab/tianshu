@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "已知失败的 verify 测试白名单。新增失败必须修复或加入此名单。Phase 7 Evolve v2 修复后将清空。",
+  "version": 1,
+  "lastUpdated": "2026-07-28",
+  "knownFailures": [
+    {
+      "file": "test/verify-evolve-loop.ts",
+      "reason": "Phase 7 Evolve v2: corrections resolution expects writeExperience to resolve on DRAFT creation, but production code only resolves on ACTIVATE. Also expects M3 进阶-18 behavior that's deferred.",
+      "phase": "Phase 7",
+      "trackingIssue": "AWKN-Lab/tianshu#43"
+    },
+    {
+      "file": "test/verify-evolve-full-loop.ts",
+      "reason": "Phase 7 Evolve v2: SKILL.md content checks for awkn-复盘总结 require documentation updates that are out of scope for Phase 2 gate unification.",
+      "phase": "Phase 7",
+      "trackingIssue": "AWKN-Lab/tianshu#43"
+    },
+    {
+      "file": "test/verify-cron-evolve.ts",
+      "reason": "Phase 7 Evolve v2: corrections resolution behavior and expected file count (2 vs 1) depend on writeExperience resolving corrections, which is deferred to Phase 7.",
+      "phase": "Phase 7",
+      "trackingIssue": "AWKN-Lab/tianshu#43"
+    }
+  ]
+}

@@ -89,6 +89,10 @@ describe('M3 进阶-17: 自进化闭环连通性', () => {
   it('单元：recordGateFailures 只记录 FAIL（PASS 跳过）', () => {
     // 先清空 corrections_ledger
     const db = getDb();
+    db.exec('DELETE FROM evolution_activation_history');
+    db.exec('DELETE FROM evolution_evaluations');
+    db.exec('DELETE FROM evolution_candidate_corrections');
+    db.exec('DELETE FROM evolution_candidates');
     db.exec('DELETE FROM corrections_ledger');
 
     const results: GateResult[] = [
@@ -108,6 +112,10 @@ describe('M3 进阶-17: 自进化闭环连通性', () => {
 
   it('单元：recordGateFailures 记录正确的 severity', () => {
     const db = getDb();
+    db.exec('DELETE FROM evolution_activation_history');
+    db.exec('DELETE FROM evolution_evaluations');
+    db.exec('DELETE FROM evolution_candidate_corrections');
+    db.exec('DELETE FROM evolution_candidates');
     db.exec('DELETE FROM corrections_ledger');
 
     const results: GateResult[] = [
@@ -132,6 +140,10 @@ describe('M3 进阶-17: 自进化闭环连通性', () => {
 
   it('端到端：record 3 次同指纹 → detect → writeExperience → corrections resolved', () => {
     const db = getDb();
+    db.exec('DELETE FROM evolution_activation_history');
+    db.exec('DELETE FROM evolution_evaluations');
+    db.exec('DELETE FROM evolution_candidate_corrections');
+    db.exec('DELETE FROM evolution_candidates');
     db.exec('DELETE FROM corrections_ledger');
 
     // 清空 derived 目录
@@ -194,6 +206,10 @@ describe('M3 进阶-17: 自进化闭环连通性', () => {
 
   it('端到端：stopExperienceExtractHook 完整跑通', async () => {
     const db = getDb();
+    db.exec('DELETE FROM evolution_activation_history');
+    db.exec('DELETE FROM evolution_evaluations');
+    db.exec('DELETE FROM evolution_candidate_corrections');
+    db.exec('DELETE FROM evolution_candidates');
     db.exec('DELETE FROM corrections_ledger');
 
     // 清空 derived 目录
@@ -228,6 +244,10 @@ describe('M3 进阶-17: 自进化闭环连通性', () => {
 
   it('端到端：goal_repeat 模式（同 goal 内 2 次同指纹）', () => {
     const db = getDb();
+    db.exec('DELETE FROM evolution_activation_history');
+    db.exec('DELETE FROM evolution_evaluations');
+    db.exec('DELETE FROM evolution_candidate_corrections');
+    db.exec('DELETE FROM evolution_candidates');
     db.exec('DELETE FROM corrections_ledger');
 
     // 清空 derived 目录
@@ -260,6 +280,10 @@ describe('M3 进阶-17: 自进化闭环连通性', () => {
 
   it('端到端：无 corrections 时 detect 返回 []', () => {
     const db = getDb();
+    db.exec('DELETE FROM evolution_activation_history');
+    db.exec('DELETE FROM evolution_evaluations');
+    db.exec('DELETE FROM evolution_candidate_corrections');
+    db.exec('DELETE FROM evolution_candidates');
     db.exec('DELETE FROM corrections_ledger');
 
     const patterns = getPatternDetector().detect();
@@ -329,6 +353,10 @@ describe('M3 进阶-17: 自进化闭环连通性', () => {
 
   it('端到端：writeAllExperiences 后 scanPendingDrafts 能找到新生成的草稿', () => {
     const db = getDb();
+    db.exec('DELETE FROM evolution_activation_history');
+    db.exec('DELETE FROM evolution_evaluations');
+    db.exec('DELETE FROM evolution_candidate_corrections');
+    db.exec('DELETE FROM evolution_candidates');
     db.exec('DELETE FROM corrections_ledger');
 
     // 清空 derived 目录

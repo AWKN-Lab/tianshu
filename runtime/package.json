@@ -16,7 +16,7 @@
     "test:all": "npm run test && npm run test:contracts",
     "test:coverage": "node --experimental-test-coverage --import tsx --test \"test/*.test.ts\" \"test/contracts/*.test.ts\"",
     "check:architecture": "node scripts/architecture-scan.mjs",
-    "check": "npm run check:architecture && npm run typecheck && npm run test:all",
+    "check": "npm run check:architecture && npm run typecheck && npm run test:all && npm run test:verify",
     "check:full": "npm run check && npm run build",
     "dev": "tsx src/cli.ts",
     "approval": "tsx src/approval-cli.ts",

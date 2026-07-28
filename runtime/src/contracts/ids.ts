@@ -22,6 +22,11 @@ export const AWKN_ID_PREFIXES = {
   event: 'evt',
   flagSnapshot: 'fsnap',
   shadowDiff: 'sdiff',
+  reviewTarget: 'rtgt',
+  reviewPlan: 'rplan',
+  reviewUnit: 'runit',
+  reviewRun: 'rrun',
+  reviewFinding: 'rfnd',
 } as const;
 
 export type AwknIdKind = keyof typeof AWKN_ID_PREFIXES;

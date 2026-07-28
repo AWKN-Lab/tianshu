@@ -174,7 +174,8 @@ export class AgentLoop {
       }
 
       this.totalTokens += response.usage.totalTokens;
-      if (this.loopMonitor.recordTokenUsage(response.usage.totalTokens)) {
+      const tokenAnomaly = this.loopMonitor.recordTokenUsage(response.usage.totalTokens);
+      if (tokenAnomaly) {
         recordLoopFailure(`token 异常增长: current=${response.usage.totalTokens}`);
         return terminate('token anomaly', '[token 异常增长，循环已终止]');
       }
@@ -270,7 +271,7 @@ export class AgentLoop {
           reactState = reflect(reactState);
           if (reactState.lastReflection && !reactState.lastReflection.shouldContinue) {
             const reason = `reflection stop: ${reactState.lastReflection.reason}`;
-            recordLoopFailure(reason);
+            recordLoopFailure(`反思停止: ${reactState.lastReflection.reason}`);
             return terminate(reason, `[reflection stop] ${reactState.lastReflection.reason}`);
           }
         }
