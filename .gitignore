@@ -34,11 +34,12 @@ out/
 *.tar.gz
 
 # ===== 技能库（独立管理，不入本仓）=====
-# skills/ 含 100+ 第三方吸收技能（lark/pptx/n8n 等），1.5GB/7万文件，远超单仓合理规模。
+# /skills/ 含 100+ 第三方吸收技能（lark/pptx/n8n 等），1.5GB/7万文件，远超单仓合理规模。
 # 引擎核心（runtime/）通过 SKILLS_DIR 加载技能，技能库作为独立资产另行管理。
 # fresh clone 后 `awkn-engine skill list` 返回空属预期；按需放入技能即可。
-skills/
-skills/**
+# 注意：用 /skills/（前导斜杠）仅忽略顶层 skills/，不影响 runtime/src/skills/ 源码
+/skills/
+/skills/**
 
 # ===== IDE / 编辑器私有 =====
 .trae/

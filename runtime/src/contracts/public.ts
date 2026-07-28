@@ -21,7 +21,11 @@ export * from './input.js';
 export * from './intent.js';
 export * from './json-value.js';
 export * from './numbers.js';
+// Phase 6 / C04 Policy & Skill Compiler Contracts
+export * from './policy.js';
 export * from './receipts.js';
 export * from './schema-id.js';
+// Phase 6 / C04 Skill Compiler Contracts
+export * from './skill.js';
 export * from './sources.js';
 export * from './time.js';

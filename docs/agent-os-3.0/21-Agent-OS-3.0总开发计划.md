@@ -1,10 +1,16 @@
 # 天枢 Agent OS 3.0 总开发计划
 
 > 文档编号：TS-AOS-PLAN-021  
-> 版本：v1.3  
+> 版本：v1.5  
 > 日期：2026-07-28  
 > 治理 Epic：Issue #43  
 > 权威范围：`AWKN-Lab/tianshu` Agent OS 3.0 开发、迁移、测试、Shadow 与发布调度
+>
+> **v1.5 变更**（AUTH-2026-07-28-PHASE6-START）：
+> - R2 Exit 状态澄清为 `SHADOW_PASSED_GO_SINGLE_PLATFORM`（仅 win32-x64，Linux 待补做）
+> - v13 Persistence 决策推迟到 R5 Shadow Beta（F1）
+> - capabilities/ 收口（A1：删除 GUNDAM D16 fixture，runtime/src 零引用）
+> - Phase 6 启动：C04 Policy/Skill Compiler → C05 Tool/Model Broker → C06 Evidence-Gain Loop（C1 串行，D1 全部 Mode 0，E1 一组件一 PR）
 
 ## 一、计划目标
 
@@ -169,40 +175,38 @@ R2 Exit 条件：
 - [x] Claim Source、Authority、Freshness、Permission 可追踪；
 - [x] Context Manifest 可重放；
 - [x] PR #64 完成语义 Review与必要修复（3 项语义修复已完成：Unicode Code Point Comparator、verifyImmutableRender、assertCrossFieldInvariants）；
-- [ ] Context Manifest / Render v13 Persistence 决策；
+- [ ] Context Manifest / Render v13 Persistence 决策（v1.5：**推迟到 R5 Shadow Beta**，基于实际 Shadow 数据决策，AUTH-2026-07-28-PHASE6-START 决策 F1）；
 - [x] WP02—05 接入只读 Shadow（Shadow 基础设施已建成：4 Legacy Adapter + ShadowDiffReceipt + ShadowExecution + R2ExitReport）；
 - [x] Engine v2 保持默认（Shadow 路径不修改 Engine v2 状态）；
 - [x] Shadow 无外部副作用（ShadowExecution 是纯函数，不写 DB/LLM/hook）；
-- [ ] Windows/Linux Replay 一致（当前仅 win32-x64 单平台，需 Linux 机器补充执行）；
-- [x] R2 Exit Report（已生成：10 个场景，Decision: NO_GO，2 SAFETY_REGRESSION + 8 BLOCKING）。
+- [ ] Windows/Linux Replay 一致（当前仅 win32-x64 单平台，`verifyCrossPlatformHash` 单平台自动跳过检查，需 Linux 机器补充执行；v1.5：作为 R5 Shadow Beta 前置条件补做）；
+- [x] R2 Exit Report（v1.5：使用真实 ExecutionCoordinator + R2 Port 实现，10/10 ACCEPTABLE，0 BLOCKING，0 SAFETY_REGRESSION，Decision: GO，commit `dd5039e`）。
 
-**真实 R2 Shadow Integration 执行结果（2026-07-28）**：
+**真实 R2 Shadow Integration 执行结果（v1.5，2026-07-28，commit `dd5039e`）**：
 
-- 执行脚本：`runtime/scripts/run-real-shadow-integration.ts`（commit `c71de01`）
+- 执行脚本：`runtime/scripts/run-real-shadow-integration.ts`
 - 场景数：10（基础文本/工具调用/Goal 关联/空响应/Intent/Context/GoalVerdict/Memory/全组件/边界）
-- Verdict 分布：MATCH=0, ACCEPTABLE=2, BLOCKING=8
-- Classification 分布：EXACT=12, EXPECTED_IMPROVEMENT=1, ACCEPTABLE_DIVERGENCE=3, MISSING_IN_R2=9, SAFETY_REGRESSION=2
-- Cross-Platform Hash：consistent=YES（单平台，跨平台未验证）
-- Decision：**NO_GO**
+- Verdict 分布：MATCH=0, ACCEPTABLE=10, BLOCKING=0
+- Classification 分布：EXACT+SEMANTIC_EQUIVALENT 占多数，0 SAFETY_REGRESSION
+- Cross-Platform Hash：consistent=YES（**单平台 win32-x64，跨平台未真正验证**）
+- Decision：**GO**
 
-**NO_GO 原因**：
-1. 2 个 SAFETY_REGRESSION（场景10：空 userInput + 无 user message 触发 Adapter 错误）
-2. 80% BLOCKING ratio（主要是 MISSING_IN_R2，因 R2 组件未接入主链）
+**v1.5 单平台状态澄清（B1）**：
 
-**关键发现**：
-- 当所有 R2 组件提供时（场景5、9），diff 为 ACCEPTABLE——R2 组件本身工作正常
-- 当 R2 组件未提供时，diff 正确报告 MISSING_IN_R2 → BLOCKING（fail-closed 正确行为）
-- Shadow 基础设施（kill switch、fail-closed 隔离、确定性 hash）全部通过验证
+当前 GO 判定实际是"单平台 GO"。`verifyCrossPlatformHash`（`r2-exit-report.ts` 第 156-159 行）只检查 ≥2 平台场景，单平台自动跳过检查，`consistent=YES`。
 
-**修复后才能进入 Phase 6**：
-1. 将 ExecutionCoordinator 接入主链，让 R2 组件在 shadow 模式下真实运行
-2. 修复场景10 的 SAFETY_REGRESSION 分类（或接受为正确行为）
-3. 补充 Linux 平台执行，验证跨平台 hash 一致性
-4. 重新生成 R2 Exit Report，目标为 GO
+- 不违反 R2 Exit Report 决策规则（规则只要求"跨平台不一致时 NO_GO"，单平台无比较对象）
+- 但未满足 R2 Exit 条件第 7 项"Windows/Linux Replay 一致"
+- 工程务实决策：Phase 6 可启动，Linux 验证作为 R5 Shadow Beta 前置条件补做
 
-当前判定：`SHADOW_PASSED_GO / RELEASE_GATE_PASSED`。
+当前判定：`SHADOW_PASSED_GO_SINGLE_PLATFORM / RELEASE_GATE_PASSED_WITH_CONDITION`。
 
-### R3：Governed Execution Kernel
+**v1.4 历史记录**（commit `c71de01` → `dd5039e`）：
+
+- v1.3 首次执行：10 场景，2 SAFETY_REGRESSION + 8 BLOCKING，Decision: NO_GO（因 R2 组件未接入主链）
+- v1.4 修复后：用真实 ExecutionCoordinator + R2 Port 实现，10/10 ACCEPTABLE，Decision: GO
+
+### R3：Governed Execution Kernel — 进行中（v1.5 启动）
 
 范围：WP06—10、WP18 Benchmark。
 
@@ -217,6 +221,19 @@ WP03 + WP05
 WP06 + WP07 + WP08 + WP09
 └─→ WP10 Evidence-Gain Loop
 ```
+
+**v1.5 Phase 6 启动状态（AUTH-2026-07-28-PHASE6-START）**：
+
+- 推荐组合：A1 + B1 + C1 + D1 + E1 + F1
+- 实施顺序：C04 → C05 → C06（串行，C1）
+- 初始 Mode：全部 Mode 0（D1，与 R2 一致，旁路实现，不破坏现有 runtime）
+- PR 策略：一组件一 PR（E1，符合 WIP 规则）
+- C04 实施：
+  - 设计文档：`05-Policy-Skill-Compiler.md` v0.2 Draft（已冻结）
+  - NEW 文件：`policy/registry.ts`、`policy/compiler.ts`、`policy/resolver.ts`、`policy/ast.ts`、`policy/bundle-store.ts`、`skills/compiler.ts`、`skills/evaluation-registry.ts`
+  - REUSE：`tools/policy.ts`、`skills/manager.ts`、`gates/quality-gates.ts`、`evolve/`、`memory/authority.ts`
+  - UPGRADE：ToolPolicy→Policy Evaluator Adapter，Skills Manager→SkillRef+版本 Hash
+  - DEPRECATE：`domains`字段、跨仓库 Registry 同步、未评测外部 Skill
 
 退出条件：
 
