@@ -1,0 +1,31 @@
+global:
+  service_enabled: true
+  default_policy: deny
+  max_nesting_depth: 1
+  warning_at: 5
+  require_acceptance: true
+  require_fresh_evidence: true
+  resume_after_restart: false
+
+profiles:
+  default:
+    maxCycles: 3
+    maxTurnsPerCycle: 5
+    maxTokens: 40000
+    maxDurationMinutes: 30
+  explicit_long_run:
+    maxCycles: 10
+    maxTurnsPerCycle: 5
+    maxTokens: 150000
+    maxDurationMinutes: 120
+
+capabilities:
+  engineer:
+    mode: allow
+    profile: default
+  cicd:
+    mode: allow
+    profile: default
+  bugfix:
+    mode: allow
+    profile: default

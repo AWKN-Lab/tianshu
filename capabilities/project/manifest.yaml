@@ -1,0 +1,38 @@
+version: 1
+capabilities:
+  - id: engineer
+    version: "1.0.0"
+    canonical_skill: engineer
+    aliases:
+      - engineer
+      - 工程师
+      - build
+    visibility: public
+    card: project/cards/engineer.md
+    loop_profile: default
+    allowed_tools: []
+    content_hash: generated
+  - id: cicd
+    version: "1.0.0"
+    canonical_skill: cicd
+    aliases:
+      - cicd
+      - CICD
+      - 持续集成
+    visibility: public
+    card: project/cards/cicd.md
+    loop_profile: default
+    allowed_tools: []
+    content_hash: generated
+  - id: bugfix
+    version: "1.0.0"
+    canonical_skill: bugfix
+    aliases:
+      - bugfix
+      - 修复
+      - bug-fix
+    visibility: public
+    card: project/cards/bugfix.md
+    loop_profile: default
+    allowed_tools: []
+    content_hash: generated
