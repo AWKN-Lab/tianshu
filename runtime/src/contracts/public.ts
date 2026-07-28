@@ -1,5 +1,6 @@
 export * from './actors.js';
 export * from './authorization.js';
+export * from './broker.js';
 export * from './canonical-json.js';
 export * from './claim.js';
 export * from './claim-migration.js';
