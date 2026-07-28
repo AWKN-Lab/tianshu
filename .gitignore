@@ -98,6 +98,9 @@ runtime/data/*.sha256
 runtime/data/.migration-backup-*
 runtime/test/data/
 
+# ===== Shadow Reports 产物（R2 Exit Report 生成的 JSON/Markdown，每次执行唯一）=====
+runtime/data/shadow-reports/
+
 # ===== 临时与备份 =====
 *.tmp
 *.bak
