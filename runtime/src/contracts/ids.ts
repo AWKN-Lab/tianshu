@@ -17,6 +17,7 @@ export const AWKN_ID_PREFIXES = {
   authorization: 'auth',
   delivery: 'dlv',
   outcome: 'out',
+  artifact: 'art',
   memoryTransaction: 'mtx',
   candidate: 'cand',
   event: 'evt',
