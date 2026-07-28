@@ -10,13 +10,13 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit",
+    "lint": "node scripts/architecture-scan.mjs",
     "test": "node scripts/run-tests.mjs unit",
     "test:contracts": "node scripts/run-tests.mjs contracts",
-    "test:all": "npm run test && npm run test:contracts",
+    "test:verify": "node scripts/run-tests.mjs verify",
+    "test:all": "npm run test && npm run test:contracts && npm run test:verify",
     "check:architecture": "node scripts/architecture-scan.mjs",
-    "check": "npm run check:architecture && npm run typecheck && npm run lint && npm run test:all",
-    "test:vitest": "vitest run",
+    "check": "npm run typecheck && npm run lint && npm run test:all",
     "dev": "tsx src/cli.ts",
     "approval": "tsx src/approval-cli.ts",
     "evolution": "tsx src/evolution-cli.ts",
@@ -31,8 +31,7 @@
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.6.0",
-    "vitest": "^4.1.7"
+    "typescript": "^5.6.0"
   },
   "engines": {
     "node": ">=20.0.0"

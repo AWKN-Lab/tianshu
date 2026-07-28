@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { dirname, sep } from 'node:path';
@@ -8,7 +8,7 @@ const runtimeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const testRoot = join(runtimeRoot, 'test');
 const mode = process.argv[2] ?? 'all';
 
-if (!['unit', 'contracts', 'all'].includes(mode)) {
+if (!['unit', 'contracts', 'verify', 'all'].includes(mode)) {
   console.error(`Unknown test mode: ${mode}`);
   process.exit(2);
 }
@@ -31,13 +31,47 @@ function listTests(directory, recursive) {
   return files;
 }
 
+/**
+ * Discover verify-*.ts scripts in test/ root (non-recursive).
+ * These are historical validation scripts that were previously not
+ * included in the default gate.
+ */
+function listVerifyScripts(directory) {
+  const files = [];
+  for (const entry of readdirSync(directory).sort()) {
+    const fullPath = join(directory, entry);
+    const stat = statSync(fullPath);
+    if (stat.isFile() && entry.startsWith('verify-') && entry.endsWith('.ts')) {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
+
+/**
+ * Check if a file uses node:test API (import from 'node:test').
+ * Files using node:test can be run with `node --test`.
+ * Files with custom assert need to be run with `tsx` directly.
+ */
+function usesNodeTest(filePath) {
+  const source = readFileSync(filePath, 'utf8');
+  return /from\s+['"]node:test['"]/.test(source);
+}
+
 const unitTests = listTests(testRoot, false);
 const contractTests = listTests(join(testRoot, 'contracts'), true);
-const selected = mode === 'unit'
-  ? unitTests
-  : mode === 'contracts'
-    ? contractTests
-    : [...unitTests, ...contractTests];
+const verifyScripts = listVerifyScripts(testRoot);
+
+let selected;
+if (mode === 'unit') {
+  selected = unitTests;
+} else if (mode === 'contracts') {
+  selected = contractTests;
+} else if (mode === 'verify') {
+  selected = verifyScripts;
+} else {
+  selected = [...unitTests, ...contractTests, ...verifyScripts];
+}
 
 if (selected.length === 0) {
   console.error(`No ${mode} tests found under ${testRoot}`);
@@ -47,19 +81,59 @@ if (selected.length === 0) {
 const relativeFiles = selected.map((file) => toPosix(relative(runtimeRoot, file)));
 console.log(`Running ${relativeFiles.length} ${mode} test file(s)`);
 for (const file of relativeFiles) console.log(`- ${file}`);
+console.log('');
 
-const result = spawnSync(
-  process.execPath,
-  ['--import', 'tsx', '--test', ...relativeFiles],
-  {
-    cwd: runtimeRoot,
-    stdio: 'inherit',
-    env: process.env,
-  },
-);
-
-if (result.error) {
-  console.error(result.error);
-  process.exit(1);
+// Split files into node:test compatible and standalone (custom assert)
+const nodeTestFiles = [];
+const standaloneFiles = [];
+for (let i = 0; i < selected.length; i++) {
+  if (usesNodeTest(selected[i])) {
+    nodeTestFiles.push(relativeFiles[i]);
+  } else {
+    standaloneFiles.push(relativeFiles[i]);
+  }
 }
-process.exit(result.status ?? 1);
+
+let overallStatus = 0;
+
+// Run node:test compatible files with `node --import tsx --test`
+if (nodeTestFiles.length > 0) {
+  console.log(`--- node:test files (${nodeTestFiles.length}) ---`);
+  const result = spawnSync(
+    process.execPath,
+    ['--import', 'tsx', '--test', ...nodeTestFiles],
+    {
+      cwd: runtimeRoot,
+      stdio: 'inherit',
+      env: process.env,
+    },
+  );
+  if (result.error) {
+    console.error(result.error);
+    overallStatus = 1;
+  } else {
+    overallStatus = overallStatus || (result.status ?? 1);
+  }
+}
+
+// Run standalone scripts (custom assert) with `tsx` directly
+for (const file of standaloneFiles) {
+  console.log(`\n--- standalone verify script: ${file} ---`);
+  const result = spawnSync(
+    process.execPath,
+    ['--import', 'tsx', file],
+    {
+      cwd: runtimeRoot,
+      stdio: 'inherit',
+      env: process.env,
+    },
+  );
+  if (result.error) {
+    console.error(result.error);
+    overallStatus = 1;
+  } else {
+    overallStatus = overallStatus || (result.status ?? 1);
+  }
+}
+
+process.exit(overallStatus);
