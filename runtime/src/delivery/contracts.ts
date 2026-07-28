@@ -19,6 +19,7 @@
 import type { DeliveryContract, DeliveryMode, DeliverySideEffect, DeliveryFailurePolicy, ResourceRef, ArtifactRequirement } from '../contracts/delivery.js';
 import { createDeliveryId } from '../contracts/delivery.js';
 import type { DeliveryExpectation } from '../contracts/goal.js';
+import type { JsonValue } from '../contracts/json-value.js';
 
 /** Delivery Contract Builder 错误 */
 export class DeliveryContractError extends Error {
@@ -106,7 +107,7 @@ export function deriveRequiresAuthorization(sideEffect: DeliverySideEffect): boo
 /**
  * 根据 DeliveryMode 构建默认 successPredicate
  */
-export function buildDefaultSuccessPredicate(mode: DeliveryMode): Record<string, unknown> {
+export function buildDefaultSuccessPredicate(mode: DeliveryMode): JsonValue {
   switch (mode) {
     case 'CHAT':
       return { messageDelivered: true };
@@ -138,7 +139,7 @@ export interface DeliveryContractInput {
   target?: ResourceRef;
   format?: string;
   requiredArtifacts?: ArtifactRequirement[];
-  successPredicate?: Record<string, unknown>;
+  successPredicate?: JsonValue;
   failurePolicy?: DeliveryFailurePolicy;
   /** 显式覆盖 sideEffect（默认从 mode 推导） */
   sideEffect?: DeliverySideEffect;
@@ -254,7 +255,7 @@ export function deriveContractsFromGoal(
       requiredArtifacts: options.requiredArtifacts?.[mode],
       // 使用 GoalSpec 中的 successPredicate 作为 primary 的谓词
       successPredicate: mode === deliveryExpectation.primaryMode
-        ? deliveryExpectation.successPredicate as Record<string, unknown>
+        ? deliveryExpectation.successPredicate
         : undefined,
     });
     contracts.push(contract);

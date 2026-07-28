@@ -331,6 +331,12 @@ export function buildOutcomeRecord(state: RunFinalState): OutcomeRecord {
       : buildEmptyAttribution();
   }
 
+  // 维持 schema 不变量：attribution.confidence 不得超过整体 confidence
+  // （归因置信度是整体置信度的子集，不应超过其上限）
+  if (attribution && attribution.confidence > confidence) {
+    attribution = { ...attribution, confidence };
+  }
+
   // 5. 生成 OutcomeRecord
   const observedAt = state.observedAt ?? toUtcTimestamp(new Date());
   const record: OutcomeRecord = {

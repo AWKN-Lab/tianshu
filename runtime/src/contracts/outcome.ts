@@ -30,8 +30,6 @@ import { awknIdSchema, createAwknId } from './ids.js';
 import type { JsonValue } from './json-value.js';
 import { UtcTimestampSchema } from './time.js';
 
-const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
-
 // ===== Section 1: Enums =====
 
 /**

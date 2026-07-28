@@ -30,14 +30,16 @@ import type {
   DeliveryContract,
   DeliveryReceipt,
   ArtifactRef,
+  DeliveryMode,
+  ResourceRef,
+  ArtifactRequirement,
 } from '../contracts/delivery.js';
 import { createDeliveryId } from '../contracts/delivery.js';
-import type { GoalSpec, DeliveryExpectation } from '../contracts/goal.js';
+import type { DeliveryExpectation } from '../contracts/goal.js';
 import { toUtcTimestamp } from '../contracts/time.js';
 import {
   buildDeliveryContract,
   deriveContractsFromGoal,
-  DeliveryContractError,
   type DeliveryContractInput,
 } from './contracts.js';
 
@@ -49,16 +51,6 @@ export class DeliveryRouterError extends Error {
   }
 }
 
-/** 执行结果（由上层 AgentLoop 提供） */
-export interface ExecutionDeliveryInput {
-  /** 执行 ID */
-  executionId: string;
-  /** 是否执行成功（仅用于决定 Bundle 初始状态，不影响 Delivery 本身状态） */
-  executionSucceeded: boolean;
-  /** 执行产生的产物引用 */
-  artifacts: ArtifactRef[];
-}
-
 /**
  * Router 构建输入（用于 planDeliveryBundle）
  */
@@ -66,11 +58,11 @@ export interface DeliveryRouterInput {
   executionId: string;
   deliveryExpectation: DeliveryExpectation;
   /** 可选：每个 mode 对应的 target（CONNECTED_SYSTEM / SCHEDULED_TASK 必填） */
-  targets?: Partial<Record<DeliveryContract['mode'], DeliveryContract['target'] & object>>;
+  targets?: Partial<Record<DeliveryMode, ResourceRef>>;
   /** 可选：每个 mode 对应的 format */
-  formats?: Partial<Record<DeliveryContract['mode'], string>>;
+  formats?: Partial<Record<DeliveryMode, string>>;
   /** 可选：每个 mode 对应的 requiredArtifacts */
-  requiredArtifacts?: Partial<Record<DeliveryContract['mode'], DeliveryContract['requiredArtifacts'] & unknown[]>>;
+  requiredArtifacts?: Partial<Record<DeliveryMode, ArtifactRequirement[]>>;
   /** 可选：执行产生的产物（用于绑定到 Bundle） */
   artifacts?: ArtifactRef[];
   /** 可选：当前 UTC 时间戳（默认现在） */
@@ -150,8 +142,11 @@ export function planDeliveryBundle(input: DeliveryRouterInput): DeliveryBundle {
  * 根据 Execution Result 决定 Bundle 是否应该开始执行（PENDING → RUNNING）
  *
  * 注意：执行失败也可启动 Delivery（如 CHAT 模式报告失败原因）。
+ *
+ * 当前策略：始终允许启动 Delivery，由上层根据 GoalSpec 决定是否跳过。
+ * 保留 executionSucceeded 入参以支持未来更精细的策略（如失败时仅允许 CHAT 模式）。
  */
-export function shouldStartDelivery(executionSucceeded: boolean): boolean {
+export function shouldStartDelivery(_executionSucceeded: boolean): boolean {
   // 即使执行失败，也允许启动 Delivery（如 CHAT 报告失败原因）
   // 上层可根据 GoalSpec 决定是否跳过 Delivery
   return true;
@@ -185,19 +180,20 @@ export function attachReceiptAndFinalize(
     );
   }
 
+  // 终态 Bundle 不可再附加 Receipt（先于 DUPLICATE_RECEIPT 检查：
+  // 已定稿的 bundle 即使收到重复 deliveryId 的 receipt，也应以 BUNDLE_ALREADY_FINALIZED 拒绝）
+  if (bundle.state === 'SUCCEEDED' || bundle.state === 'FAILED') {
+    throw new DeliveryRouterError(
+      `cannot attach receipt to ${bundle.state} bundle`,
+      'BUNDLE_ALREADY_FINALIZED',
+    );
+  }
+
   // 已有同 deliveryId 的 receipt 不允许覆盖（追加模式）
   if (bundle.receipts.some((r) => r.deliveryId === receipt.deliveryId)) {
     throw new DeliveryRouterError(
       `receipt for deliveryId ${receipt.deliveryId} already attached`,
       'DUPLICATE_RECEIPT',
-    );
-  }
-
-  // 终态 Bundle 不可再附加 Receipt
-  if (bundle.state === 'SUCCEEDED' || bundle.state === 'FAILED') {
-    throw new DeliveryRouterError(
-      `cannot attach receipt to ${bundle.state} bundle`,
-      'BUNDLE_ALREADY_FINALIZED',
     );
   }
 

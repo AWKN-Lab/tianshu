@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ActorRefSchema, ObjectRefSchema } from './actors.js';
+import { DeliveryModeSchema } from './delivery.js';
 import { awknIdSchema } from './ids.js';
 import { JsonValueSchema } from './json-value.js';
 import { SafeNonNegativeIntegerSchema, SafePositiveIntegerSchema } from './numbers.js';
@@ -64,20 +65,13 @@ export const GoalJudgePolicySchema = z.object({
   requiredGateTypes: z.array(z.string().min(1)),
 }).strict();
 
-export const DeliveryModeSchema = z.enum([
-  'CHAT',
-  'FILE',
-  'VISUAL',
-  'ARTIFACT_APP',
-  'CONNECTED_SYSTEM',
-  'SCHEDULED_TASK',
-]);
-
 export const DeliveryExpectationSchema = z.object({
   modes: z.array(DeliveryModeSchema).min(1),
   primaryMode: DeliveryModeSchema,
   successPredicate: JsonValueSchema,
 }).strict();
+
+export type DeliveryExpectation = z.infer<typeof DeliveryExpectationSchema>;
 
 function duplicateValues(values: readonly string[]): string[] {
   const seen = new Set<string>();
