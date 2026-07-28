@@ -1,9 +1,6 @@
 import type { ChatRequest, ChatResponse, LlmProviderInterface } from '../types.js';
 import { encodeOpenAiMessages } from '../protocol.js';
 
-const MINIMAX_DEFAULT_MODEL = process.env.AWKN_MINIMAX_MODEL ?? 'MiniMax-M2.5';
-const MINIMAX_BASE_URL = process.env.AWKN_MINIMAX_BASE_URL ?? 'https://api.minimaxi.chat/v1';
-
 function getLlmTimeoutMs(): number {
   return Number(process.env.AWKN_LLM_TIMEOUT_MS) || 120000;
 }
@@ -14,9 +11,11 @@ export class MiniMaxProvider implements LlmProviderInterface {
   async chat(req: ChatRequest): Promise<ChatResponse> {
     const apiKey = process.env.AWKN_MINIMAX_API_KEY;
     if (!apiKey) throw new Error('AWKN_MINIMAX_API_KEY is not set');
+    const model = req.model ?? process.env.AWKN_MINIMAX_MODEL ?? 'MiniMax-M2.5';
+    const baseUrl = process.env.AWKN_MINIMAX_BASE_URL ?? 'https://api.minimaxi.chat/v1';
 
     const body: Record<string, unknown> = {
-      model: req.model ?? MINIMAX_DEFAULT_MODEL,
+      model,
       messages: encodeOpenAiMessages(req.messages),
       temperature: req.temperature ?? 0.7,
     };
@@ -30,7 +29,7 @@ export class MiniMaxProvider implements LlmProviderInterface {
     const timeout = setTimeout(() => controller.abort(), getLlmTimeoutMs());
     let resp: Response;
     try {
-      resp = await fetch(`${MINIMAX_BASE_URL}/chat/completions`, {
+      resp = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify(body),
@@ -68,7 +67,7 @@ export class MiniMaxProvider implements LlmProviderInterface {
         totalTokens: data.usage.total_tokens,
       },
       provider: 'minimax',
-      model: req.model ?? MINIMAX_DEFAULT_MODEL,
+      model,
       finishReason: choice.finish_reason === 'tool_calls'
         ? 'tool_calls'
         : choice.finish_reason === 'length'

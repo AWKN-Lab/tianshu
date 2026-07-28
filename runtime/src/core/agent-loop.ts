@@ -61,7 +61,10 @@ export interface AgentLoopResult {
 
 export class AgentLoop {
   private config: AgentLoopConfig;
-  private loopMonitor = new LoopMonitor();
+  private loopMonitor = new LoopMonitor({
+    maxTokenGrowth: Number(process.env.AWKN_LOOP_MAX_TOKEN_GROWTH) || 2.0,
+    maxRepeatingPattern: Number(process.env.AWKN_LOOP_MAX_REPEATING_PATTERN) || 3,
+  });
   private totalTokens = 0;
   private activeRunId?: string;
   private activeTraceId = generateTraceId();

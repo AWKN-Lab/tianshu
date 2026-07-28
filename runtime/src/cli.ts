@@ -17,7 +17,7 @@ import { AgentLoop } from './core/agent-loop.js';
 import { startCronEngine, stopCronEngine } from './cron/engine.js';
 import { hookManager } from './core/hook-manager.js';
 import type { HookPoint } from './core/hook-types.js';
-import { resolve, dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import type { LlmProvider } from './llm/types.js';

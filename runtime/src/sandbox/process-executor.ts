@@ -6,7 +6,13 @@ import type { CommandSandboxRequest, SandboxExecutionResult, SandboxExecutor, Wr
 const execFileAsync = promisify(execFile);
 
 function safeEnv(): NodeJS.ProcessEnv {
-  const keys = ['PATH', 'Path', 'SYSTEMROOT', 'SystemRoot', 'HOME', 'USERPROFILE', 'TMP', 'TEMP', 'LANG'];
+  const keys = [
+    'PATH', 'Path', 'SYSTEMROOT', 'SystemRoot', 'HOME', 'USERPROFILE', 'TMP', 'TEMP', 'LANG',
+    // GitHub CLI auth (keyring not accessible from sandbox; GH_TOKEN overrides it)
+    'GH_TOKEN', 'GH_HOST',
+    // Git identity (for read-only git operations)
+    'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM',
+  ];
   return Object.fromEntries(keys.filter((key) => process.env[key] !== undefined).map((key) => [key, process.env[key]]));
 }
 
