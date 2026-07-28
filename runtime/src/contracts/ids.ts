@@ -25,6 +25,8 @@ export const AWKN_ID_PREFIXES = {
   brokerPlan: 'bp',
   modelRoute: 'mr',
   toolCall: 'tc',
+  policyBundle: 'pb',
+  skillBundle: 'sb',
 } as const;
 
 export type AwknIdKind = keyof typeof AWKN_ID_PREFIXES;

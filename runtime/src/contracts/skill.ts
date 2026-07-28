@@ -310,8 +310,7 @@ export const SKILL_BUNDLE_ID_PREFIX = 'sb';
 
 /** 生成 Skill Bundle ID */
 export function createSkillBundleId(): string {
-  // 复用 randomUUID 逻辑，保持契约稳定
-  return `${SKILL_BUNDLE_ID_PREFIX}_${createAwknId('shadowDiff').slice('sdiff_'.length)}`;
+  return createAwknId('skillBundle');
 }
 
 // ===== Skill Score（设计文档第 8 章） =====

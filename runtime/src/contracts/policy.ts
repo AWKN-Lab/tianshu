@@ -339,9 +339,7 @@ export const POLICY_BUNDLE_ID_PREFIX = 'pb';
 
 /** 生成 Policy Bundle ID */
 export function createPolicyBundleId(): string {
-  return `${POLICY_BUNDLE_ID_PREFIX}_${createAwknId('shadowDiff').slice('sdiff_'.length)}`;
-  // 复用 randomUUID 逻辑，避免在 AWKN_ID_PREFIXES 加新前缀（保持契约稳定）
-  // 实际实现：pb_<32hex>
+  return createAwknId('policyBundle');
 }
 
 // ===== Compiler Receipt（awkn-compiler-receipt/v1） =====
