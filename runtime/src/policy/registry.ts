@@ -23,6 +23,9 @@ import type {
   PolicyExecutionLevel,
   PolicyType,
 } from '../contracts/policy.js';
+import { stableHash } from '../contracts/canonical-json.js';
+import type { JsonValue } from '../contracts/json-value.js';
+import { FORBIDDEN_POLICY_ID_PREFIXES } from './resolver.js';
 
 /** Registry 错误 */
 export class PolicyRegistryError extends Error {
@@ -32,23 +35,12 @@ export class PolicyRegistryError extends Error {
   }
 }
 
-/** Registry 项（Policy + 注册时间） */
+/** Registry 项（Policy + 注册时间 + 内容 Hash） */
 interface RegistryEntry {
   policy: Policy;
   registeredAt: string;
+  contentHash: string;
 }
-
-/** 禁止注册的业务项目 Policy 前缀（设计文档第 11.2 章） */
-const FORBIDDEN_POLICY_PREFIXES = [
-  'gundam.',
-  'value.',
-  'win.',
-  'mr.mont.',
-  'annie.',
-  'subtitle.',
-  'coze.',
-  'project.annie',
-];
 
 /** 允许的 Policy 来源 */
 const ALLOWED_SOURCES = ['core', 'project', 'task_profile', 'evolve_candidate'];
@@ -67,9 +59,10 @@ export class PolicyRegistry {
   /**
    * 注册 Policy
    *
+   * @param contentHash 可选内容 Hash；未提供时由 Registry 基于 Policy 内容计算
    * @throws PolicyRegistryError 如果来源不允许、policyId 命中禁用前缀、版本冲突
    */
-  register(policy: Policy, registeredAt: string): void {
+  register(policy: Policy, registeredAt: string, contentHash?: string): void {
     // 校验来源
     if (!ALLOWED_SOURCES.includes(policy.source)) {
       throw new PolicyRegistryError(
@@ -80,7 +73,7 @@ export class PolicyRegistry {
 
     // 校验 policyId 前缀
     const lowerId = policy.policyId.toLowerCase();
-    for (const forbidden of FORBIDDEN_POLICY_PREFIXES) {
+    for (const forbidden of FORBIDDEN_POLICY_ID_PREFIXES) {
       if (lowerId.startsWith(forbidden)) {
         throw new PolicyRegistryError(
           `policyId forbidden (external business project): ${policy.policyId}`,
@@ -103,9 +96,11 @@ export class PolicyRegistry {
       this.activeVersions.set(policy.policyId, policy.version);
     }
 
+    const hash = contentHash ?? stableHash(policy.schema, policy as unknown as JsonValue);
     this.policies.set(policy.policyId, {
       policy,
       registeredAt,
+      contentHash: hash,
     });
   }
 
@@ -200,4 +195,73 @@ export class PolicyRegistry {
       || policyScope.levels.includes(query.level);
     return profileMatch && levelMatch;
   }
+
+  /**
+   * Quarantine ACTIVE Policy (设计文档第 14 节: ACTIVE → QUARANTINED).
+   *
+   * Quarantine 后新 Run 不再使用该版本.
+   */
+  quarantine(policyId: string, reason: string): void {
+    void reason; // reason 仅用于审计日志，Mode 0 不持久化
+    this.transitionStatus(policyId, 'QUARANTINED');
+  }
+
+  /**
+   * 获取 Policy 的内容 Hash (用于 Bundle sourceVersions).
+   */
+  getContentHash(policyId: string): string | undefined {
+    return this.policies.get(policyId)?.contentHash;
+  }
+
+  /**
+   * 快照当前 ACTIVE Policy (用于 Bundle 冻结).
+   *
+   * 返回的是 Policy 的引用副本, 后续 Registry 更新不影响已返回的快照.
+   */
+  snapshotActive(): readonly Policy[] {
+    const results: Policy[] = [];
+    for (const [policyId, version] of this.activeVersions) {
+      const entry = this.policies.get(policyId);
+      if (entry && entry.policy.version === version) {
+        results.push(entry.policy);
+      }
+    }
+    return results;
+  }
+
+  /**
+   * 列出指定 policyId 的所有版本（按 version 升序）.
+   *
+   * 注意：clean 基线中同一 policyId 仅保留最新注册的版本（覆盖语义）.
+   * 如需多版本共存，请使用 register 时传入不同 policyId 或扩展 Registry.
+   */
+  listVersions(policyId: string): readonly Policy[] {
+    const entry = this.policies.get(policyId);
+    return entry ? [entry.policy] : [];
+  }
+
+  /** 清空 Registry (主要用于测试) */
+  clear(): void {
+    this.policies.clear();
+    this.activeVersions.clear();
+  }
+}
+
+// ===========================================================================
+// Section: Status Transition Helpers (导出供外部使用)
+// ===========================================================================
+
+/** 允许的状态转换映射（设计文档第 14 章） */
+export const POLICY_STATUS_TRANSITIONS: Readonly<Record<PolicyStatus, readonly PolicyStatus[]>> = {
+  DRAFT: ['VALIDATING', 'RETIRED'],
+  VALIDATING: ['APPROVED', 'QUARANTINED', 'DRAFT'],
+  APPROVED: ['ACTIVE', 'QUARANTINED'],
+  ACTIVE: ['QUARANTINED', 'RETIRED'],
+  QUARANTINED: ['RETIRED', 'VALIDATING'],
+  RETIRED: [],
+};
+
+/** 检查状态转换是否允许 */
+export function isStatusTransitionAllowed(from: PolicyStatus, to: PolicyStatus): boolean {
+  return POLICY_STATUS_TRANSITIONS[from].includes(to);
 }

@@ -247,6 +247,58 @@ export type RecoveryAction = z.infer<typeof RecoveryActionSchema>;
 // ===== CompiledSkillBundle (awkn-compiled-skill-bundle/v1) =====
 
 /**
+ * 检测 executionGraph 中的环（DFS）.
+ *
+ * 返回所有检测到的环路径，每个环是一个 nodeId 数组（首尾相同）.
+ * 例如: [['A','B','C','A']] 表示 A→B→C→A 形成环.
+ */
+function detectCycles(nodes: readonly SkillExecutionNode[]): string[][] {
+  const adjacency = new Map<string, string[]>();
+  for (const node of nodes) {
+    adjacency.set(node.nodeId, [...node.dependsOn]);
+  }
+  const cycles: string[][] = [];
+  const visited = new Set<string>();
+  const recursionStack = new Set<string>();
+  const path: string[] = [];
+
+  function dfs(nodeId: string): void {
+    if (recursionStack.has(nodeId)) {
+      // 找到环：从 path 中找到 nodeId 出现的位置，截取环
+      const cycleStart = path.indexOf(nodeId);
+      if (cycleStart >= 0) {
+        const cycle = [...path.slice(cycleStart), nodeId];
+        cycles.push(cycle);
+      }
+      return;
+    }
+    if (visited.has(nodeId)) return;
+
+    visited.add(nodeId);
+    recursionStack.add(nodeId);
+    path.push(nodeId);
+
+    const deps = adjacency.get(nodeId) ?? [];
+    for (const dep of deps) {
+      if (adjacency.has(dep)) {
+        dfs(dep);
+      }
+    }
+
+    path.pop();
+    recursionStack.delete(nodeId);
+  }
+
+  for (const node of nodes) {
+    if (!visited.has(node.nodeId)) {
+      dfs(node.nodeId);
+    }
+  }
+
+  return cycles;
+}
+
+/**
  * Compiled Skill Bundle Schema (awkn-compiled-skill-bundle/v1)
  *
  * 设计文档第 7.2 章。
@@ -287,18 +339,45 @@ export const CompiledSkillBundleSchema = z.object({
       message: 'executionGraph must be empty when no selectedSkills',
     });
   }
-  // 检查 executionGraph 形成无环 DAG（简单检查：dependsOn 引用的 nodeId 必须存在）
+  // 检查 executionGraph 形成无环 DAG
+  // 1. 缺失依赖：dependsOn 引用的 nodeId 必须存在
+  // 2. 自依赖：node 不能依赖自身
+  // 3. 真实环：依赖链不能形成环
   const nodeIds = new Set(value.executionGraph.map((n) => n.nodeId));
+  const missingDeps: string[] = [];
+  const selfDeps: string[] = [];
   for (const node of value.executionGraph) {
     for (const depId of node.dependsOn) {
       if (!nodeIds.has(depId)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['executionGraph'],
-          message: `node ${node.nodeId} depends on non-existent nodeId: ${depId}`,
-        });
+        missingDeps.push(`${node.nodeId}→${depId}`);
+      }
+      if (depId === node.nodeId) {
+        selfDeps.push(node.nodeId);
       }
     }
+  }
+  if (missingDeps.length > 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['executionGraph'],
+      message: `missing dependencies: ${missingDeps.join(', ')}`,
+    });
+  }
+  if (selfDeps.length > 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['executionGraph'],
+      message: `self-dependency detected: ${selfDeps.join(', ')}`,
+    });
+  }
+  // 3. 真实环检测：DFS 检查依赖链是否形成环
+  const cycles = detectCycles(value.executionGraph);
+  if (cycles.length > 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['executionGraph'],
+      message: `cycles detected: ${cycles.map((c) => c.join('→')).join('; ')}`,
+    });
   }
 });
 export type CompiledSkillBundle = z.infer<typeof CompiledSkillBundleSchema>;
@@ -308,8 +387,16 @@ export type CompiledSkillBundle = z.infer<typeof CompiledSkillBundleSchema>;
 /** Skill Bundle ID 前缀 */
 export const SKILL_BUNDLE_ID_PREFIX = 'sb';
 
-/** 生成 Skill Bundle ID */
-export function createSkillBundleId(): string {
+/**
+ * 生成 Skill Bundle ID.
+ *
+ * @param contentHash 可选内容 Hash (SHA256 hex). 若提供，则基于内容 Hash 生成确定性 ID
+ *   (相同内容产生相同 ID). 若不提供，则回退到随机 UUID.
+ */
+export function createSkillBundleId(contentHash?: string): string {
+  if (contentHash && /^[0-9a-f]{64}$/.test(contentHash)) {
+    return `${SKILL_BUNDLE_ID_PREFIX}_${contentHash.slice(0, 32)}`;
+  }
   return createAwknId('skillBundle');
 }
 
