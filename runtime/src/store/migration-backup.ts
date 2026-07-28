@@ -210,7 +210,11 @@ export function listMigrationBackups(dbPath: string): MigrationBackup[] {
   // Sort by backupPath descending — the filename contains an ISO timestamp
   // (e.g., .migration-backup-2026-07-27T18-14-10-344Z.db) which is
   // lexicographically sortable and gives chronological order.
-  return backups.sort((a, b) => b.backupPath.localeCompare(a.backupPath));
+  // Use code point comparison instead of localeCompare() to ensure
+  // cross-platform determinism (localeCompare may differ on Linux).
+  return backups.sort((a, b) =>
+    a.backupPath > b.backupPath ? -1 : a.backupPath < b.backupPath ? 1 : 0,
+  );
 }
 
 /**
