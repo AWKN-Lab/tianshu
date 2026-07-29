@@ -28,6 +28,8 @@ export class CronEngine {
   private checkInterval: ReturnType<typeof setInterval> | null = null;
   private workerInterval: ReturnType<typeof setInterval> | null = null;
   private running = false;
+  // M3 进阶-11: in-flight 跟踪 — 防止 checkAll 重复触发同一 job（兜底轮询场景）
+  private inFlight: Set<string> = new Set();
   private readonly worker = new CronWorker();
   private readonly workStore = new CronWorkStore();
 
@@ -115,17 +117,28 @@ export class CronEngine {
       queryRun('UPDATE cron_jobs SET next_run_at = ?, updated_at = ? WHERE id = ?', [nextIso, new Date().toISOString(), job.id]);
       const delay = nextDate.getTime() - Date.now();
       if (delay > 0 && delay < 24 * 60 * 60 * 1000) {
-        const timer = setTimeout(() => {
+        const timer = setTimeout(async () => {
           if (!this.running) return;
           const latest = queryAll<CronJobRow>('SELECT * FROM cron_jobs WHERE id = ? AND enabled = 1', [job.id])[0];
           if (!latest) return;
-          this.enqueueJob(latest, `${latest.id}:${nextIso}`);
+          void this.executeJob(latest);
           this.scheduleJob(latest);
         }, delay);
         this.timers.set(job.id, timer);
       }
     } catch {
       queryRun('UPDATE cron_jobs SET next_run_at = NULL WHERE id = ?', [job.id]);
+    }
+  }
+
+  // M3 进阶-11: executeJob — in-flight 跟踪防止重复入队
+  // fire-and-forget: 调用方不 await，但 inFlight Set 保证同一 job 不会被并发触发
+  private async executeJob(job: CronJobRow): Promise<void> {
+    this.inFlight.add(job.id);
+    try {
+      this.enqueueJob(job, `${job.id}:${job.next_run_at ?? new Date().toISOString()}`);
+    } finally {
+      this.inFlight.delete(job.id);
     }
   }
 
@@ -147,9 +160,10 @@ export class CronEngine {
   private checkAll(): void {
     const now = Date.now();
     for (const job of queryAll<CronJobRow>('SELECT * FROM cron_jobs WHERE enabled = 1')) {
+      if (this.inFlight.has(job.id)) continue;
       if (!job.next_run_at) continue;
       if (new Date(job.next_run_at).getTime() <= now) {
-        this.enqueueJob(job, `${job.id}:${job.next_run_at}`);
+        void this.executeJob(job);
         this.scheduleJob(job);
       }
     }
