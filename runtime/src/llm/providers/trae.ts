@@ -34,7 +34,8 @@ export class TraeProvider implements LlmProviderInterface {
         if (!result.success || !result.llmResponse) continue;
         const content = result.llmResponse.content ?? '';
         const toolCalls = result.llmResponse.toolCalls;
-        if (!content.trim() && !toolCalls?.length) continue;
+        // M3 进阶-19: fail-closed — empty llmResponse.content 跳过（不当作成功）
+        if (content.trim() === '' && !toolCalls?.length) continue;
         return {
           content,
           toolCalls,
@@ -53,12 +54,13 @@ export class TraeProvider implements LlmProviderInterface {
     throw new Error('trae provider: bridge unavailable — no hook response and file bridge timeout');
   }
 
+  // M3 进阶-20: cleanupBridge — 统一资源清理（req+resp），所有出口调用，避免泄漏
   private async fileBridge(req: ChatRequest): Promise<ChatResponse | null> {
     const id = randomUUID();
     mkdirSync(BRIDGE_DIR, { recursive: true });
     const reqPath = resolve(BRIDGE_DIR, `req-${id}.json`);
     const respPath = resolve(BRIDGE_DIR, `resp-${id}.json`);
-    const cleanup = (): void => {
+    const cleanupBridge = (): void => {
       try { unlinkSync(reqPath); } catch { /* noop */ }
       try { unlinkSync(respPath); } catch { /* noop */ }
     };
@@ -66,38 +68,44 @@ export class TraeProvider implements LlmProviderInterface {
     try {
       writeFileSync(reqPath, JSON.stringify(buildBridgeRequest(id, req, req.model ?? TRAE_DEFAULT_MODEL)), 'utf-8');
     } catch (err) {
-      cleanup();
+      cleanupBridge();
       logger.error(`Failed to write bridge request: ${String(err)}`);
       return null;
     }
 
-    const maxPolls = BRIDGE_TIMEOUT_MS / BRIDGE_POLL_INTERVAL_MS;
-    for (let i = 0; i < maxPolls; i++) {
-      await new Promise((resolvePoll) => setTimeout(resolvePoll, BRIDGE_POLL_INTERVAL_MS));
-      if (!existsSync(respPath)) continue;
-      try {
-        const parsed = JSON.parse(readFileSync(respPath, 'utf-8')) as BridgeResponse;
-        const toolCalls = parsed.toolCalls ?? parsed.tool_calls;
-        const content = parsed.content ?? '';
-        if (!content.trim() && !toolCalls?.length) throw new Error('bridge response has empty content and no tool calls');
-        cleanup();
-        return {
-          content,
-          toolCalls,
-          usage: parsed.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-          provider: 'trae',
-          model: req.model ?? TRAE_DEFAULT_MODEL,
-          finishReason: parsed.finishReason ?? (parsed.finish_reason === 'tool_calls' || toolCalls?.length ? 'tool_calls' : 'stop'),
-        };
-      } catch (err) {
-        logger.error(`Failed to parse bridge response: ${String(err)}`);
-        cleanup();
-        return null;
+    try {
+      const maxPolls = BRIDGE_TIMEOUT_MS / BRIDGE_POLL_INTERVAL_MS;
+      for (let i = 0; i < maxPolls; i++) {
+        await new Promise((resolvePoll) => setTimeout(resolvePoll, BRIDGE_POLL_INTERVAL_MS));
+        if (!existsSync(respPath)) continue;
+        try {
+          const parsed = JSON.parse(readFileSync(respPath, 'utf-8')) as BridgeResponse;
+          const toolCalls = parsed.toolCalls ?? parsed.tool_calls;
+          const content = parsed.content ?? '';
+          if (!content.trim() && !toolCalls?.length) throw new Error('bridge response has empty content and no tool calls');
+          cleanupBridge();
+          return {
+            content,
+            toolCalls,
+            usage: parsed.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            provider: 'trae',
+            model: req.model ?? TRAE_DEFAULT_MODEL,
+            finishReason: parsed.finishReason ?? (parsed.finish_reason === 'tool_calls' || toolCalls?.length ? 'tool_calls' : 'stop'),
+          };
+        } catch (err) {
+          logger.error(`Failed to parse bridge response: ${String(err)}`);
+          cleanupBridge();
+          return null;
+        }
       }
-    }
 
-    cleanup();
-    return null;
+      cleanupBridge();
+      return null;
+    } catch (err) {
+      logger.error(`Bridge polling failed: ${String(err)}`);
+      cleanupBridge();
+      return null;
+    }
   }
 
   async isAvailable(): Promise<boolean> {
