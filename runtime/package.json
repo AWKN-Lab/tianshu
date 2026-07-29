@@ -20,7 +20,8 @@
     "dev": "tsx src/cli.ts",
     "approval": "tsx src/approval-cli.ts",
     "evolution": "tsx src/evolution-cli.ts",
-    "memory": "tsx src/memory-cli.ts"
+    "memory": "tsx src/memory-cli.ts",
+    "postinstall": "npm rebuild better-sqlite3 --silent"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",

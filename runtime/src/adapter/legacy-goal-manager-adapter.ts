@@ -194,11 +194,3 @@ export function adaptLegacyGoalManager(
     adaptedAt: now,
   };
 }
-
-// 引入 judgeVersion 以保留接口（未来 Shadow Diff 可能用到）
-void 0 as unknown as string; // placeholder to ensure judgeVersion import is used
-// 注意：judgeVersion 参数当前未使用，保留接口以便未来扩展
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function _judgeVersionPlaceholder(judgeVersion: string): void {
-  void judgeVersion;
-}
