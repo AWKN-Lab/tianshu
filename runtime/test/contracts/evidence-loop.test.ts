@@ -360,24 +360,45 @@ describe('Evidence-Gain Loop Contract (C06)', () => {
       assert.equal(result.shouldSwitch, false);
     });
 
-    it('detects repeated action fingerprint', () => {
+    it('detects repeated action fingerprint [ACTION] (PR1 P2-1: 来源标记 + 禁止低增益顺带通过)', () => {
+      // 构造只触发 ACTION 重复、不触发其他低增益条件的 attempts：
+      // - actionFingerprint 相同 → 触发 'repeated action fingerprint [ACTION]'
+      // - evidenceDeltaScore > 0 → 不触发 'consecutive low delta cycles' 和 'current hypothesis rejected'
+      // - currentDeltaScore > 0 → 不触发 'current delta score non-positive'
+      // - failureType undefined → 不触发 'repeated failure type'
       const attempts: StrategyAttempt[] = [
-        makeStrategyAttempt({ actionFingerprint: 'fp-A', evidenceDeltaScore: 0.1 }),
-        makeStrategyAttempt({ actionFingerprint: 'fp-A', evidenceDeltaScore: 0.0 }),
+        makeStrategyAttempt({ actionFingerprint: 'fp-A', evidenceDeltaScore: 0.5 }),
+        makeStrategyAttempt({ actionFingerprint: 'fp-A', evidenceDeltaScore: 0.4 }),
       ];
-      const result = assessStrategySwitch(attempts, 0.0);
+      const result = assessStrategySwitch(attempts, 0.3);
       assert.equal(result.shouldSwitch, true);
-      assert.ok(result.reasons.some((r) => r.includes('repeated action fingerprint')));
+      // 断言 [ACTION] 来源标记存在
+      assert.ok(result.reasons.some((r) => r.includes('[ACTION]')), 'reasons 应含 [ACTION] 来源标记');
+      // 断言只有 1 个 reason，禁止其他低增益条件顺带通过
+      assert.equal(result.reasons.length, 1, '应只有 1 个 reason（ACTION 重复），无其他低增益条件顺带通过');
+      assert.ok(result.reasons[0]!.includes('repeated action fingerprint'), 'reason 应为 repeated action fingerprint');
     });
 
-    it('detects repeated failure type', () => {
+    it('detects repeated failure type [ERROR] (PR1 P2-1: 来源标记 + 禁止低增益顺带通过)', () => {
+      // 构造只触发 ERROR 重复、不触发其他低增益条件的 attempts：
+      // - failureType 相同（EXECUTION_ERROR）→ 触发 'repeated failure type: EXECUTION_ERROR [ERROR]'
+      // - actionFingerprint 不同 → 不触发 'repeated action fingerprint'
+      // - evidenceDeltaScore > 0 → 不触发 'consecutive low delta cycles' 和 'current hypothesis rejected'
+      // - currentDeltaScore > 0 → 不触发 'current delta score non-positive'
+      // - failureType 为 EXECUTION_ERROR（非 HYPOTHESIS_REJECTED/REGRESSION）→ 不触发 'current hypothesis rejected'
       const attempts: StrategyAttempt[] = [
-        makeStrategyAttempt({ failureType: 'EXECUTION_ERROR', evidenceDeltaScore: -0.1 }),
-        makeStrategyAttempt({ failureType: 'EXECUTION_ERROR', evidenceDeltaScore: -0.2 }),
+        makeStrategyAttempt({ actionFingerprint: 'fp-A', failureType: 'EXECUTION_ERROR', evidenceDeltaScore: 0.5 }),
+        makeStrategyAttempt({ actionFingerprint: 'fp-B', failureType: 'EXECUTION_ERROR', evidenceDeltaScore: 0.4 }),
       ];
-      const result = assessStrategySwitch(attempts, 0.0);
+      const result = assessStrategySwitch(attempts, 0.3);
       assert.equal(result.shouldSwitch, true);
-      assert.ok(result.reasons.some((r) => r.includes('repeated failure type')));
+      // 断言 [ERROR] 来源标记存在
+      assert.ok(result.reasons.some((r) => r.includes('[ERROR]')), 'reasons 应含 [ERROR] 来源标记');
+      // 断言只有 1 个 reason，禁止其他低增益条件顺带通过
+      assert.equal(result.reasons.length, 1, '应只有 1 个 reason（ERROR 重复），无其他低增益条件顺带通过');
+      assert.ok(result.reasons[0]!.includes('repeated failure type'), 'reason 应为 repeated failure type');
+      // 不应含 [ACTION] 标记
+      assert.ok(!result.reasons.some((r) => r.includes('[ACTION]')), '不应含 [ACTION] 来源标记');
     });
 
     it('detects hypothesis rejected', () => {

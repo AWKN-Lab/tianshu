@@ -402,7 +402,9 @@ export function assessStrategySwitch(
     const last = recentFingerprints[recentFingerprints.length - 1];
     const prev = recentFingerprints[recentFingerprints.length - 2];
     if (last === prev) {
-      reasons.push('repeated action fingerprint');
+      // PR1 P2-1: 保留 [ACTION] 来源标记，测试可断言因 ACTION 重复触发 SWITCH，
+      // 禁止用其他低增益条件（如 consecutive low delta）顺带通过
+      reasons.push('repeated action fingerprint [ACTION]');
     }
   }
 
@@ -414,7 +416,8 @@ export function assessStrategySwitch(
     const last = failureTypes[failureTypes.length - 1];
     const prev = failureTypes[failureTypes.length - 2];
     if (last === prev) {
-      reasons.push(`repeated failure type: ${last}`);
+      // PR1 P2-1: 保留 [ERROR] 来源标记，测试可断言因 ERROR 重复触发 SWITCH
+      reasons.push(`repeated failure type: ${last} [ERROR]`);
     }
   }
 
