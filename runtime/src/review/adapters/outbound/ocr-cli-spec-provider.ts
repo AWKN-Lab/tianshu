@@ -93,6 +93,7 @@ function statusOf(value: OcrDelegateSpec['files'][number]['status']): ReviewFile
     case 'modified': return 'MODIFIED';
     case 'deleted': return 'DELETED';
     case 'renamed': return 'RENAMED';
+    case 'copied': return 'COPIED';
     case 'binary': return 'BINARY';
   }
 }

@@ -18,6 +18,7 @@ export const REVIEW_FINDING_SCHEMA = 'awkn-review-finding/v1';
 export const REVIEW_COVERAGE_SCHEMA = 'awkn-review-coverage/v1';
 export const REVIEW_VERDICT_SCHEMA = 'awkn-review-verdict/v1';
 export const REVIEW_RECEIPT_SCHEMA = 'awkn-review-receipt/v1';
+export const REVIEW_SHADOW_DIFF_SCHEMA = 'awkn-review-shadow-diff/v1';
 
 export const Sha256Schema = z.string().regex(SHA256_HEX_PATTERN, 'invalid sha256 hash');
 export const PrefixedSha256Schema = z.string().regex(/^sha256:[0-9a-f]{64}$/, 'invalid prefixed sha256 hash');
@@ -95,7 +96,7 @@ export type ReviewRuleGroup = z.infer<typeof ReviewRuleGroupSchema>;
 const OcrDelegateFileSchema = z.object({
   path: RepositoryRelativePathSchema,
   old_path: RepositoryRelativePathSchema.nullable(),
-  status: z.enum(['added', 'modified', 'deleted', 'renamed', 'binary']),
+  status: z.enum(['added', 'modified', 'deleted', 'renamed', 'copied', 'binary']),
   insertions: SafeNonNegativeIntegerSchema,
   deletions: SafeNonNegativeIntegerSchema,
   will_review: z.boolean(),
@@ -178,7 +179,7 @@ export const ReviewTargetSchema = z.object({
   includePatterns: z.array(z.string().min(1)),
   excludePatterns: z.array(z.string().min(1)),
   initiator: ActorRefSchema,
-  implementer: ActorRefSchema.optional(),
+  implementer: ActorRefSchema,
   createdAt: UtcTimestampSchema,
 }).strict();
 export type ReviewTarget = z.infer<typeof ReviewTargetSchema>;
@@ -497,6 +498,17 @@ export type ReviewReceipt = ReceiptEnvelope & {
   payloadSchema: typeof REVIEW_RECEIPT_SCHEMA;
   payload: ReviewReceiptPayload;
 };
+
+export const ReviewShadowDiffPayloadSchema = z.object({
+  schema: z.literal(REVIEW_SHADOW_DIFF_SCHEMA),
+  reviewReceiptId: awknIdSchema('rcpt'),
+  legacyPassed: z.boolean(),
+  structuredStatus: z.enum(['PASS', 'FAIL', 'PARTIAL', 'STALE', 'INVALID']),
+  classification: z.enum(['EXACT', 'EXPECTED_IMPROVEMENT', 'SAFETY_REGRESSION', 'UNKNOWN']),
+  gateAuthority: z.literal('LEGACY'),
+  createdAt: UtcTimestampSchema,
+}).strict();
+export type ReviewShadowDiffPayload = z.infer<typeof ReviewShadowDiffPayloadSchema>;
 
 function reviewPlanHashProjection(plan: Pick<ReviewPlan,
   'target' | 'provider' | 'providerVersion' | 'ruleBundleHash' | 'files' | 'ruleGroups' | 'units'>): unknown {

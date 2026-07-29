@@ -7,9 +7,15 @@ export interface ReviewFileArtifact {
   readonly objectRef?: ObjectRef;
 }
 
+export interface ReviewContractArtifact {
+  readonly ref: ObjectRef;
+  readonly content: string;
+}
+
 export interface ReviewArtifactBundle {
   readonly targetFingerprint: string;
   readonly files: readonly ReviewFileArtifact[];
+  readonly contracts?: readonly ReviewContractArtifact[];
 }
 
 export interface ReviewWorkspacePort {

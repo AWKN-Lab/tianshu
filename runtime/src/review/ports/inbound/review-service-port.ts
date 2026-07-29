@@ -16,7 +16,7 @@ export interface ReviewTargetMetadata {
   readonly includePatterns?: readonly string[];
   readonly excludePatterns?: readonly string[];
   readonly initiator: ActorRef;
-  readonly implementer?: ActorRef;
+  readonly implementer: ActorRef;
   readonly createdAt: string;
 }
 
@@ -26,6 +26,7 @@ export interface ReviewExecutionContext {
   readonly serviceActor: ActorRef;
   readonly artifactRefs: readonly ObjectRef[];
   readonly evidence: readonly EvidenceRecord[];
+  readonly contractEvidenceRefs?: readonly string[];
 }
 
 export interface ReviewServicePort {

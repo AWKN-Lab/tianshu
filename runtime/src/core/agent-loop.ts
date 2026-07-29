@@ -11,6 +11,7 @@ import {
   budgetGate,
   lintGate,
   recordGateFailures,
+  reviewGate,
   testGate,
   typecheckGate,
   type GateContext,
@@ -27,6 +28,16 @@ import type { CyclePlanInput } from '../loop/cycle-planner.js';
 import type { DeltaInput } from '../loop/evidence-delta.js';
 import type { DeviationInput } from '../loop/deviation.js';
 import type { EvidenceCyclePlan, Hypothesis, ExpectedEvidence, PlannedAction, CycleBudget } from '../contracts/evidence-loop.js';
+import { getDb } from '../store/db.js';
+import {
+  parseReviewRolloutMode,
+  runStructuredWorktreeReview,
+  type ReviewContractInput,
+  type ReviewRolloutMode,
+} from '../adapter/review-kernel-runner.js';
+import { SqliteReviewAuditAdapter } from '../adapter/sqlite-review-audit-adapter.js';
+import type { ActorRef, ReviewReceipt } from '../contracts/public.js';
+import { buildReviewShadowDiffReceipt } from '../review/public.js';
 
 const logger = createLogger('AgentLoop');
 
@@ -154,6 +165,8 @@ export interface AgentLoopConfig {
   provider?: LlmProvider;
   reviewProvider?: LlmProvider;
   reviewPrompt?: string;
+  reviewMode?: ReviewRolloutMode;
+  reviewContracts?: readonly ReviewContractInput[];
   approvedTools?: string[];
 }
 
@@ -174,6 +187,7 @@ export interface AgentLoopResult {
   totalTokens: number;
   terminated: boolean;
   terminationReason?: string;
+  reviewReceipt?: ReviewReceipt;
 }
 
 export class AgentLoop {
@@ -182,6 +196,8 @@ export class AgentLoop {
   private totalTokens = 0;
   private activeRunId?: string;
   private activeTraceId = generateTraceId();
+  private lastImplementerActor?: ActorRef;
+  private lastReviewReceipt?: ReviewReceipt;
   /**
    * Evidence-Gain Loop 协调器实例（懒初始化）。
    * 当 AWKN_EVIDENCE_LOOP_ENABLED=1 时启用；否则为 null。
@@ -322,6 +338,11 @@ export class AgentLoop {
       }
 
       this.totalTokens += response.usage.totalTokens;
+      this.lastImplementerActor = {
+        schema: 'awkn-actor-ref/v1',
+        actorId: `model:${response.provider}:${response.model}`,
+        actorType: 'assistant',
+      };
       const tokenAnomaly = this.loopMonitor.recordTokenUsage(response.usage.totalTokens);
       if (tokenAnomaly) {
         recordLoopFailure(`token 异常增长: current=${response.usage.totalTokens}`);
@@ -375,6 +396,7 @@ export class AgentLoop {
             approvedToolNames: this.config.approvedTools,
             runId: this.activeRunId,
             traceId: this.activeTraceId,
+            implementerActorId: this.lastImplementerActor.actorId,
           };
           const startedAt = Date.now();
           let toolResult = '';
@@ -544,7 +566,7 @@ export class AgentLoop {
         lintGate({ ...gateContext, lintCmd: gateContext.lintCmd ?? 'npm run lint' }),
       ]);
       const bundle = await collectArtifactBundle({ cwd: this.config.cwd, finalText: lastFinalText, gates: deterministic });
-      const reviewResult = await this.runIndependentReview(bundle);
+      const reviewResult = await this.runReviewForMode(bundle, run.id, cycle);
 
       const incrementalTokens = this.totalTokens - previousCycleTokens;
       previousCycleTokens = this.totalTokens;
@@ -740,6 +762,107 @@ export class AgentLoop {
     return 'codex';
   }
 
+  private configuredReviewMode(): ReviewRolloutMode {
+    return this.config.reviewMode ?? parseReviewRolloutMode(process.env.AWKN_REVIEW_OCR_V1);
+  }
+
+  private async runReviewForMode(
+    bundle: Awaited<ReturnType<typeof collectArtifactBundle>>,
+    legacyRunId: string,
+    cycle: number,
+  ): Promise<GateResult> {
+    const mode = this.configuredReviewMode();
+    if (mode === '0') return this.runIndependentReview(bundle);
+
+    const legacy = mode === 'shadow' ? await this.runIndependentReview(bundle) : undefined;
+    if (this.lastImplementerActor === undefined) {
+      return {
+        name: 'reviewGate',
+        passed: false,
+        details: '缺少实现者 Actor，无法证明独立审核',
+        suggestion: '记录实际实现模型 Actor 后重新审核',
+        durationMs: 0,
+      };
+    }
+    const startedAt = Date.now();
+    try {
+      const structured = await runStructuredWorktreeReview({
+        repositoryRoot: this.config.cwd,
+        mode,
+        router: getLlmRouter(),
+        reviewerProvider: this.resolveReviewProvider(),
+        implementer: this.lastImplementerActor,
+        db: getDb(),
+        contractArtifacts: this.config.reviewContracts,
+      });
+      this.totalTokens += structured.totalTokens;
+      const structuredGate = await reviewGate({
+        cwd: this.config.cwd,
+        reviewMode: 'enforce',
+        reviewReceipt: structured.receipt,
+      });
+      structuredGate.durationMs = Date.now() - startedAt;
+      for (const finding of structured.receipt.payload.findings) {
+        if (finding.disposition !== 'OPEN') continue;
+        try {
+          getCorrectionsLedger().record({
+            goalId: this.config.goalId,
+            source: `review:${finding.category}`,
+            severity: finding.severity === 'CRITICAL' ? 'fatal'
+              : finding.severity === 'HIGH' || finding.severity === 'MEDIUM' ? 'error' : 'warn',
+            errorText: `${finding.path}:${finding.startLine} ${finding.message}`,
+            fingerprint: finding.fingerprint,
+            context: {
+              findingId: finding.findingId,
+              reviewReceiptId: structured.receipt.receiptId,
+              targetFingerprint: structured.receipt.payload.targetFingerprint,
+              severity: finding.severity,
+              impact: finding.impact,
+            },
+          });
+        } catch (error) {
+          logger.warn(`Failed to persist Review Finding correction: ${String(error)}`);
+        }
+      }
+
+      if (mode === 'shadow') {
+        const legacyPassed = legacy?.passed === true;
+        const shadowReceipt = buildReviewShadowDiffReceipt({
+          executionId: structured.executionId,
+          traceId: structured.traceId,
+          producer: structured.serviceActor,
+          reviewReceipt: structured.receipt,
+          legacyPassed,
+          createdAt: new Date().toISOString(),
+        });
+        new SqliteReviewAuditAdapter(getDb()).persistEnvelope(shadowReceipt);
+        getEventStore().appendEvent(legacyRunId, 'review.shadow.evaluated', {
+          cycle,
+          classification: shadowReceipt.payload.classification,
+          legacyPassed,
+          structuredVerdict: structured.receipt.payload.verdict.status,
+          reviewReceiptId: structured.receipt.receiptId,
+          shadowReceiptId: shadowReceipt.receiptId,
+          planHash: structured.receipt.payload.planHash,
+        });
+        return legacy!;
+      }
+      this.lastReviewReceipt = structured.receipt;
+      return structuredGate;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      getEventStore().appendEvent(legacyRunId, 'review.kernel.failed', { cycle, mode, error: message });
+      if (mode === 'shadow') return legacy!;
+      return {
+        name: 'reviewGate',
+        passed: false,
+        details: `Review Kernel enforce 执行失败: ${message}`,
+        suggestion: '修复 Review Provider/Reviewer/Receipt 错误后重试；禁止回退文本 PASS',
+        durationMs: Date.now() - startedAt,
+      };
+    }
+  }
+
   private async runIndependentReview(bundle: Awaited<ReturnType<typeof collectArtifactBundle>>): Promise<GateResult> {
     const startedAt = Date.now();
     const provider = this.resolveReviewProvider();
@@ -804,6 +927,7 @@ export class AgentLoop {
       totalTokens: this.totalTokens,
       terminated,
       terminationReason,
+      reviewReceipt: this.lastReviewReceipt,
       l2Results,
       l2Achieved,
     };

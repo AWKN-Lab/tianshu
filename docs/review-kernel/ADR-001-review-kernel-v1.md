@@ -17,7 +17,7 @@ OCR 的最小机器协议集成只能存在于 AWKN 仓库的 `integrations/open
 核心不变量：
 
 1. 调模型前冻结 `ReviewTarget`；目标、文件和规则均有 SHA-256 指纹。
-2. `ReviewPlan` 由稳定投影计算，排除机器根路径、Actor 和时间，因此相同输入可跨入口复算。
+2. `ReviewPlan` 由稳定投影计算，排除 Actor 和时间；仓库根路径纳入绑定以避免不同仓库在相同 Diff 下发生目标碰撞。同一冻结仓库目标可跨入口复算。
 3. 测试文件默认纳入；Planner 独立创建 `FILE/CROSS_FILE/SPEC/TEST_ABUSE` 单元。
 4. Reviewer 实际 Actor 必须与实现者不同。单元最多尝试两个不同 Reviewer；失败为 `PARTIAL`。
 5. Finding 必须位于冻结文件的可见 Diff 行，并引用本次执行 Evidence。Critical/High 还需独立 Reviewer 或确定性工具验证。

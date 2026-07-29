@@ -21,13 +21,8 @@ describe('review kernel runtime composition', () => {
 
   it('refuses direct review without an implementer actor', async () => {
     await assert.rejects(reviewRepositoryTool.execute({ mode: 'enforce' }), /trusted implementer Actor is missing/);
-    await assert.rejects(
-      reviewRepositoryTool.execute(
-        { mode: 'enforce', implementerActorId: 'model:codex:spoofed' },
-        { sessionId: 's', userId: 'u', callSource: 'main_dialogue', implementerActorId: 'model:trae:actual' },
-      ),
-      /must match the runtime-derived/,
-    );
+    const properties = reviewRepositoryTool.parameters.properties as Record<string, unknown>;
+    assert.equal('implementerActorId' in properties, false, 'caller must not be allowed to claim implementer identity');
   });
 
   it('runs a real worktree snapshot through a structured reviewer and audit store', async () => {

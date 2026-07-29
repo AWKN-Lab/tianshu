@@ -24,6 +24,7 @@ export const ReceiptTypeSchema = z.enum([
   'EVOLUTION',
   'CYCLE',
   'SHADOW_DIFF',
+  'REVIEW',
 ]);
 
 export type ReceiptType = z.infer<typeof ReceiptTypeSchema>;

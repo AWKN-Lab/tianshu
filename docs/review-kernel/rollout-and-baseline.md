@@ -2,7 +2,7 @@
 
 ## 当前交付状态
 
-Runtime 契约、Planner、Reviewer、Finding Validator、Coverage/Verdict、Receipt、Native Git/OCR Adapter、AgentLoop、Gate、直接工具和 shadow Receipt 已实现。引擎内 OCR Go producer 与真实 30–50 仓库样本的人工标注/观测属于发布工作，不以单元测试结果冒充；任何外部 OCR checkout 都不是交付物或运行依赖。
+Runtime 契约、Planner、Reviewer、Finding Validator、Coverage/Verdict、Receipt、Native Git/OCR Adapter、AgentLoop、Gate、直接工具、shadow Receipt 与引擎内最小 Go producer 已实现。真实 30–50 仓库样本的双人标注、Shadow 观测和发布二进制摘要固定仍属于发布工作，不以设计样本或单元测试冒充；任何外部 OCR checkout 都不是交付物或运行依赖。
 
 ## 基线语料
 

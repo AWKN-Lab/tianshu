@@ -21,9 +21,69 @@ import {
   type GateContext,
   type TianhuoCicdGateContext,
 } from '../src/gates/quality-gates.js';
+import {
+  REVIEW_COVERAGE_SCHEMA,
+  REVIEW_RECEIPT_SCHEMA,
+  REVIEW_VERDICT_SCHEMA,
+  createAwknId,
+  parseJsonValue,
+  receiptPayloadHash,
+  type ReviewReceipt,
+} from '../src/contracts/public.js';
 
 // 跑 typecheck/test/lint 命令的 gate 需要一个真实 cwd，这里用 runtime 自身
 const RUNTIME_CWD = process.cwd();
+
+function reviewReceipt(status: 'PASS' | 'PARTIAL'): ReviewReceipt {
+  const coverage = {
+    schema: REVIEW_COVERAGE_SCHEMA,
+    plannedFiles: ['src/a.ts'],
+    reviewedFiles: status === 'PASS' ? ['src/a.ts'] : [],
+    excludedFiles: [],
+    failedFiles: status === 'PASS' ? [] : ['src/a.ts'],
+    plannedUnits: 1,
+    completedUnits: status === 'PASS' ? 1 : 0,
+    failedUnits: status === 'PASS' ? 0 : 1,
+    fileCoverage: status === 'PASS' ? 1 : 0,
+    riskCoverage: status === 'PASS' ? 1 : 0,
+    missing: status === 'PASS' ? [] : [{ path: 'src/a.ts', reason: 'unit failed' }],
+  } as const;
+  const payload = parseJsonValue({
+    schema: REVIEW_RECEIPT_SCHEMA,
+    reviewRunId: createAwknId('reviewRun'),
+    targetFingerprint: 'a'.repeat(64),
+    planHash: 'b'.repeat(64),
+    ruleBundleHash: 'c'.repeat(64),
+    reviewerActors: [],
+    findings: [],
+    coverage,
+    verdict: {
+      schema: REVIEW_VERDICT_SCHEMA,
+      status,
+      reasonCodes: status === 'PASS' ? ['OK'] : ['UNIT_FAILED'],
+      blockerFindingIds: [],
+      coverage,
+      evaluatedAt: '2026-07-28T08:00:00.000Z',
+    },
+    evidenceRefs: [],
+  });
+  return {
+    schema: 'awkn-receipt-envelope/v1',
+    receiptId: createAwknId('receipt'),
+    receiptType: 'REVIEW',
+    payloadSchema: REVIEW_RECEIPT_SCHEMA,
+    executionId: createAwknId('execution'),
+    traceId: createAwknId('trace'),
+    aggregateType: 'review-target',
+    aggregateId: 'target',
+    producer: { schema: 'awkn-actor-ref/v1', actorId: 'review-service', actorType: 'service' },
+    status: status === 'PASS' ? 'SUCCESS' : 'PARTIAL',
+    payload: payload as ReviewReceipt['payload'],
+    payloadHash: receiptPayloadHash(REVIEW_RECEIPT_SCHEMA, payload),
+    artifactRefs: [],
+    createdAt: '2026-07-28T08:00:00.000Z',
+  };
+}
 
 describe('reviewGate — 修复后不再默认通过', () => {
   it('无 reviewVerdict → returned=false（M0-3 核心修复点）', async () => {
@@ -62,10 +122,28 @@ describe('reviewGate — 修复后不再默认通过', () => {
     assert.equal(result.passed, false);
     assert.ok(result.suggestion?.includes('未包含 PASS/FAIL 标记'));
   });
+
+  it('enforce 仅接受结构化 PASS receipt', async () => {
+    const passed = await reviewGate({ cwd: RUNTIME_CWD, reviewMode: 'enforce', reviewReceipt: reviewReceipt('PASS') });
+    const partial = await reviewGate({ cwd: RUNTIME_CWD, reviewMode: 'enforce', reviewReceipt: reviewReceipt('PARTIAL') });
+    assert.equal(passed.passed, true);
+    assert.equal(partial.passed, false);
+    assert.deepEqual(partial.reasonCodes, ['UNIT_FAILED']);
+  });
+
+  it('shadow 保持 legacy verdict 权威', async () => {
+    const result = await reviewGate({
+      cwd: RUNTIME_CWD,
+      reviewMode: 'shadow',
+      reviewVerdict: 'VERDICT: FAIL',
+      reviewReceipt: reviewReceipt('PASS'),
+    });
+    assert.equal(result.passed, false);
+  });
 });
 
-describe('securityGate — 修复后不再默认通过', () => {
-  it('无 reviewVerdict → returned=false（M0-4 核心修复点）', async () => {
+describe('securityGate — 独立安全证据', () => {
+  it('无 securityVerdict → returned=false（M0-4 核心修复点）', async () => {
     const ctx: GateContext = { cwd: RUNTIME_CWD };
     const result = await securityGate(ctx);
     assert.equal(result.passed, false);
@@ -75,7 +153,7 @@ describe('securityGate — 修复后不再默认通过', () => {
   it('传入 PASS verdict → passed=true', async () => {
     const ctx: GateContext = {
       cwd: RUNTIME_CWD,
-      reviewVerdict: '安全扫描 PASS，无密钥泄露。',
+      securityVerdict: '安全扫描 PASS，无密钥泄露。',
     };
     const result = await securityGate(ctx);
     assert.equal(result.passed, true);

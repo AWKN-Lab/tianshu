@@ -119,6 +119,8 @@ export class ReviewService implements ReviewServicePort {
     const unitResults: ReviewUnitResult[] = [];
     const findings = [];
     const validationErrors: string[] = [];
+    const allowedEvidenceRefs = new Set(context.evidence.map((record) => record.evidenceId));
+    const contractEvidenceRefs = new Set(context.contractEvidenceRefs ?? []);
     let totalTokens = 0;
     for (const unit of plan.units) {
       let completed = false;
@@ -138,8 +140,23 @@ export class ReviewService implements ReviewServicePort {
           if (!Number.isSafeInteger(response.usage.totalTokens) || response.usage.totalTokens < 0) {
             throw new Error('reviewer returned invalid token usage');
           }
+          if (response.evidenceRefs.some((evidenceRef) => !allowedEvidenceRefs.has(evidenceRef))) {
+            throw new Error('reviewer returned evidence outside the frozen execution');
+          }
+          if (unit.type === 'SPEC'
+            && (response.evidenceRefs.length === 0
+              || !response.evidenceRefs.some((evidenceRef) => contractEvidenceRefs.has(evidenceRef)))) {
+            throw new Error('SPEC review unit requires frozen contract evidence');
+          }
           totalTokens += response.usage.totalTokens;
-          const validated = validateFindingDrafts(plan, unit, response.reviewer, response.findings);
+          const validated = validateFindingDrafts(
+            plan,
+            unit,
+            response.reviewer,
+            response.findings,
+            artifacts,
+            allowedEvidenceRefs,
+          );
           findings.push(...validated.findings);
           validationErrors.push(...validated.errors.map((error) => `${unit.unitId}: ${error}`));
           unitResults.push({
@@ -171,8 +188,26 @@ export class ReviewService implements ReviewServicePort {
       }
     }
 
-    const currentTargetFingerprint = await this.dependencies.workspace.currentFingerprint(plan)
-      .catch(() => plan.target.diffFingerprint);
+    let currentTargetFingerprint: string;
+    try {
+      currentTargetFingerprint = await this.dependencies.workspace.currentFingerprint(plan);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return ReviewRunSchema.parse({
+        schema: REVIEW_RUN_SCHEMA,
+        reviewRunId: createAwknId('reviewRun'),
+        plan,
+        providerStatus: 'INVALID',
+        providerError: `target freshness check failed: ${message}`,
+        currentTargetFingerprint: plan.target.diffFingerprint,
+        unitResults,
+        findings,
+        validationErrors,
+        totalTokens,
+        startedAt,
+        completedAt: this.clock(),
+      });
+    }
     return ReviewRunSchema.parse({
       schema: REVIEW_RUN_SCHEMA,
       reviewRunId: createAwknId('reviewRun'),

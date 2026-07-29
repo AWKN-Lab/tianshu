@@ -1,0 +1,64 @@
+version: 1
+# content_hash is SHA-256 over UTF-8 card content with CRLF canonicalized to LF.
+capabilities:
+  - id: engineer
+    version: "1.0.0"
+    canonical_skill: engineer
+    aliases:
+      - engineer
+      - 工程师
+      - build
+    visibility: public
+    card: project/cards/engineer.md
+    loop_profile: default
+    allowed_tools: []
+    content_hash: 4f31574e8deea845e40019277c980d07b507e75dad8ef870c67dc8ae29523744
+  - id: cicd
+    version: "1.0.0"
+    canonical_skill: cicd
+    aliases:
+      - cicd
+      - release
+      - 发布
+    visibility: public
+    card: project/cards/cicd.md
+    loop_profile: default
+    allowed_tools: []
+    content_hash: 2d885fee7d54e74ba2a0556640437f17642ed413e344e321ab890a20c29d452f
+  - id: bugfix
+    version: "1.0.0"
+    canonical_skill: bugfix
+    aliases:
+      - bugfix
+      - 修复
+      - fix
+    visibility: public
+    card: project/cards/bugfix.md
+    loop_profile: default
+    allowed_tools: []
+    content_hash: 3125612df23824883b517f2fdff15acbf3a24afc9a30d4da64bace6201129ec1
+  - id: audit
+    version: "1.0.0"
+    canonical_skill: awkn-审核
+    execution_mode: hybrid
+    aliases:
+      - audit
+      - 审核
+      - review
+    visibility: public
+    card: project/cards/audit.md
+    loop_profile: default
+    allowed_tools: []
+    content_hash: abf4a34085cafa6941d7a090ae949b22d524a957c4b3ab0e1f88203e457bc128
+  - id: deploy
+    version: "1.0.0"
+    canonical_skill: awkn-部署
+    aliases:
+      - deploy
+      - 部署
+      - 上线
+    visibility: public
+    card: project/cards/deploy.md
+    loop_profile: default
+    allowed_tools: []
+    content_hash: fda6e4801d50040cb972741fd933904cd8d547d5052694fe29377df1566d1cd8

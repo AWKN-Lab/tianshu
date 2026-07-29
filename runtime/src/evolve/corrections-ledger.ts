@@ -43,6 +43,8 @@ export interface RecordCorrectionInput {
   source: CorrectionSource | string;
   severity?: CorrectionSeverity;
   errorText: string;
+  /** Optional stable upstream fingerprint (for example a ReviewFinding fingerprint). */
+  fingerprint?: string;
   context?: Record<string, unknown>;
 }
 
@@ -102,7 +104,10 @@ export class CorrectionsLedger {
     const id = randomUUID();
     const now = new Date().toISOString();
     const severity = input.severity ?? 'error';
-    const fingerprint = computeFingerprint(input.source, input.errorText);
+    if (input.fingerprint !== undefined && !/^[0-9a-f]{16}(?:[0-9a-f]{48})?$/.test(input.fingerprint)) {
+      throw new Error('fingerprint 必须是 16 或 64 位小写十六进制');
+    }
+    const fingerprint = input.fingerprint ?? computeFingerprint(input.source, input.errorText);
     const contextJson = JSON.stringify(input.context ?? {});
 
     queryRun(

@@ -32,7 +32,6 @@ export const reviewRepositoryTool: ToolHandler = {
       repositoryRoot: { type: 'string', description: 'Git 仓库绝对路径，默认当前工作区' },
       mode: { type: 'string', enum: ['enforce'], description: '直接调用只允许 enforce；shadow 由 AgentLoop 双跑' },
       reviewerProvider: { type: 'string', enum: ['trae', 'codex', 'minimax'], description: '独立 Reviewer provider' },
-      implementerActorId: { type: 'string', description: '实现者 Actor ID，用于禁止自改自审' },
       contractArtifacts: {
         type: 'array',
         description: '冻结的 PRD/Spec/验收标准内容与带 contentHash 的 ObjectRef',
@@ -41,7 +40,7 @@ export const reviewRepositoryTool: ToolHandler = {
       baseRef: { type: 'string', description: '可选；与 headRef 同时提供时强制使用固定 OCR range provider' },
       headRef: { type: 'string', description: '可选；与 baseRef 同时提供时强制使用固定 OCR range provider' },
     },
-    required: ['implementerActorId'],
+    required: [],
   },
   async execute(args, context) {
     const repositoryRoot = resolve(String(args.repositoryRoot ?? context?.workspaceRoot ?? process.cwd()));
@@ -51,10 +50,6 @@ export const reviewRepositoryTool: ToolHandler = {
     if (!PROVIDERS.has(provider)) throw new Error(`unsupported reviewerProvider: ${provider}`);
     if (context?.implementerActorId === undefined) {
       throw new Error('trusted implementer Actor is missing from execution context');
-    }
-    if (args.implementerActorId === undefined
-      || String(args.implementerActorId) !== context.implementerActorId) {
-      throw new Error('implementerActorId must match the runtime-derived execution Actor');
     }
     const implementerActorId = context.implementerActorId;
     const contractArtifacts = ContractArtifactsSchema.parse(args.contractArtifacts ?? []);

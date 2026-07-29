@@ -11,6 +11,14 @@
 
 Runtime 默认只接受本目录 `bin/ocr[.exe]`，即使通过环境变量覆盖路径，也必须仍位于本目录内；真实路径解析后逃逸同样拒绝。
 
-## 当前状态
+## 构建与验证
 
-AWKN 侧严格协议、Adapter、Native Git 对照和 fail-closed 门禁已经实现。Go producer 尚未在本机生成，因为当前环境没有 Go 工具链；在它进入本目录并完成 Go 测试、二进制签名之前，commit-range OCR 模式必须失败关闭。任何外部仓库都只能作为只读调研来源，不能成为构建或运行依赖。
+最小 producer 源码位于 `src/`，只依赖 Go 标准库和系统 Git：
+
+```text
+cd integrations/open-code-review/src
+go test ./...
+go build -trimpath -o ../bin/ocr ./cmd/ocr
+```
+
+CI 会在 Windows 和 Linux 上构建 producer，并执行 OCR 与 Runtime Native Git Adapter 的内容指纹对照。发布时还必须将二进制版本和 SHA-256 固定到部署配置；在摘要缺失、版本不匹配或二进制不在本目录时，commit-range OCR 模式失败关闭。任何外部仓库都只能作为只读调研来源，不能成为构建或运行依赖。
