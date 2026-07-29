@@ -1,455 +1,412 @@
 /**
  * Outcome Recorder (Phase 6 / C08 / WP-AOS-13)
  *
- * 设计文档: docs/agent-os-3.0/08-Delivery-Evidence-Memory-Evolve.md 第三、四节
+ * 设计文档: `docs/agent-os-3.0/08-Delivery-Evidence-Memory-Evolve.md` 第三节
  *
  * 职责：
- * - 协调五层结果记录（执行/交付/采用/业务/学习）
- * - 维护每个 executionId 的部分结果状态（in-memory）
- * - 在 finalize 时通过 zod schema 验证并生成 hash
- * - 提供 rule_based 归因构建器（设计文档第四节，P0）
+ * - 在 Run 终态时生成 OutcomeRecord
+ * - 五层状态独立计算，禁止合并：
+ *   - executionOutcome: 执行层（动作完成情况）
+ *   - deliveryOutcome: 交付层（产物送达载体情况）
+ *   - adoptionOutcome: 采用层（用户实际采用情况）
+ *   - businessOutcome: 业务层（业务目标达成情况）
+ *   - learningOutcome: 学习层（产生有价值学习情况）
+ * - 默认未观察层为 UNKNOWN（fail-closed）
+ * - 执行失败仍可能产生 learningOutcome = SUCCEEDED
  *
- * 五层独立性（设计文档 3.1）：
- * - executionOutcome: 执行完成
- * - deliveryOutcome: 交付完成
- * - adoptionOutcome: 用户采用（UNKNOWN 允许）
- * - businessOutcome: 业务结果（UNKNOWN 允许）
- * - learningOutcome: 学习结果（UNKNOWN 允许，执行失败仍可能产生学习）
- *
- * 禁止合并的状态（设计文档 3.1）：
+ * 关键规则（设计文档 3.1）：
  * - 测试通过 ≠ 用户采用
  * - 文件创建 ≠ 用户下载
- * - 邮件工具成功 ≠ 收件人收到
+ * - 邮件工具返回成功 ≠ 收件人收到
  * - 模型建议完成 ≠ 业务目标达成
  * - 用户采用 ≠ 建议有效
  * - 执行失败仍可能产生有价值学习
- *
- * 状态约束（已在 contract schema 中冻结）：
- * - executionOutcome=SUCCEEDED → learningOutcome 不能是 FAILED
- * - executionOutcome=FAILED → deliveryOutcome 不能是 SUCCEEDED
- * - adoptionOutcome=SUCCEEDED → deliveryOutcome 必须 SUCCEEDED
- * - businessOutcome=SUCCEEDED → adoptionOutcome 必须 SUCCEEDED
- * - executionOutcome=CANCELLED → businessOutcome 只能是 UNKNOWN 或 CANCELLED
  */
 
+import type { ActorRef } from '../contracts/actors.js';
+import type { DeliveryBundle } from '../contracts/delivery.js';
+import type { EvidenceRecord } from '../contracts/evidence.js';
 import type {
-  OutcomeRecord,
   OutcomeAttribution,
+  OutcomeRecord,
   OutcomeState,
 } from '../contracts/outcome.js';
-import type { ActorRef } from '../contracts/actors.js';
-import {
-  OutcomeRecordSchema,
-  OutcomeAttributionSchema,
-  createOutcomeId,
-  computeOutcomeRecordHash,
-} from '../contracts/outcome.js';
+import { createOutcomeId, DEFAULT_UNOBSERVED_OUTCOME } from '../contracts/outcome.js';
+import type { BrokerPlan, ToolExecutionReceipt } from '../contracts/broker.js';
+import type { CompiledPolicyBundle } from '../contracts/policy.js';
+import type { CompiledSkillBundle } from '../contracts/skill.js';
 import { toUtcTimestamp } from '../contracts/time.js';
+import { buildRuleBasedAttribution, buildEmptyAttribution, type AttributionInput } from './attribution.js';
 
-// ===== Types =====
+/** Outcome Recorder 错误 */
+export class OutcomeRecorderError extends Error {
+  constructor(message: string, readonly code: string) {
+    super(message);
+    this.name = 'OutcomeRecorderError';
+  }
+}
 
-/**
- * 部分结果状态（五层结果的中间态）。
- * 每个 executionId 对应一个 PartialOutcome，在 finalize 前可逐层更新。
- */
-interface PartialOutcome {
-  readonly executionId: string;
+/** Run 终态输入 */
+export interface RunFinalState {
+  /** Execution ID */
+  executionId: string;
+  /** Run ID（可选，无 Run 概念时为空） */
   runId?: string;
-  executionOutcome: OutcomeState;
-  deliveryOutcome: OutcomeState;
-  adoptionOutcome: OutcomeState;
-  businessOutcome: OutcomeState;
-  learningOutcome: OutcomeState;
-  evidenceIds: string[];
+  /** 执行是否成功（动作完成） */
+  executionSucceeded: boolean;
+  /** 执行是否部分成功（多个验收项中部分通过） */
+  executionPartial?: boolean;
+  /** 执行是否被取消 */
+  executionCancelled?: boolean;
+  /** 交付 Bundle（用于推导 deliveryOutcome） */
+  deliveryBundle?: DeliveryBundle;
+  /** 用户采用信号（如用户确认、下载、点击等） */
+  adoptionSignal?: 'ADOPTED' | 'REJECTED' | 'PARTIAL' | null;
+  /** 业务结果信号（如 KPI 达成、目标完成） */
+  businessSignal?: 'ACHIEVED' | 'NOT_ACHIEVED' | 'PARTIAL' | null;
+  /** 学习结果信号（如产生新经验、新候选规则） */
+  learningSignal?: 'LEARNED' | 'NOT_LEARNED' | null;
+  /** 证据记录列表 */
+  evidenceRecords: EvidenceRecord[];
+  /** 观察者 */
+  observer: ActorRef;
+  /** 观察时间（默认现在） */
+  observedAt?: string;
+  /** BrokerPlan（用于归因） */
+  brokerPlan?: BrokerPlan;
+  /** Policy Bundle（用于归因） */
+  policyBundle?: CompiledPolicyBundle;
+  /** Skill Bundle（用于归因） */
+  skillBundle?: CompiledSkillBundle;
+  /** Tool Execution Receipts（用于归因） */
+  toolReceipts?: ToolExecutionReceipt[];
+  /** 显式覆盖归因结果（可选，默认自动构建） */
   attribution?: OutcomeAttribution;
+  /** 备注 */
+  notes?: string;
 }
 
 /**
- * 归因贡献者（用于构建 rule_based 归因）。
+ * 根据执行结果推导 executionOutcome
+ *
+ * - executionCancelled → CANCELLED
+ * - executionPartial → PARTIAL
+ * - executionSucceeded → SUCCEEDED
+ * - 否则 → FAILED
+ *
+ * fail-closed: 无信号 → UNKNOWN
  */
-export interface AttributionContributor {
-  readonly ref: string;
-  /** 省略时均分权重；提供时所有 contributor 必须同时提供 */
-  readonly weight?: number;
-  readonly role?: string;
-  readonly kind: 'claim' | 'policy' | 'skill' | 'model' | 'tool';
-}
-
-// ===== Internal Helpers =====
-
-function createPartialOutcome(executionId: string): PartialOutcome {
-  return {
-    executionId,
-    executionOutcome: 'PENDING',
-    deliveryOutcome: 'PENDING',
-    adoptionOutcome: 'UNKNOWN',
-    businessOutcome: 'UNKNOWN',
-    learningOutcome: 'UNKNOWN',
-    evidenceIds: [],
-  };
-}
-
-function mergeEvidence(existing: string[], addition: ReadonlyArray<string>): string[] {
-  if (addition.length === 0) return existing;
-  const set = new Set(existing);
-  for (const id of addition) set.add(id);
-  return [...set];
+export function deriveExecutionOutcome(state: RunFinalState): OutcomeState {
+  if (state.executionCancelled) return 'CANCELLED';
+  if (state.executionPartial) return 'PARTIAL';
+  if (state.executionSucceeded) return 'SUCCEEDED';
+  // 无明确成功/失败信号时，归为 FAILED（终态时必须有明确信号）
+  return 'FAILED';
 }
 
 /**
- * 计算结果观察的置信度（基于已确定层数 / 总层数）。
- * PENDING 和 UNKNOWN 视为"未确定"，降低置信度。
+ * 根据 DeliveryBundle 推导 deliveryOutcome
+ *
+ * - 无 Bundle → UNKNOWN（fail-closed，未尝试交付）
+ * - Bundle.state=SUCCEEDED → SUCCEEDED
+ * - Bundle.state=FAILED → FAILED
+ * - Bundle.state=PARTIAL → PARTIAL
+ * - Bundle.state=PENDING / RUNNING → PENDING
+ *
+ * 关键规则：
+ * - 文件创建成功但 Bundle FAILED → deliveryOutcome = FAILED（不可合并）
+ * - 执行成功但 Bundle 未完成 → deliveryOutcome = PENDING（不可推断为 SUCCEEDED）
  */
-function computeConfidence(partial: PartialOutcome): number {
-  let determined = 0;
-  if (partial.executionOutcome !== 'PENDING' && partial.executionOutcome !== 'UNKNOWN') determined += 1;
-  if (partial.deliveryOutcome !== 'PENDING' && partial.deliveryOutcome !== 'UNKNOWN') determined += 1;
-  if (partial.adoptionOutcome !== 'PENDING' && partial.adoptionOutcome !== 'UNKNOWN') determined += 1;
-  if (partial.businessOutcome !== 'PENDING' && partial.businessOutcome !== 'UNKNOWN') determined += 1;
-  if (partial.learningOutcome !== 'PENDING' && partial.learningOutcome !== 'UNKNOWN') determined += 1;
-  return determined / 5;
+export function deriveDeliveryOutcome(bundle: DeliveryBundle | undefined): OutcomeState {
+  if (!bundle) return DEFAULT_UNOBSERVED_OUTCOME;
+  switch (bundle.state) {
+    case 'SUCCEEDED':
+      return 'SUCCEEDED';
+    case 'FAILED':
+      return 'FAILED';
+    case 'PARTIAL':
+      return 'PARTIAL';
+    case 'PENDING':
+    case 'RUNNING':
+      return 'PENDING';
+    default: {
+      // fail-closed: 未知状态归为 UNKNOWN
+      const exhaustive: never = bundle.state;
+      void exhaustive;
+      return DEFAULT_UNOBSERVED_OUTCOME;
+    }
+  }
 }
-
-function toWeightedRef(
-  ref: string,
-  weight: number,
-  role?: string,
-): { ref: string; weight: number; role?: string } {
-  return role ? { ref, weight, role } : { ref, weight };
-}
-
-// ===== Attribution Builder =====
 
 /**
- * 构建 rule_based 归因（设计文档第四节）。
+ * 根据用户采用信号推导 adoptionOutcome
  *
- * 规则：
- * - 若所有 contributor 均省略 weight，则均分权重（1/n）
- * - 若所有 contributor 均提供 weight，则校验总和（容差 0.01），不满足时自动归一化
- * - 不允许混合（部分提供、部分省略）
- * - 至少需要一个 contributor
- * - method 固定为 'rule_based'
+ * - 无信号 → UNKNOWN（fail-closed，未观察到不能推断）
+ * - ADOPTED → SUCCEEDED
+ * - REJECTED → FAILED
+ * - PARTIAL → PARTIAL
  *
- * @param contributors 贡献者列表
- * @returns 归一化并通过 schema 验证的 OutcomeAttribution
+ * 关键规则：
+ * - 测试通过 ≠ 用户采用
+ * - 文件创建 ≠ 用户下载
+ * - 执行成功且用户未反馈 → UNKNOWN（不可推断为 SUCCEEDED）
  */
-export function buildRuleBasedAttribution(
-  contributors: ReadonlyArray<AttributionContributor>,
-): OutcomeAttribution {
-  if (contributors.length === 0) {
-    throw new Error('attribution requires at least one contributor');
-  }
-
-  const weights = contributors.map((c) => c.weight);
-  const allDefined = weights.every((w) => w !== undefined);
-  const allUndefined = weights.every((w) => w === undefined);
-
-  if (!allDefined && !allUndefined) {
-    throw new Error('cannot mix weighted and unweighted contributors; provide weights for all or none');
-  }
-
-  let normalizedWeights: number[];
-
-  if (allUndefined) {
-    const equal = 1 / contributors.length;
-    normalizedWeights = contributors.map(() => equal);
-  } else {
-    const rawWeights = weights.map((w) => w as number);
-    const sum = rawWeights.reduce((acc, w) => acc + w, 0);
-    if (sum === 0) {
-      throw new Error('attribution weights cannot all be zero');
-    }
-    if (Math.abs(sum - 1) > 0.01) {
-      // 自动归一化
-      normalizedWeights = rawWeights.map((w) => w / sum);
-    } else {
-      normalizedWeights = rawWeights;
+export function deriveAdoptionOutcome(signal: RunFinalState['adoptionSignal']): OutcomeState {
+  if (signal === null || signal === undefined) return DEFAULT_UNOBSERVED_OUTCOME;
+  switch (signal) {
+    case 'ADOPTED':
+      return 'SUCCEEDED';
+    case 'REJECTED':
+      return 'FAILED';
+    case 'PARTIAL':
+      return 'PARTIAL';
+    default: {
+      const exhaustive: never = signal;
+      void exhaustive;
+      return DEFAULT_UNOBSERVED_OUTCOME;
     }
   }
-
-  const indexed = contributors.map((c, i) => ({
-    ref: c.ref,
-    weight: normalizedWeights[i],
-    role: c.role,
-    kind: c.kind,
-  }));
-
-  const attribution: OutcomeAttribution = {
-    contributingClaims: indexed
-      .filter((c) => c.kind === 'claim')
-      .map((c) => toWeightedRef(c.ref, c.weight, c.role)),
-    contributingPolicies: indexed
-      .filter((c) => c.kind === 'policy')
-      .map((c) => toWeightedRef(c.ref, c.weight, c.role)),
-    contributingSkills: indexed
-      .filter((c) => c.kind === 'skill')
-      .map((c) => toWeightedRef(c.ref, c.weight, c.role)),
-    contributingModels: indexed
-      .filter((c) => c.kind === 'model')
-      .map((c) => toWeightedRef(c.ref, c.weight, c.role)),
-    contributingTools: indexed
-      .filter((c) => c.kind === 'tool')
-      .map((c) => toWeightedRef(c.ref, c.weight, c.role)),
-    confidence: 0.8,
-    method: 'rule_based',
-  };
-
-  return OutcomeAttributionSchema.parse(attribution);
 }
 
-// ===== Outcome Recorder =====
+/**
+ * 根据业务结果信号推导 businessOutcome
+ *
+ * - 无信号 → UNKNOWN（fail-closed）
+ * - ACHIEVED → SUCCEEDED
+ * - NOT_ACHIEVED → FAILED
+ * - PARTIAL → PARTIAL
+ *
+ * 关键规则：
+ * - 模型建议完成 ≠ 业务目标达成
+ * - 用户采用 ≠ 建议有效
+ */
+export function deriveBusinessOutcome(signal: RunFinalState['businessSignal']): OutcomeState {
+  if (signal === null || signal === undefined) return DEFAULT_UNOBSERVED_OUTCOME;
+  switch (signal) {
+    case 'ACHIEVED':
+      return 'SUCCEEDED';
+    case 'NOT_ACHIEVED':
+      return 'FAILED';
+    case 'PARTIAL':
+      return 'PARTIAL';
+    default: {
+      const exhaustive: never = signal;
+      void exhaustive;
+      return DEFAULT_UNOBSERVED_OUTCOME;
+    }
+  }
+}
 
 /**
- * Outcome Recorder（设计文档第三节）。
+ * 根据学习信号推导 learningOutcome
  *
- * 协调五层结果的记录、验证和最终化。
- * 维护 in-memory 状态，支持幂等记录和提前拒绝非法状态转换。
+ * - 无信号 → UNKNOWN（fail-closed）
+ * - LEARNED → SUCCEEDED（产生有价值学习）
+ * - NOT_LEARNED → FAILED
  *
- * 五层结果相互独立，不可合并（设计文档 3.1）。
+ * 关键规则：
+ * - 执行失败仍可能 learningOutcome = SUCCEEDED（从失败中学习）
+ * - Delivery 失败可形成 Learning Outcome
  */
-export class OutcomeRecorder {
-  private readonly partials = new Map<string, PartialOutcome>();
-  private readonly finalized = new Map<string, OutcomeRecord>();
-
-  /**
-   * 记录执行层结果。
-   * 其他层默认为 PENDING/UNKNOWN，可后续逐层更新。
-   *
-   * 幂等：同一 executionId + 'execution' + state 视为 no-op（evidence 仍会合并）。
-   */
-  recordExecutionOutcome(
-    executionId: string,
-    state: OutcomeState,
-    evidence?: ReadonlyArray<string>,
-  ): void {
-    const partial = this.getOrCreatePartial(executionId);
-    if (partial.executionOutcome === state) {
-      if (evidence && evidence.length > 0) {
-        partial.evidenceIds = mergeEvidence(partial.evidenceIds, evidence);
-      }
-      return;
-    }
-    // 约束：执行成功时学习不能是 FAILED
-    if (state === 'SUCCEEDED' && partial.learningOutcome === 'FAILED') {
-      throw new Error('execution cannot succeed when learning outcome is FAILED');
-    }
-    partial.executionOutcome = state;
-    if (evidence && evidence.length > 0) {
-      partial.evidenceIds = mergeEvidence(partial.evidenceIds, evidence);
+export function deriveLearningOutcome(signal: RunFinalState['learningSignal']): OutcomeState {
+  if (signal === null || signal === undefined) return DEFAULT_UNOBSERVED_OUTCOME;
+  switch (signal) {
+    case 'LEARNED':
+      return 'SUCCEEDED';
+    case 'NOT_LEARNED':
+      return 'FAILED';
+    default: {
+      const exhaustive: never = signal;
+      void exhaustive;
+      return DEFAULT_UNOBSERVED_OUTCOME;
     }
   }
+}
 
-  /**
-   * 记录交付层结果。
-   * 交付成功要求执行成功（设计文档 3.1：文件创建 ≠ 用户下载）。
-   */
-  recordDeliveryOutcome(
-    executionId: string,
-    deliveryState: OutcomeState,
-    evidence?: ReadonlyArray<string>,
-  ): void {
-    const partial = this.getOrCreatePartial(executionId);
-    if (partial.deliveryOutcome === deliveryState) {
-      if (evidence && evidence.length > 0) {
-        partial.evidenceIds = mergeEvidence(partial.evidenceIds, evidence);
-      }
-      return;
-    }
-    // 约束：执行失败时交付不能成功
-    if (deliveryState === 'SUCCEEDED' && partial.executionOutcome === 'FAILED') {
-      throw new Error('delivery cannot succeed when execution failed');
-    }
-    partial.deliveryOutcome = deliveryState;
-    if (evidence && evidence.length > 0) {
-      partial.evidenceIds = mergeEvidence(partial.evidenceIds, evidence);
-    }
+/**
+ * 计算 Outcome 总置信度
+ *
+ * 基于：
+ * - 证据数量（更多证据 → 更高置信度）
+ * - 是否有归因 bundle
+ * - 是否有用户信号
+ *
+ * 上限 0.95（保留人工审查空间）
+ */
+export function computeOutcomeConfidence(state: RunFinalState): number {
+  let confidence = 0.3; // 基础置信度
+
+  // 证据数量加成
+  const evidenceCount = state.evidenceRecords.length;
+  if (evidenceCount > 0) {
+    confidence += Math.min(0.3, evidenceCount * 0.05);
   }
 
-  /**
-   * 记录用户采用层结果。
-   * 采用成功要求交付成功（设计文档 3.1：测试通过 ≠ 用户采用）。
-   */
-  recordAdoptionOutcome(
-    executionId: string,
-    adoptionState: OutcomeState,
-    evidence?: ReadonlyArray<string>,
-  ): void {
-    const partial = this.getOrCreatePartial(executionId);
-    if (partial.adoptionOutcome === adoptionState) {
-      if (evidence && evidence.length > 0) {
-        partial.evidenceIds = mergeEvidence(partial.evidenceIds, evidence);
-      }
-      return;
-    }
-    // 约束：交付未成功时采用不能成功
-    if (adoptionState === 'SUCCEEDED' && partial.deliveryOutcome !== 'SUCCEEDED') {
-      throw new Error('adoption cannot succeed when delivery is not SUCCEEDED');
-    }
-    partial.adoptionOutcome = adoptionState;
-    if (evidence && evidence.length > 0) {
-      partial.evidenceIds = mergeEvidence(partial.evidenceIds, evidence);
-    }
+  // 归因 bundle 加成
+  if (state.brokerPlan) confidence += 0.05;
+  if (state.policyBundle) confidence += 0.05;
+  if (state.skillBundle) confidence += 0.05;
+  if (state.toolReceipts && state.toolReceipts.length > 0) confidence += 0.05;
+
+  // 用户信号加成（adoption / business 有明确信号时置信度更高）
+  if (state.adoptionSignal) confidence += 0.1;
+  if (state.businessSignal) confidence += 0.1;
+
+  return Math.min(0.95, confidence);
+}
+
+/**
+ * 构建 OutcomeRecord
+ *
+ * 主流程：
+ * 1. 推导五层 Outcome 状态（独立计算，禁止合并）
+ * 2. 提取 evidenceIds
+ * 3. 计算总置信度
+ * 4. 构建归因（若未显式提供）
+ * 5. 生成 OutcomeRecord
+ *
+ * fail-closed:
+ * - 无证据 → 抛错（fail-closed: 无证据不能生成 Outcome）
+ * - 无 observer → 抛错
+ * - 无 executionId → 抛错
+ *
+ * 关键规则：
+ * - 默认 adoptionOutcome / businessOutcome / learningOutcome = UNKNOWN
+ * - 执行失败仍可 learningOutcome = SUCCEEDED（若 learningSignal=LEARNED）
+ * - Delivery 失败可形成 Learning Outcome（learningSignal=LEARNED 时）
+ */
+export function buildOutcomeRecord(state: RunFinalState): OutcomeRecord {
+  if (!state.executionId) {
+    throw new OutcomeRecorderError(
+      'executionId is required',
+      'MISSING_EXECUTION_ID',
+    );
+  }
+  if (!state.observer) {
+    throw new OutcomeRecorderError(
+      'observer is required',
+      'MISSING_OBSERVER',
+    );
+  }
+  if (state.evidenceRecords.length === 0) {
+    throw new OutcomeRecorderError(
+      'at least one evidence is required to produce an OutcomeRecord',
+      'NO_EVIDENCE',
+    );
   }
 
-  /**
-   * 记录业务结果层。
-   * 业务成功要求采用成功（设计文档 3.1：模型建议 ≠ 业务目标达成）。
-   * 执行取消时业务结果只能是 UNKNOWN 或 CANCELLED。
-   */
-  recordBusinessOutcome(
-    executionId: string,
-    businessState: OutcomeState,
-    evidence?: ReadonlyArray<string>,
-  ): void {
-    const partial = this.getOrCreatePartial(executionId);
-    if (partial.businessOutcome === businessState) {
-      if (evidence && evidence.length > 0) {
-        partial.evidenceIds = mergeEvidence(partial.evidenceIds, evidence);
-      }
-      return;
-    }
-    // 约束：采用未成功时业务不能成功
-    if (businessState === 'SUCCEEDED' && partial.adoptionOutcome !== 'SUCCEEDED') {
-      throw new Error('business outcome cannot succeed without adoption');
-    }
-    // 约束：执行取消时业务只能是 UNKNOWN 或 CANCELLED
-    if (
-      partial.executionOutcome === 'CANCELLED'
-      && businessState !== 'UNKNOWN'
-      && businessState !== 'CANCELLED'
-    ) {
-      throw new Error('cancelled execution cannot have non-UNKNOWN/CANCELLED business outcome');
-    }
-    partial.businessOutcome = businessState;
-    if (evidence && evidence.length > 0) {
-      partial.evidenceIds = mergeEvidence(partial.evidenceIds, evidence);
-    }
-  }
+  // 1. 推导五层状态
+  const executionOutcome = deriveExecutionOutcome(state);
+  const deliveryOutcome = deriveDeliveryOutcome(state.deliveryBundle);
+  const adoptionOutcome = deriveAdoptionOutcome(state.adoptionSignal);
+  const businessOutcome = deriveBusinessOutcome(state.businessSignal);
+  const learningOutcome = deriveLearningOutcome(state.learningSignal);
 
-  /**
-   * 记录学习结果层。
-   * 执行成功时学习不能是 FAILED；执行失败仍可能产生学习（设计文档测试 10）。
-   */
-  recordLearningOutcome(
-    executionId: string,
-    learningState: OutcomeState,
-    evidence?: ReadonlyArray<string>,
-  ): void {
-    const partial = this.getOrCreatePartial(executionId);
-    if (partial.learningOutcome === learningState) {
-      if (evidence && evidence.length > 0) {
-        partial.evidenceIds = mergeEvidence(partial.evidenceIds, evidence);
-      }
-      return;
-    }
-    // 约束：执行成功时学习不能是 FAILED
-    if (learningState === 'FAILED' && partial.executionOutcome === 'SUCCEEDED') {
-      throw new Error('learning outcome cannot be FAILED when execution succeeded');
-    }
-    partial.learningOutcome = learningState;
-    if (evidence && evidence.length > 0) {
-      partial.evidenceIds = mergeEvidence(partial.evidenceIds, evidence);
-    }
-  }
+  // 2. 提取 evidenceIds（去重）
+  const evidenceIds = [...new Set(state.evidenceRecords.map((e) => e.evidenceId))].sort();
 
-  /**
-   * 附加归因（验证权重总和 = 1.0，容差 0.01）。
-   * 在 finalize 前调用，或直接传给 finalizeOutcome。
-   */
-  attachAttribution(executionId: string, attribution: OutcomeAttribution): void {
-    const partial = this.getOrCreatePartial(executionId);
-    const validated = OutcomeAttributionSchema.parse(attribution);
-    partial.attribution = validated;
-  }
+  // 3. 计算总置信度
+  const confidence = computeOutcomeConfidence(state);
 
-  /**
-   * 设置 runId（可选，用于关联执行运行）。
-   */
-  setRunId(executionId: string, runId: string): void {
-    const partial = this.getOrCreatePartial(executionId);
-    partial.runId = runId;
-  }
-
-  /**
-   * 最终化结果记录。
-   *
-   * 构建 OutcomeRecord，通过 OutcomeRecordSchema 验证（fail-closed），
-   * 计算 hash（computeOutcomeRecordHash），并缓存到 finalized map。
-   *
-   * @param executionId 执行 ID
-   * @param observer 观察者
-   * @param attribution 可选归因；若提供则覆盖之前 attachAttribution 的值
-   * @returns 验证通过的 OutcomeRecord
-   */
-  finalizeOutcome(
-    executionId: string,
-    observer: ActorRef,
-    attribution?: OutcomeAttribution,
-  ): OutcomeRecord {
-    const partial = this.partials.get(executionId);
-    if (!partial) {
-      throw new Error(`no outcome recorded for execution ${executionId}`);
-    }
-
-    const finalAttribution = attribution ?? partial.attribution;
-    if (attribution) {
-      OutcomeAttributionSchema.parse(attribution);
-    }
-
-    const draft: OutcomeRecord = {
-      schema: 'awkn-outcome-record/v1',
-      outcomeId: createOutcomeId(),
-      executionId: partial.executionId,
-      ...(partial.runId ? { runId: partial.runId } : {}),
-      executionOutcome: partial.executionOutcome,
-      deliveryOutcome: partial.deliveryOutcome,
-      adoptionOutcome: partial.adoptionOutcome,
-      businessOutcome: partial.businessOutcome,
-      learningOutcome: partial.learningOutcome,
-      evidenceIds: [...partial.evidenceIds],
-      observedAt: toUtcTimestamp(new Date()),
-      observer,
-      confidence: computeConfidence(partial),
-      ...(finalAttribution ? { attribution: finalAttribution } : {}),
+  // 4. 构建归因
+  let attribution = state.attribution;
+  if (!attribution) {
+    const attributionInput: AttributionInput = {
+      brokerPlan: state.brokerPlan,
+      policyBundle: state.policyBundle,
+      skillBundle: state.skillBundle,
+      toolReceipts: state.toolReceipts,
+      evidenceRecords: state.evidenceRecords,
+      executionOutcome,
+      deliveryOutcome,
     };
-
-    const record = OutcomeRecordSchema.parse(draft) as OutcomeRecord;
-    const { outcomeId: _omit, ...content } = record;
-    void _omit;
-    const hash = computeOutcomeRecordHash(content);
-    void hash;
-
-    this.finalized.set(executionId, record);
-    return record;
+    // 只有在有 bundle 或 evidence 时才构建归因
+    const hasAnyContributor = state.brokerPlan
+      || state.policyBundle
+      || state.skillBundle
+      || (state.toolReceipts && state.toolReceipts.length > 0)
+      || state.evidenceRecords.length > 0;
+    attribution = hasAnyContributor
+      ? buildRuleBasedAttribution(attributionInput)
+      : buildEmptyAttribution();
   }
 
-  /**
-   * 获取已最终化的结果记录。
-   * @returns 已最终化的 OutcomeRecord，或 undefined（未最终化）
-   */
-  getOutcome(executionId: string): OutcomeRecord | undefined {
-    return this.finalized.get(executionId);
+  // 维持 schema 不变量：attribution.confidence 不得超过整体 confidence
+  // （归因置信度是整体置信度的子集，不应超过其上限）
+  if (attribution && attribution.confidence > confidence) {
+    attribution = { ...attribution, confidence };
   }
 
-  /**
-   * 获取当前部分结果状态（只读快照，用于检查进度）。
-   * 返回深拷贝以防止外部修改。
-   */
-  getPartialOutcome(executionId: string): Readonly<PartialOutcome> | undefined {
-    const partial = this.partials.get(executionId);
-    if (!partial) return undefined;
-    return {
-      ...partial,
-      evidenceIds: [...partial.evidenceIds],
-    };
+  // 5. 生成 OutcomeRecord
+  const observedAt = state.observedAt ?? toUtcTimestamp(new Date());
+  const record: OutcomeRecord = {
+    schema: 'awkn-outcome-record/v1',
+    outcomeId: createOutcomeId(),
+    executionId: state.executionId,
+    executionOutcome,
+    deliveryOutcome,
+    adoptionOutcome,
+    businessOutcome,
+    learningOutcome,
+    evidenceIds,
+    observedAt,
+    observer: state.observer,
+    confidence,
+    attribution,
+  };
+  if (state.runId !== undefined) {
+    record.runId = state.runId;
   }
+  if (state.notes !== undefined) {
+    record.notes = state.notes;
+  }
+  return record;
+}
 
-  private getOrCreatePartial(executionId: string): PartialOutcome {
-    let partial = this.partials.get(executionId);
-    if (!partial) {
-      partial = createPartialOutcome(executionId);
-      this.partials.set(executionId, partial);
-    }
-    return partial;
-  }
+/**
+ * 查询指定层的 Outcome 状态
+ *
+ * 用于上层按层查询：
+ * ```ts
+ * const adoptionState = getOutcomeLayer(record, 'adoptionOutcome');
+ * if (adoptionState === 'UNKNOWN') {
+ *   // 未观察到用户采用，不可推断为成功
+ * }
+ * ```
+ */
+export function getOutcomeLayer(
+  record: OutcomeRecord,
+  layer: 'executionOutcome' | 'deliveryOutcome' | 'adoptionOutcome' | 'businessOutcome' | 'learningOutcome',
+): OutcomeState {
+  return record[layer];
+}
+
+/**
+ * 检查指定层是否成功
+ */
+export function isLayerSucceeded(
+  record: OutcomeRecord,
+  layer: 'executionOutcome' | 'deliveryOutcome' | 'adoptionOutcome' | 'businessOutcome' | 'learningOutcome',
+): boolean {
+  return record[layer] === 'SUCCEEDED';
+}
+
+/**
+ * 检查指定层是否失败
+ */
+export function isLayerFailed(
+  record: OutcomeRecord,
+  layer: 'executionOutcome' | 'deliveryOutcome' | 'adoptionOutcome' | 'businessOutcome' | 'learningOutcome',
+): boolean {
+  return record[layer] === 'FAILED';
+}
+
+/**
+ * 检查指定层是否未知（fail-closed 默认状态）
+ */
+export function isLayerUnknown(
+  record: OutcomeRecord,
+  layer: 'executionOutcome' | 'deliveryOutcome' | 'adoptionOutcome' | 'businessOutcome' | 'learningOutcome',
+): boolean {
+  return record[layer] === 'UNKNOWN';
 }
