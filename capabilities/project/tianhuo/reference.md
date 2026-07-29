@@ -41,18 +41,28 @@
 Classify -> Fetch -> Plan -> Execute -> Review/Verify -> Evolve
 ```
 
-### 2.0A 项目风险路由
+### 2.0A 已有项目修改强制链
 
-项目任务先调用 `awkn_tianhuo_start`，一次只执行返回的一张能力卡。禁止默认加载整条技能链：
+只要任务满足“已有项目 + 需求/想法/问题/报错 + 可能修改代码、配置、文档、部署或数据”，不得直接进入 Execute，必须自动路由为多技能链：
 
-- 只读解释：直接回答，不建立工程链。
-- 小改动：执行检查 → 工程师 → 新鲜验证。
-- 普通 BUG：执行检查 → BUG 修复 → CICD；高风险时插入独立审核。
-- 标准开发：执行检查 → 工程师 → 审核 → CICD。
-- 正式发布：审核 → CICD → 部署，并要求生产批准。
-- 新项目：PRD → Spec → 工程文档 → 工程师 → 审核 → CICD → 部署 → 复盘。
+```
+天火入口
+  -> awkn-执行检查(Read/Locate/Plan)
+  -> plan任务计划
+  -> awkn-工程文档(按风险决定是否生成交接包；默认需要)
+  -> awkn-程序员天阶功法(阶段调度)
+  -> awkn-工程师(Build实现/排错/测试)
+  -> awkn-审核(Review质量门禁)
+  -> awkn-cicd(自动测试/质量门禁/发布触发)
+  -> awkn-部署(仅涉及上线/回滚/生产变更时)
+```
 
-用户显式点名技能时传入 `requestedCapability`，不再重复自动分类。每阶段通过 `awkn_tianhuo_advance` 提交新鲜证据后才可推进。
+放行规则：
+- 纯查询、只读分析、概念解释可 bypass。
+- 文案/注释/低风险单文件小改可走快速模式，但仍需 awkn-执行检查的 Read/Locate/Verify。
+- 审核未 PASS/PASS_WITH_RISKS，不得进入 CI/CD 或部署。
+- CI/CD 未 PASS/RISK人工确认，不得进入 awkn-部署。
+- 用户忘记点名技能时，由天火自动补齐，不反问“是否加载”。
 
 ### 2.1 可绕过条件
 
@@ -181,8 +191,9 @@ if (taskClassificationPacket.route_to_skill != null) {
 | 轨迹 schema | `schemas/task-trajectory.schema.json` | 回放误解、安全、验证、恢复场景 |
 | 协作请求 schema | `schemas/coordination-request.schema.json` | 多智能体只输出请求包 |
 | 入口一致性 | `scripts/check-runtime-contract.js` | 检查 P0、flow、safetyGate、多入口漂移 |
-| 路由回归 | `../../../awkn-engine-mcp/runtime/test/tianhuo-workflow.test.ts` | 验证路由、门禁和恢复 |
-| 薄技能回归 | `../../../awkn-engine-mcp/runtime/test/public-skills-thin.test.ts` | 验证跨 IDE 入口与 TOKEN 上限 |
+| Claude Code 接口 | `scripts/check-claude-code-interface.js` | 检查 `claude --agent tianhuo` 适配器 |
+| 失败回放 | `scripts/replay-trajectories.js` | 防止同类错误回归 |
+| 能力评分 | `scripts/agent-scorecard.js` | 量化意图、验证、安全、编排、写回 |
 
 核心文档、配置、入口发生变化后，优先运行入口一致性检查；失败回放和评分是冷路径，不进入 P0 默认上下文。
 

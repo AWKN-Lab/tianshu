@@ -60,47 +60,12 @@
     ]
   },
   "global_skills": {
-    "description": "天火链接的全局技能库 (~/.claude/skills/)",
-    "chain_engineering": [
-      "C:\\Users\\10919\\.claude\\skills\\awkn-程序员天阶功法",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-工程师",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-工程文档",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-spec",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-执行检查",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-审核",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-bug修复大法",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-复盘总结",
-      "C:\\Users\\10919\\.claude\\skills\\饭要一口一口吃",
-      "C:\\Users\\10919\\.claude\\skills\\plan"
-    ],
-    "chain_product": [
-      "C:\\Users\\10919\\.claude\\skills\\awkn-prd",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-分析师",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-调研员"
-    ],
-    "chain_ops": [
-      "C:\\Users\\10919\\.claude\\skills\\awkn-部署",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-cicd",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-浏览器操控",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-电脑操控",
-      "C:\\Users\\10919\\.claude\\skills\\AWKN-搜索"
-    ],
-    "chain_platform": [
-      "C:\\Users\\10919\\.claude\\skills\\awkn-ui",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-Agent设计",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-技能治理",
-      "C:\\Users\\10919\\.claude\\skills\\cailun",
-      "C:\\Users\\10919\\.claude\\skills\\minimax",
-      "C:\\Users\\10919\\.claude\\skills\\飞书套件"
-    ],
-    "chain_tools": [
-      "C:\\Users\\10919\\.claude\\skills\\auto-prompt",
-      "C:\\Users\\10919\\.claude\\skills\\pua-debugging",
-      "C:\\Users\\10919\\.claude\\skills\\source-rater",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-todo-tracker",
-      "C:\\Users\\10919\\.claude\\skills\\distilled",
-      "C:\\Users\\10919\\.claude\\skills\\batch-import",
-      "C:\\Users\\10919\\.claude\\skills\\repo-janitor-souls"
+    "description": "Codex、TRAE 等 IDE 共用 awkn引擎/skills 薄技能，详细能力由 capabilities + MCP 提供",
+    "skills_root": "../../skills",
+    "capabilities_root": "../../capabilities",
+    "project_capabilities": [
+      "tianhuo", "tianjie", "execution-check", "engineer", "bugfix", "audit",
+      "cicd", "deploy", "prd", "spec", "engineering-docs", "retrospective"
     ]
   },
   "runtime_contract": {
@@ -118,16 +83,9 @@
     "source_health_manifest": "data/source-health-manifest.json"
   },
   "awkn_programmer": {
-    "root": "C:\\Users\\10919\\.claude\\skills\\awkn-程序员天阶功法",
-    "mandatory_existing_project_chain": [
-      "C:\\Users\\10919\\.claude\\skills\\awkn-执行检查",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-工程文档",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-程序员天阶功法",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-工程师",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-审核",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-cicd",
-      "C:\\Users\\10919\\.claude\\skills\\awkn-部署"
-    ],
+    "root": "../../skills/awkn-程序员天阶功法",
+    "routing_policy": "risk-based-progressive-loading",
+    "workflow_tools": ["awkn_tianhuo_start", "awkn_tianhuo_advance", "awkn_tianhuo_status"],
     "routing": {
       "task_contract": "SKILL.md#Workflow Handoff",
       "existing_project_gate": "..\\awkn-执行检查\\SKILL.md",

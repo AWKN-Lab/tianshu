@@ -115,9 +115,9 @@ finding -> revisionResponse -> freshEvidence -> closeState
 
 | 项 | 默认上限 | 超限动作 |
 |----|---------|---------|
-| maxCycles | 50 | 自动暂停，汇报当前进度 |
-| maxTokens | 5,000,000 | 自动暂停，汇报已用预算 |
-| maxDurationMs | 24h | 自动暂停，汇报已用时长 |
+| maxCycles | 10 | 自动暂停，汇报当前进度 |
+| maxTokens | 150,000 | 自动暂停，汇报已用预算 |
+| maxDurationMs | 2h | 自动暂停，汇报已用时长 |
 
 超限不是失败，是强制停下来让用户决策：续费、放宽上限、或停止。
 
