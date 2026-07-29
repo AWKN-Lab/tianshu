@@ -31,6 +31,7 @@ import type {
   CycleReceipt,
   StrategyAttempt,
   StrategyDecision,
+  DeviationType,
 } from '../contracts/evidence-loop.js';
 import {
   CycleReceiptSchema,
@@ -41,9 +42,49 @@ import type { EvidenceDelta } from '../contracts/evidence.js';
 import { buildCyclePlan, type CyclePlanInput } from './cycle-planner.js';
 import { calculateEvidenceDelta, type DeltaInput } from './evidence-delta.js';
 import { diagnoseDeviation, recommendStrategyDecision, type DeviationInput } from './deviation.js';
-import { evaluateStrategySwitch, recordStrategyAttempt, type StrategySwitchResult } from './strategy-switcher.js';
+import {
+  evaluateStrategySwitch,
+  recordStrategyAttempt,
+  type StrategySwitchOption,
+  type StrategySwitchResult,
+} from './strategy-switcher.js';
 import { evaluateStopCondition, shouldStop, type StopControlInput, type StopDecision } from './stop-controller.js';
 import { toUtcTimestamp } from '../contracts/time.js';
+
+/**
+ * 根据 DeviationType 推导默认的 nextStrategy
+ *
+ * 用于 recommendedDecision='SWITCH' 但 strategySwitch.shouldSwitch=false 的场景：
+ * 此时虽然 assessStrategySwitch 没有触发（如 strategyAttempts 为空），
+ * 但 deviationType 已经明确建议切换策略，需要给 receipt 一个可观测的 nextStrategy。
+ */
+function deriveDefaultNextStrategy(
+  deviationType: DeviationType,
+  hasSwitchedBefore: boolean,
+): StrategySwitchOption {
+  switch (deviationType) {
+    case 'HYPOTHESIS_REJECTED':
+      return 'replace_hypothesis';
+    case 'CAPABILITY_GAP':
+      return 'replace_model';
+    case 'EXECUTION_ERROR':
+      return 'replace_tool';
+    case 'CONTEXT_GAP':
+      return 'narrow_scope';
+    case 'REPEATED_PATTERN':
+      return 'replace_skill';
+    case 'AUTHORIZATION_GAP':
+      return 'request_user_choice';
+    case 'NO_EVIDENCE':
+      return hasSwitchedBefore ? 'request_user_choice' : 'narrow_scope';
+    case 'ACCEPTANCE_MISMATCH':
+      return 'narrow_scope';
+    case 'REGRESSION':
+      return 'rollback_to_plan_freeze';
+    default:
+      return 'narrow_scope';
+  }
+}
 
 /** Evidence-Gain Loop 错误 */
 export class EvidenceLoopError extends Error {
@@ -175,7 +216,34 @@ export function createEvidenceGainLoop(
       const strategyDecision: StrategyDecision =
         strategySwitch.shouldSwitch ? strategySwitch.decision : recommendedDecision;
 
-      // 5. 评估停止条件
+      // 5. 生成 CycleReceipt（先于 stop 评估，让 evaluateNoGainStop 能看到当前轮 receipt）
+      // 当 strategyDecision==='SWITCH' 但 strategySwitch.shouldSwitch=false（来自 recommendedDecision），
+      // 需要根据 deviationType 推导默认 nextStrategy，以满足 schema 不变量「SWITCH 必须有 nextStrategy」
+      const resolvedNextStrategy = strategyDecision === 'SWITCH'
+        ? (strategySwitch.nextStrategy ?? deriveDefaultNextStrategy(deviation.deviationType, state.hasSwitchedBefore))
+        : strategySwitch.nextStrategy;
+      const receipt = buildCycleReceipt({
+        cyclePlan: input.cyclePlan,
+        delta,
+        deviationType: deviation.deviationType,
+        strategyDecision,
+        nextStrategy: resolvedNextStrategy,
+        actualEvidenceIds: input.actualEvidenceIds ?? [],
+        tokens: input.tokens ?? 0,
+        durationMs: input.durationMs ?? 0,
+        now: input.now,
+      });
+
+      // 6. 更新状态：先 push receipt，再评估 stop，让 evaluateNoGainStop 能看到当前轮 delta
+      state.cycleReceipts.push(receipt);
+
+      // 7. 标记是否已切换过（仅追踪 strategySwitch 触发的实际切换，
+      //    recommendedDecision 的 SWITCH 是建议而非已执行的切换）
+      if (strategySwitch.shouldSwitch && !state.hasSwitchedBefore) {
+        state.hasSwitchedBefore = true;
+      }
+
+      // 8. 评估停止条件（基于已更新的 state，让 NO_GAIN_STOP 能看到当前轮）
       const stopInput: StopControlInput = {
         cycleReceipts: state.cycleReceipts,
         strategyAttempts: state.strategyAttempts,
@@ -188,27 +256,6 @@ export function createEvidenceGainLoop(
         preconditionFailed: input.preconditionFailed,
       };
       const stopDecision = evaluateStopCondition(stopInput);
-
-      // 6. 生成 CycleReceipt
-      const receipt = buildCycleReceipt({
-        cyclePlan: input.cyclePlan,
-        delta,
-        deviationType: deviation.deviationType,
-        strategyDecision,
-        nextStrategy: strategySwitch.nextStrategy,
-        actualEvidenceIds: input.actualEvidenceIds ?? [],
-        tokens: input.tokens ?? 0,
-        durationMs: input.durationMs ?? 0,
-        now: input.now,
-      });
-
-      // 7. 更新状态
-      state.cycleReceipts.push(receipt);
-
-      // 8. 标记是否已切换过
-      if (strategySwitch.shouldSwitch && !state.hasSwitchedBefore) {
-        state.hasSwitchedBefore = true;
-      }
 
       const shouldContinue = !shouldStop(stopDecision)
         && strategyDecision !== 'STOP'
