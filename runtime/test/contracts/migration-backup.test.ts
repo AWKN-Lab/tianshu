@@ -178,7 +178,7 @@ describe('Migration Backup/Restore', () => {
   });
 
   describe('Integration with runAgentOsMigrations', () => {
-    it('creates backup before applying v11/v12 migrations', () => {
+    it('creates backup before applying v11/v12/v13 migrations', () => {
       const integrationDbPath = join(testDir, 'integration-backup.db');
       const db = createTestDb(integrationDbPath);
 
@@ -187,7 +187,7 @@ describe('Migration Backup/Restore', () => {
       const backup = getLastMigrationBackup();
       assert.ok(backup, 'backup should have been created');
       assert.equal(existsSync(backup.backupPath), true);
-      assert.deepEqual(backup.pendingMigrations, [11, 12]);
+      assert.deepEqual(backup.pendingMigrations, [11, 12, 13]);
       assert.equal(backup.contentHash.length, 64);
 
       // Verify migrations were applied
@@ -195,6 +195,7 @@ describe('Migration Backup/Restore', () => {
       const versionList = versions.map((v) => v.version);
       assert.ok(versionList.includes(11));
       assert.ok(versionList.includes(12));
+      assert.ok(versionList.includes(13));
 
       db.close();
     });
@@ -328,6 +329,92 @@ describe('Migration Backup/Restore', () => {
 
       const after = listMigrationBackups(cleanupDbPath);
       assert.equal(after.length, 3);
+    });
+  });
+
+  describe('Step 4: migration failure auto-restore + cleanup integration', () => {
+    it('auto-cleans old backups after successful migration (cleanupOldBackups wired)', () => {
+      const cleanupDbPath = join(testDir, 'auto-cleanup.db');
+      // Pre-create 7 stale backups (exceeding default keepCount=5)
+      for (let i = 0; i < 7; i++) {
+        const db = createTestDb(cleanupDbPath);
+        backupBeforeMigration(db, cleanupDbPath, [11]);
+        db.close();
+      }
+      const staleCount = listMigrationBackups(cleanupDbPath).length;
+      assert.ok(staleCount >= 7, `expected >=7 stale backups, got ${staleCount}`);
+
+      // Run migration — should trigger cleanupOldBackups(dbPath, 5) on success
+      const db = createTestDb(cleanupDbPath);
+      runAgentOsMigrations(db);
+      db.close();
+
+      const remaining = listMigrationBackups(cleanupDbPath);
+      // Default keepCount=5; stale backups reduced to <=5+1 (the +1 is the new backup just created)
+      assert.ok(remaining.length <= 6, `expected <=6 backups after auto-cleanup, got ${remaining.length}`);
+    });
+
+    it('auto-restores DB from backup when migration fails (try/catch recovery)', () => {
+      const failDbPath = join(testDir, 'auto-restore-on-fail.db');
+      const db = createTestDb(failDbPath);
+      // Insert a pre-migration marker row to verify restore later
+      db.exec('CREATE TABLE pre_migration_marker (id INTEGER PRIMARY KEY, note TEXT)');
+      db.prepare('INSERT INTO pre_migration_marker (note) VALUES (?)').run('before-migration');
+      db.close();
+
+      // Re-open and sabotage v13 migration by creating evolution_candidate_corrections
+      // with wrong schema (missing columns v13 expects) → v13 INSERT will fail with
+      // "no such column: candidate_id"
+      const sabotagedDb = new Database(failDbPath);
+      sabotagedDb.exec(`
+        CREATE TABLE evolution_candidate_corrections (
+          wrong_column TEXT,
+          another_wrong TEXT
+        );
+        CREATE TABLE evolution_candidates (id TEXT PRIMARY KEY);
+        CREATE TABLE corrections_ledger (id TEXT PRIMARY KEY);
+        INSERT INTO evolution_candidate_corrections (wrong_column, another_wrong) VALUES ('a', 'b');
+      `);
+      // Mark v1-v12 as applied so only v13 is pending
+      for (let v = 1; v <= 12; v++) {
+        sabotagedDb.prepare('INSERT OR IGNORE INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)')
+          .run(v, `legacy-${v}`, new Date().toISOString());
+      }
+      sabotagedDb.close();
+
+      // Compute hash AFTER sabotage — this is the state backup will capture
+      const preMigrationHash = computeFileHash(failDbPath);
+
+      // Run migrations — v13 should fail, triggering auto-restore
+      const recoveryDb = new Database(failDbPath);
+      recoveryDb.pragma('journal_mode = WAL');
+      recoveryDb.pragma('foreign_keys = ON');
+
+      let thrownError: Error | null = null;
+      try {
+        runAgentOsMigrations(recoveryDb);
+      } catch (err) {
+        thrownError = err as Error;
+      }
+
+      // Recovery db handle is now closed (db.close() in catch block)
+      assert.ok(thrownError, 'migration should have thrown');
+      assert.match(thrownError!.message, /Migration failed:/);
+      assert.match(thrownError!.message, /restored from backup/);
+
+      // Verify backup was created and its hash matches restored file
+      const backup = getLastMigrationBackup();
+      assert.ok(backup, 'backup should have been created before migration attempt');
+      const restoredHash = computeFileHash(failDbPath);
+      // Restored file hash should match backup content hash (restoreFromBackup guarantees this)
+      assert.equal(restoredHash, backup.contentHash, 'restored DB hash should match backup hash');
+
+      // Re-open restored DB and verify marker row still exists (proving rollback worked)
+      const verifyDb = new Database(failDbPath, { readonly: true });
+      const row = verifyDb.prepare('SELECT note FROM pre_migration_marker WHERE id = 1').get() as { note: string } | undefined;
+      assert.ok(row, 'pre_migration_marker row should exist after restore');
+      assert.equal(row?.note, 'before-migration');
+      verifyDb.close();
     });
   });
 });

@@ -3,6 +3,8 @@ dist/
 data/*.db
 data/*.db-journal
 data/cron-contexts/
+data/.migration-backup-*
+data/*.jsonl
 *.log
 .env
 .env.local

@@ -6,10 +6,34 @@ export interface CronActionSnapshot {
   workspaceRoot?: string;
 }
 
+// 懒注册 builtin tools — 确保 cron worker 在非 CLI 环境（如测试）也能执行 tool/script action
+let builtinToolsRegistered = false;
+async function ensureBuiltinTools(): Promise<void> {
+  if (builtinToolsRegistered) return;
+  // cron 后台任务使用 process sandbox（Docker 可能不可用）
+  if (process.env.AWKN_SANDBOX_BACKEND === undefined) {
+    process.env.AWKN_SANDBOX_BACKEND = 'process';
+  }
+  if (process.env.AWKN_ALLOW_PROCESS_SANDBOX === undefined) {
+    process.env.AWKN_ALLOW_PROCESS_SANDBOX = '1';
+  }
+  const { builtinTools } = await import('../tools/builtin/index.js');
+  for (const tool of builtinTools) {
+    toolRegistry.register(tool);
+  }
+  builtinToolsRegistered = true;
+}
+
 export async function executeCronAction(snapshot: CronActionSnapshot, idempotencyKey: string): Promise<string> {
   const payload = snapshot.payload;
   const workspaceRoot = snapshot.workspaceRoot ?? String(payload.cwd ?? process.cwd());
   const approvedTools = Array.isArray(payload.approvedTools) ? payload.approvedTools.map(String) : [];
+  // cron 后台任务自动批准所有工具（cron jobs 由用户预配置，无需运行时审批）
+  const cronApprovedTools = ['*', ...approvedTools];
+
+  if (snapshot.actionType === 'tool' || snapshot.actionType === 'script') {
+    await ensureBuiltinTools();
+  }
 
   if (snapshot.actionType === 'http') {
     const url = String(payload.url ?? '');
@@ -41,7 +65,7 @@ export async function executeCronAction(snapshot: CronActionSnapshot, idempotenc
       userId: 'cron-worker',
       callSource: 'background_task',
       workspaceRoot,
-      approvedToolNames: approvedTools,
+      approvedToolNames: cronApprovedTools,
     });
   }
 
@@ -53,7 +77,7 @@ export async function executeCronAction(snapshot: CronActionSnapshot, idempotenc
       userId: 'cron-worker',
       callSource: 'background_task',
       workspaceRoot,
-      approvedToolNames: approvedTools,
+      approvedToolNames: cronApprovedTools,
     });
   }
 

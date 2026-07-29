@@ -56,7 +56,10 @@ export class EvolutionLifecycle {
     correctionIds?: string[];
   }): EvolutionCandidate {
     if (input.sourceFingerprint) {
-      const existing = this.findInFlightByFingerprint(input.sourceFingerprint);
+      const kind = input.sourcePattern?.kind;
+      const existing = typeof kind === 'string'
+        ? this.findInFlightByFingerprintAndKind(input.sourceFingerprint, kind)
+        : this.findInFlightByFingerprint(input.sourceFingerprint);
       if (existing) {
         this.linkCorrections(existing.id, input.correctionIds ?? []);
         return existing;
@@ -96,13 +99,32 @@ export class EvolutionLifecycle {
     ).get(fingerprint) as EvolutionCandidate | undefined) ?? null;
   }
 
+  /** 按 fingerprint + pattern kind 查找进行中的候选（同指纹不同 kind 视为不同经验） */
+  findInFlightByFingerprintAndKind(fingerprint: string, kind: string): EvolutionCandidate | null {
+    return (this.db.prepare(
+      `SELECT * FROM evolution_candidates
+       WHERE source_fingerprint = ?
+         AND json_extract(source_pattern_json, '$.kind') = ?
+         AND status IN ('DRAFT', 'VALIDATING', 'APPROVED', 'ACTIVE')
+       ORDER BY version DESC LIMIT 1`,
+    ).get(fingerprint, kind) as EvolutionCandidate | undefined) ?? null;
+  }
+
   linkCorrections(candidateId: string, correctionIds: string[]): number {
     if (correctionIds.length === 0) return 0;
+    // Filter to only corrections that exist in corrections_ledger (avoid FK constraint failure)
+    const existingIds = new Set(
+      this.db.prepare('SELECT id FROM corrections_ledger WHERE id IN (' +
+        correctionIds.map(() => '?').join(',') + ')').all(...correctionIds)
+        .map((row) => (row as { id: string }).id),
+    );
+    const validIds = correctionIds.filter((id) => existingIds.has(id));
+    if (validIds.length === 0) return 0;
     const insert = this.db.prepare(
       `INSERT OR IGNORE INTO evolution_candidate_corrections
        (candidate_id, correction_id, created_at) VALUES (?, ?, ?)`,
     );
-    return this.db.transaction(() => correctionIds.reduce((count, correctionId) =>
+    return this.db.transaction(() => validIds.reduce((count, correctionId) =>
       count + insert.run(candidateId, correctionId, new Date().toISOString()).changes, 0))();
   }
 

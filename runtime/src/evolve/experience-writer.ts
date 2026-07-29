@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EvolutionLifecycle } from './lifecycle.js';
+import { getCorrectionsLedger } from './corrections-ledger.js';
 import type { DetectedPattern } from './pattern-detector.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -44,10 +45,10 @@ export function patternToMarkdown(pattern: DetectedPattern, experienceId: string
 
 - **类型**: derived
 - **日期**: ${new Date().toISOString()}
-- **状态**: DRAFT / 待回放验证
+- **状态**: 待人工补充
 - **fingerprint**: ${pattern.fingerprint}
 
-## 1. 检测模式
+## 1. 检测到的模式
 
 | 维度 | 值 |
 |---|---|
@@ -58,22 +59,22 @@ export function patternToMarkdown(pattern: DetectedPattern, experienceId: string
 | last_ts | ${pattern.lastTs} |
 | goal_id | ${pattern.goalId ?? '(无)'} |
 
-## 2. 最近错误
+## 2. 最近一次错误文本
 
 \`\`\`
 ${pattern.latestError.slice(0, 2000)}
 \`\`\`
 
-## 3. 样本证据
+## 3. 样本 correction ID
 
 ${pattern.sampleIds.map((id) => `- ${id}`).join('\n')}
 
-## 4. 候选根因
+## 4. 根因分析（待人工补充）
 
 - 检查失败是否由协议、状态、外部依赖、权限、测试覆盖或上下文缺失引起。
 - 通过历史任务回放验证规则，禁止仅凭文本判断晋级。
 
-## 5. 候选工程规则
+## 5. 待提炼的铁律（待人工补充）
 
 1. 在修改前复用现有接口、状态与证据。
 2. 对该 fingerprint 增加确定性检查和失败证据。
@@ -88,7 +89,7 @@ ${pattern.sampleIds.map((id) => `- ${id}`).join('\n')}
 
 ---
 
-_自动生成的候选经验。相关 correction 在 ACTIVE 前保持开放。_
+_自动生成的候选经验（DRAFT）。相关 correction 已在起草时标记 resolved，经验本身待 awkn-复盘总结 补全根因与工程规则后回放验证晋级。_
 `;
 }
 
@@ -105,18 +106,28 @@ export interface WriteResult {
 
 export function writeExperience(pattern: DetectedPattern): WriteResult {
   const lifecycle = new EvolutionLifecycle();
-  const existing = lifecycle.findInFlightByFingerprint(pattern.fingerprint);
+  const existing = lifecycle.findInFlightByFingerprintAndKind(pattern.fingerprint, pattern.kind);
   if (existing) {
+    // Ensure file exists at the current derived dir (previous file may have been cleaned up)
+    const dir = getDerivedDir();
+    mkdirSync(dir, { recursive: true });
+    const filePath = resolve(dir, `${existing.experience_id}.md`);
+    if (!existsSync(filePath)) writeFileSync(filePath, patternToMarkdown(pattern, existing.experience_id), 'utf-8');
     const linked = lifecycle.linkCorrections(existing.id, pattern.sampleIds);
+    const resolved = getCorrectionsLedger().resolveByFingerprint(
+      pattern.fingerprint,
+      `experience ${existing.experience_id} reused (kind=${pattern.kind})`,
+      existing.experience_id,
+    );
     return {
       experienceId: existing.experience_id,
-      filePath: existing.content_path,
+      filePath,
       pattern,
       candidateId: existing.id,
       candidateStatus: existing.status,
       linkedCorrections: linked,
       reusedCandidate: true,
-      resolvedCorrections: 0,
+      resolvedCorrections: resolved,
     };
   }
 
@@ -132,6 +143,11 @@ export function writeExperience(pattern: DetectedPattern): WriteResult {
     sourceFingerprint: pattern.fingerprint,
     correctionIds: pattern.sampleIds,
   });
+  const resolvedCorrections = getCorrectionsLedger().resolveByFingerprint(
+    pattern.fingerprint,
+    `experience ${experienceId} drafted (kind=${pattern.kind})`,
+    experienceId,
+  );
   return {
     experienceId,
     filePath,
@@ -140,7 +156,7 @@ export function writeExperience(pattern: DetectedPattern): WriteResult {
     candidateStatus: candidate.status,
     linkedCorrections: pattern.sampleIds.length,
     reusedCandidate: false,
-    resolvedCorrections: 0,
+    resolvedCorrections,
   };
 }
 
@@ -184,6 +200,7 @@ export interface PendingDraft {
   pendingMarkerCount: number;
 }
 
+// M3 进阶-18: scanPendingDrafts / completePendingDrafts — 候选经验草稿扫描与补全
 export function scanPendingDrafts(): PendingDraft[] {
   const dir = getDerivedDir();
   if (!existsSync(dir)) return [];

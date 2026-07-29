@@ -23,6 +23,7 @@ export const readTool: ToolHandler = {
   },
   async execute(args) {
     const path = args.path as string;
+    // M3 进阶-25: throw Error instead of returning error string, so agent-loop records isError
     if (!existsSync(path)) throw new Error(`File not found: ${path}`);
     return readFileSync(path, 'utf-8');
   },
@@ -80,6 +81,7 @@ export const execTool: ToolHandler = {
       });
       return (stdout + stderr).slice(0, 50000);
     } catch (err) {
+      // M3 进阶-24: enriched error construction with stdout/stderr for error propagation chain
       const error = err as Error & { stdout?: string; stderr?: string };
       const combined = (error.stderr ?? '') + (error.stdout ?? '');
       throw new Error(combined

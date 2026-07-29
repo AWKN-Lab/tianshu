@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseSkillFile as parseSkillContent } from './parser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -17,37 +18,20 @@ export interface SkillMetadata {
 
 interface SkillRecord { meta: SkillMetadata; body: string }
 
-function parseArray(value: string): string[] {
-  const trimmed = value.trim();
-  const raw = trimmed.startsWith('[') && trimmed.endsWith(']') ? trimmed.slice(1, -1) : trimmed;
-  return raw.split(',').map((part) => part.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
-}
-
 function parseSkillFile(filePath: string): SkillRecord {
   const content = readFileSync(filePath, 'utf-8');
-  const frontmatter = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/);
-  const body = frontmatter ? content.slice(frontmatter[0].length) : content;
-  const fields = new Map<string, string>();
-  if (frontmatter) {
-    for (const line of frontmatter[1].split('\n')) {
-      const match = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
-      if (match) fields.set(match[1].toLowerCase(), match[2].trim());
-    }
-  }
-
-  const name = fields.get('name')?.replace(/^['"]|['"]$/g, '') ?? basename(dirname(filePath));
-  const enabledValue = fields.get('enabled')?.toLowerCase();
-  const statusValue = fields.get('status')?.toLowerCase();
+  const parsed = parseSkillContent(content);
+  const name = parsed.meta.name || basename(dirname(filePath));
   return {
     meta: {
       name,
-      version: fields.get('version')?.replace(/^['"]|['"]$/g, '') ?? '0.0.0',
-      description: fields.get('description')?.replace(/^['"]|['"]$/g, '') ?? '',
-      triggers: parseArray(fields.get('triggers') ?? fields.get('trigger') ?? ''),
-      enabled: enabledValue !== 'false' && statusValue !== 'disabled',
+      version: parsed.meta.version,
+      description: parsed.meta.description,
+      triggers: parsed.meta.triggers,
+      enabled: parsed.meta.enabled,
       filePath,
     },
-    body,
+    body: parsed.body,
   };
 }
 

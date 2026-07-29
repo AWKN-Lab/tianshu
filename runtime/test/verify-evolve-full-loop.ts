@@ -28,8 +28,12 @@ if (existsSync(TMP_DERIVED)) {
 mkdirSync(TMP_DERIVED, { recursive: true });
 process.env.AWKN_DERIVED_DIR = TMP_DERIVED;
 
-// SKILL.md 路径（项目根下）
+// SKILL.md 路径（项目根下，属于独立资产，见仓库 .gitignore：/skills/ 作为独立资产另行管理）
 const SKILL_MD = resolve(process.cwd(), '..', 'skills', 'awkn-复盘总结', 'SKILL.md');
+// CI fresh clone 时 /skills/ 不存在（被 .gitignore 排除），此时跳过 SKILL.md 相关断言。
+// runtime 核心职责是生成经验草稿（第 1/4/5 节），SKILL.md 的扫描指令属于项目级 skill 资产。
+const SKILL_MD_AVAILABLE = existsSync(SKILL_MD);
+const SKILL_CONTENT = SKILL_MD_AVAILABLE ? readFileSync(SKILL_MD, 'utf-8') : '';
 
 // ─── mock DetectedPattern ────────────────────────────────────────
 const mockPattern: DetectedPattern = {
@@ -96,35 +100,35 @@ assert(
 // ─── 2. SKILL.md 15.1 子章节验证 ─────────────────────────────────
 console.log('\n=== 2. awkn-复盘总结 SKILL.md 15.1 子章节验证 ===');
 
-assert(existsSync(SKILL_MD), `SKILL.md 存在: ${SKILL_MD}`);
+if (!SKILL_MD_AVAILABLE) {
+  console.log(`  ⏭️  SKILL.md 不存在（${SKILL_MD}），跳过（/skills/ 为独立资产，CI 环境正常）`);
+} else {
+  // 验证 frontmatter version 是 v2.6.2
+  assert(
+    /version:\s*"v2\.6\.2"/.test(SKILL_CONTENT),
+    'frontmatter version = v2.6.2（对齐 §十九）',
+  );
 
-const skillContent = readFileSync(SKILL_MD, 'utf-8');
+  // 验证 triggers 含新触发词
+  assert(
+    SKILL_CONTENT.includes('"补全草稿"') &&
+      SKILL_CONTENT.includes('"处理 derived"') &&
+      SKILL_CONTENT.includes('"扫草稿"'),
+    'triggers 含新触发词（补全草稿/处理 derived/扫草稿）',
+  );
 
-// 验证 frontmatter version 是 v2.6.2
-assert(
-  /version:\s*"v2\.6\.2"/.test(skillContent),
-  'frontmatter version = v2.6.2（对齐 §十九）',
-);
+  // 验证 15.1 子章节存在
+  assert(
+    SKILL_CONTENT.includes('### 15.1 derived 草稿自动补全流程（v2.6.2 新增）'),
+    '§十五 含 15.1 子章节 "derived 草稿自动补全流程"',
+  );
 
-// 验证 triggers 含新触发词
-assert(
-  skillContent.includes('"补全草稿"') &&
-    skillContent.includes('"处理 derived"') &&
-    skillContent.includes('"扫草稿"'),
-  'triggers 含新触发词（补全草稿/处理 derived/扫草稿）',
-);
-
-// 验证 15.1 子章节存在
-assert(
-  skillContent.includes('### 15.1 derived 草稿自动补全流程（v2.6.2 新增）'),
-  '§十五 含 15.1 子章节 "derived 草稿自动补全流程"',
-);
-
-// 验证扫描路径正确
-assert(
-  skillContent.includes('agents/tianhuo/04-记忆与知识/EXPERIENCE/derived/'),
-  '15.1 含正确扫描路径',
-);
+  // 验证扫描路径正确
+  assert(
+    SKILL_CONTENT.includes('agents/tianhuo/04-记忆与知识/EXPERIENCE/derived/'),
+    '15.1 含正确扫描路径',
+  );
+}
 
 // ─── 3. 扫描标记与草稿格式匹配验证（核心闭环）──────────────────────
 console.log('\n=== 3. 扫描标记与草稿格式匹配验证（闭环核心）===');
@@ -136,14 +140,18 @@ const skillMarkers = [
   '## 5. 待提炼的铁律（待人工补充）',
 ];
 
-// 验证每个标记都能在草稿中找到
-for (const marker of skillMarkers) {
-  const inSkill = skillContent.includes(marker);
-  const inDraft = draftContent.includes(marker);
-  assert(
-    inSkill && inDraft,
-    `标记 "${marker}" 在 SKILL.md (${inSkill ? '✓' : '✗'}) 和草稿 (${inDraft ? '✓' : '✗'}) 中都存在`,
-  );
+if (!SKILL_MD_AVAILABLE) {
+  console.log('  ⏭️  SKILL.md 不存在，跳过标记匹配验证（CI 环境正常）');
+} else {
+  // 验证每个标记都能在草稿中找到
+  for (const marker of skillMarkers) {
+    const inSkill = SKILL_CONTENT.includes(marker);
+    const inDraft = draftContent.includes(marker);
+    assert(
+      inSkill && inDraft,
+      `标记 "${marker}" 在 SKILL.md (${inSkill ? '✓' : '✗'}) 和草稿 (${inDraft ? '✓' : '✗'}) 中都存在`,
+    );
+  }
 }
 
 // ─── 4. 扫描流程验证：derived 目录可被遍历找草稿 ──────────────────
@@ -187,12 +195,16 @@ assert(!stillPending, '补全后草稿不再被识别为"待补全"（闭环关�
 // ─── 6. E74 边界验证：铁律不自动标"已提炼" ────────────────────────
 console.log('\n=== 6. E74 边界验证：铁律不自动标"已提炼" ===');
 
-// SKILL.md 15.1 必须含"铁律最终必须人工确认"边界
-assert(
-  skillContent.includes('铁律最终必须人工确认') &&
-    skillContent.includes('不能自动标"已提炼"'),
-  '15.1 含 E74 边界（铁律必须人工确认，不自动标"已提炼"）',
-);
+if (!SKILL_MD_AVAILABLE) {
+  console.log('  ⏭️  SKILL.md 不存在，跳过 E74 边界验证（CI 环境正常）');
+} else {
+  // SKILL.md 15.1 必须含"铁律最终必须人工确认"边界
+  assert(
+    SKILL_CONTENT.includes('铁律最终必须人工确认') &&
+      SKILL_CONTENT.includes('不能自动标"已提炼"'),
+    '15.1 含 E74 边界（铁律必须人工确认，不自动标"已提炼"）',
+  );
+}
 
 // ─── 清理 ─────────────────────────────────────────────────────────
 rmSync(TMP_DERIVED, { recursive: true, force: true });

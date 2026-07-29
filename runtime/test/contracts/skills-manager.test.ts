@@ -26,4 +26,33 @@ describe('SkillsManager', () => {
     const resolved = resolveDefaultSkillsRoot().replace(/\\/g, '/');
     assert.match(resolved, /\/skills$/);
   });
+
+  it('parses CRLF line endings in SKILL.md frontmatter (M3 进阶-21)', () => {
+    const root = mkdtempSync(join(tmpdir(), 'awkn-skills-crlf-'));
+    const skillDir = join(root, 'crlf-skill');
+    mkdirSync(skillDir, { recursive: true });
+    // 写入 CRLF 行尾的 SKILL.md（Windows 默认）
+    const crlfContent = [
+      '---',
+      'name: crlf-audit',
+      'version: 2.0.0',
+      'description: audit with CRLF',
+      'triggers: [audit, crlf]',
+      '---',
+      'Body with CRLF.',
+      '',
+    ].join('\r\n');
+    writeFileSync(join(skillDir, 'SKILL.md'), crlfContent);
+
+    const manager = new SkillsManager(root);
+    const loaded = manager.loadAll();
+    assert.equal(loaded.length, 1);
+    const skill = loaded[0]!;
+    assert.equal(skill.name, 'crlf-audit');
+    assert.equal(skill.version, '2.0.0');
+    assert.equal(skill.description, 'audit with CRLF');
+    assert.deepEqual(skill.triggers, ['audit', 'crlf']);
+    assert.equal(skill.enabled, true);
+    assert.equal(manager.getSkillBody('crlf-audit')?.trim(), 'Body with CRLF.');
+  });
 });
