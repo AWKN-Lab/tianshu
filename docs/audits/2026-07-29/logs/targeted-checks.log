@@ -1,0 +1,15 @@
+CHECK runtime/test/contracts/policy-ast-deep.test.ts
+CHECK runtime/src/llm/bridge-path.ts
+CHECK runtime/src/llm/providers/trae.ts
+CHECK runtime/scripts/bridge-daemon.ts
+CHECK runtime/src/memory/awkn-memory-os-backend.ts
+CHECK runtime/src/memory/router.ts
+CHECK runtime/src/llm/router.ts
+CHECK runtime/test/contracts/memory-backend-adapter.test.ts
+CHECK runtime/test/contracts/bridge-path.test.ts
+{"defaultPath":"/mnt/data/awkn-audit-work/runtime/data/llm-bridge","cwdIndependent":true,"absoluteOverride":true,"relativeRejected":true}
+(node:2552) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+Patch apply check
+PASS
