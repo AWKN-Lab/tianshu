@@ -37,14 +37,14 @@ Trusted Input Gateway
 ```text
 R0 Baseline                Done
 → R1 Contract Kernel       Done
-→ R2 Trusted Decision Core Components near complete
+→ R2 Trusted Decision Core Done (PR #90 merged 2026-07-29, main@9810bc0)
    WP02 Trusted Input       main@20c52409
    WP03 Intent / Goal       main@a461e408
    WP04 Claim Ledger        main@df174845，Migration v12
    WP05A Context Planner    main@b5c9c401
    WP05B Context Render     PR #64，机器验证已通过，等待语义 Review
-   R2 Shadow Exit           Issue #66，未开始
-→ R3—R6                    Issue #67—#80
+   R2 Shadow Exit           GO (2026-07-28)，见 docs/2026-07-28-R2-Exit-Report.md
+→ R3—R6                    Issue #67—#80，13 个 feat 分支待合并
 ```
 
 当前 Agent OS 组件仍以 Mode `0` 为主。Engine v2 保持默认执行路径，Shadow 与 Enforce 必须按总计划逐组件推进。
