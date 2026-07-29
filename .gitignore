@@ -121,3 +121,8 @@ integrations/open-code-review-src-tmp/**
 *~
 .cache/
 .tmp/
+
+# ===== OCR 上游源码临时副本（仅用于调研移植，不入仓）=====
+integrations/open-code-review-src-tmp/
+# OCR 构建产物（二进制不入仓，CI 现场构建）
+integrations/open-code-review/bin/

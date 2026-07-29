@@ -36,6 +36,7 @@ export const AWKN_ID_PREFIXES = {
   reviewUnit: 'runit',
   reviewRun: 'rrun',
   reviewFinding: 'rfnd',
+  reviewReceipt: 'rrcpt',
   policy: 'pol',
   skill: 'sk',
 } as const;
