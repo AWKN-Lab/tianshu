@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - 'runtime/**'
+      - 'integrations/open-code-review/**'
       - '.github/workflows/runtime-ci.yml'
   push:
     branches: [main]
     paths:
       - 'runtime/**'
+      - 'integrations/open-code-review/**'
       - '.github/workflows/runtime-ci.yml'
 
 permissions:
@@ -19,6 +21,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ocr-producer:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: integrations/open-code-review/src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: integrations/open-code-review/src/go.mod
+          cache: false
+      - name: Test minimal OCR producer
+        run: go test ./...
+      - name: Build engine-local OCR producer
+        shell: bash
+        run: |
+          suffix=""
+          if [ "$RUNNER_OS" = "Windows" ]; then suffix=".exe"; fi
+          mkdir -p ../bin
+          go build -trimpath -o "../bin/ocr${suffix}" ./cmd/ocr
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+      - name: Export native OCR binary path
+        run: node -e "const fs=require('node:fs'),p=require('node:path');fs.appendFileSync(process.env.GITHUB_ENV,'AWKN_TEST_OCR_BINARY='+p.resolve('../bin',process.platform==='win32'?'ocr.exe':'ocr')+String.fromCharCode(10))"
+      - name: Install Runtime dependencies
+        working-directory: runtime
+        run: npm ci
+      - name: Verify OCR and Native Git content binding
+        working-directory: runtime
+        run: node --import tsx --test test/ocr-producer-integration.test.ts
+
   check:
     strategy:
       fail-fast: false

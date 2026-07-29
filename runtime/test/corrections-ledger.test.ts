@@ -124,6 +124,16 @@ describe('computeFingerprint', () => {
 // ─── Manager: record + read ───────────────────────────────────────
 
 describe('CorrectionsLedger.record', () => {
+  it('preserves a validated upstream finding fingerprint', () => {
+    const ledger = new CorrectionsLedger();
+    const fingerprint = 'a'.repeat(64);
+    const row = ledger.record({ source: 'review:CORRECTNESS', errorText: 'broken invariant', fingerprint });
+    assert.equal(row.fingerprint, fingerprint);
+    assert.throws(
+      () => ledger.record({ source: 'review:CORRECTNESS', errorText: 'bad fingerprint', fingerprint: 'unsafe' }),
+      /fingerprint/,
+    );
+  });
   it('写入 + 字段完整性 + 自动 fingerprint', () => {
     const ledger = new CorrectionsLedger();
     const row = ledger.record({

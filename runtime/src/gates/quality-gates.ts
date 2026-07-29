@@ -13,6 +13,7 @@ import { createLogger } from '../core/logger.js';
 import { getGoalManager } from '../goal/goal-manager.js';
 import { parseReviewVerdict } from './prd-consistency.js';
 import { getCorrectionsLedger } from '../evolve/corrections-ledger.js';
+import { ReviewReceiptSchema, type ReviewReceipt } from '../contracts/public.js';
 
 const execFileAsync = promisify(execFile);
 const logger = createLogger('QualityGates');
@@ -39,6 +40,12 @@ export interface GateContext {
    * 历史问题：v0.1 reviewGate 默认 passed=true，导致 L2 永远"自评自满"通过
    */
   reviewVerdict?: string;
+  /** Review Kernel rollout mode. Receipt implies enforce when mode is omitted. */
+  reviewMode?: '0' | 'shadow' | 'enforce';
+  /** Structured Review Kernel receipt. Only a valid PASS receipt satisfies enforce mode. */
+  reviewReceipt?: ReviewReceipt;
+  /** Independent security scan verdict; never inferred from code review. */
+  securityVerdict?: string;
 }
 
 export interface GateResult {
@@ -50,6 +57,8 @@ export interface GateResult {
   suggestion?: string;
   /** 执行耗时（ms） */
   durationMs: number;
+  receiptId?: string;
+  reasonCodes?: string[];
 }
 
 // ─── 自进化闭环入口：记录 gate 失败到 corrections-ledger ──────────
@@ -228,12 +237,49 @@ export async function lintGate(ctx: GateContext): Promise<GateResult> {
  */
 export async function reviewGate(ctx: GateContext): Promise<GateResult> {
   const startedAt = Date.now();
+  const mode = ctx.reviewMode ?? (ctx.reviewReceipt === undefined ? '0' : 'enforce');
+
+  if (mode === 'enforce') {
+    if (ctx.reviewReceipt === undefined) {
+      return {
+        name: 'reviewGate',
+        passed: false,
+        details: 'Review Kernel enforce 模式缺少结构化 REVIEW Receipt',
+        suggestion: '执行 ReviewService.evaluate 并传入完整 Review Receipt',
+        durationMs: Date.now() - startedAt,
+      };
+    }
+    const parsed = ReviewReceiptSchema.safeParse(ctx.reviewReceipt);
+    if (!parsed.success) {
+      return {
+        name: 'reviewGate',
+        passed: false,
+        details: `Review Receipt 非法: ${parsed.error.issues.map((issue) => issue.message).join('; ')}`.slice(0, 1_000),
+        suggestion: '重新执行结构化审核，禁止用文本 verdict 绕过 Receipt 校验',
+        durationMs: Date.now() - startedAt,
+      };
+    }
+    const payload = ctx.reviewReceipt.payload;
+    return {
+      name: 'reviewGate',
+      passed: payload.verdict.status === 'PASS',
+      details: `Review Kernel ${payload.verdict.status}; coverage=${payload.coverage.fileCoverage.toFixed(3)}/${payload.coverage.riskCoverage.toFixed(3)}`,
+      suggestion: payload.verdict.status === 'PASS'
+        ? undefined
+        : `处理 Review Receipt ${ctx.reviewReceipt.receiptId} 的阻断项后重新审核`,
+      durationMs: Date.now() - startedAt,
+      receiptId: ctx.reviewReceipt.receiptId,
+      reasonCodes: [...payload.verdict.reasonCodes],
+    };
+  }
 
   if (!ctx.reviewVerdict) {
     return {
       name: 'reviewGate',
       passed: false,
-      details: '未提供 review verdict（caller 必须先调 awkn-审核 技能并传入 finalText）',
+      details: mode === 'shadow'
+        ? 'Review shadow 模式仍缺少 legacy review verdict'
+        : '未提供 review verdict（caller 必须先调 awkn-审核 技能并传入 finalText）',
       suggestion: '在调 evaluateL2StopConditions 之前，先 callSkill("awkn-审核", ...) 并把结果放入 ctx.reviewVerdict',
       durationMs: Date.now() - startedAt,
     };
@@ -264,28 +310,26 @@ export async function reviewGate(ctx: GateContext): Promise<GateResult> {
  *   拿到扫描结果后传入 ctx.securityVerdict
  * - 无 securityVerdict 时 returned=false
  *
- * 注：当前复用 awkn-审核 输出（awkn-安全扫描 技能在仓库内不存在），实际只检查 verdict 是否 PASS
+ * 安全结论必须来自独立扫描，不能由代码 Review PASS 推导。
  */
 export async function securityGate(ctx: GateContext): Promise<GateResult> {
   const startedAt = Date.now();
 
-  // 暂复用 reviewVerdict 作为安全扫描来源（awkn-审核 输出已含安全维度）
-  // 待 awkn-安全扫描 技能独立后，应增加 ctx.securityVerdict 字段
-  if (!ctx.reviewVerdict) {
+  if (!ctx.securityVerdict) {
     return {
       name: 'securityGate',
       passed: false,
-      details: '未提供 security 扫描结果（当前复用 reviewVerdict，待独立 awkn-安全扫描 技能接入）',
-      suggestion: '在调 runAllGates 之前，先 callSkill("awkn-审核", ...) 并把结果放入 ctx.reviewVerdict',
+      details: '未提供 security 扫描结果（必须来自独立安全扫描）',
+      suggestion: '先执行独立安全扫描并把明确 verdict 放入 ctx.securityVerdict',
       durationMs: Date.now() - startedAt,
     };
   }
 
-  const verdict = parseReviewVerdict(ctx.reviewVerdict);
+  const verdict = parseReviewVerdict(ctx.securityVerdict);
   return {
     name: 'securityGate',
     passed: verdict === 'PASS',
-    details: ctx.reviewVerdict.slice(0, 500),
+    details: ctx.securityVerdict.slice(0, 500),
     suggestion: verdict === 'FAIL'
       ? '存在安全风险，根据 awkn-审核 的安全部分修复'
       : verdict === null

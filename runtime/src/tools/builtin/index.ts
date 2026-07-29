@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import type { ToolHandler } from '../types.js';
 import { memoryTools } from './memory-tools.js';
 import { skillTool } from './skill-tool.js';
+import { reviewRepositoryTool } from './review-repository-tool.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -212,5 +213,6 @@ export const builtinTools: ToolHandler[] = [
   grepTool,
   globTool,
   skillTool,
+  reviewRepositoryTool,
   ...memoryTools,
 ];

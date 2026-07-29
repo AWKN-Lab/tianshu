@@ -187,7 +187,7 @@ describe('Migration Backup/Restore', () => {
       const backup = getLastMigrationBackup();
       assert.ok(backup, 'backup should have been created');
       assert.equal(existsSync(backup.backupPath), true);
-      assert.deepEqual(backup.pendingMigrations, [11, 12, 13]);
+      assert.deepEqual(backup.pendingMigrations, [11, 12, 13, 14]);
       assert.equal(backup.contentHash.length, 64);
 
       // Verify migrations were applied
@@ -196,6 +196,7 @@ describe('Migration Backup/Restore', () => {
       assert.ok(versionList.includes(11));
       assert.ok(versionList.includes(12));
       assert.ok(versionList.includes(13));
+      assert.ok(versionList.includes(14));
 
       db.close();
     });
@@ -296,7 +297,7 @@ describe('Migration Backup/Restore', () => {
 
   describe('listMigrationBackups and cleanup', () => {
     it('lists backups sorted by creation time', () => {
-      const listDbPath = join(testDir, 'list-test.db');
+      const listDbPath = join(testDir, 'list-case', 'list-test.db');
       const db1 = createTestDb(listDbPath);
       const backup1 = backupBeforeMigration(db1, listDbPath, [11]);
       db1.close();
@@ -314,7 +315,7 @@ describe('Migration Backup/Restore', () => {
     });
 
     it('cleanupOldBackups keeps only N most recent', () => {
-      const cleanupDbPath = join(testDir, 'cleanup-test.db');
+      const cleanupDbPath = join(testDir, 'cleanup-case', 'cleanup-test.db');
       for (let i = 0; i < 7; i++) {
         const db = createTestDb(cleanupDbPath);
         backupBeforeMigration(db, cleanupDbPath, [11]);

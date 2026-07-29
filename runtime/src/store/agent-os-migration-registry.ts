@@ -232,6 +232,29 @@ const AGENT_OS_MIGRATIONS: readonly AgentOsMigration[] = [
       }
     },
   },
+  {
+    version: 14,
+    name: 'review-kernel-evidence-store',
+    up(db) {
+      db.exec(`
+        CREATE TABLE evidence_records (
+          id TEXT PRIMARY KEY,
+          execution_id TEXT NOT NULL,
+          trace_id TEXT NOT NULL,
+          evidence_type TEXT NOT NULL,
+          evidence_level INTEGER NOT NULL CHECK (evidence_level BETWEEN 0 AND 5),
+          content_hash TEXT NOT NULL,
+          record_json TEXT NOT NULL,
+          observed_at TEXT NOT NULL,
+          FOREIGN KEY (execution_id) REFERENCES executions(id) ON DELETE CASCADE
+        );
+        CREATE INDEX idx_evidence_execution
+          ON evidence_records(execution_id, observed_at);
+        CREATE INDEX idx_evidence_content_hash
+          ON evidence_records(content_hash);
+      `);
+    },
+  },
 ] as const;
 
 /**

@@ -20,6 +20,8 @@ export interface ExecutionContext {
   runId?: string;
   stepId?: string;
   traceId?: string;
+  /** Trusted runtime-derived Actor identity for the implementation under review. */
+  implementerActorId?: string;
 }
 
 export interface ToolResult {
