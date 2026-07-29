@@ -20,6 +20,8 @@ export interface ExecutionContext {
   runId?: string;
   stepId?: string;
   traceId?: string;
+  /** PR2: 可选的 implementer Actor ID，用于 Review Kernel 禁止自改自审。PR3 将从可信执行上下文强制注入。 */
+  implementerActorId?: string;
 }
 
 export interface ToolResult {

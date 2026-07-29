@@ -31,6 +31,12 @@ export const AWKN_ID_PREFIXES = {
   skillBundle: 'sb',
   evolveCandidateV2: 'ecv',
   cycle: 'cycle',
+  reviewTarget: 'rtgt',
+  reviewUnit: 'runit',
+  reviewPlan: 'rplan',
+  reviewRun: 'rrun',
+  reviewFinding: 'rfnd',
+  reviewReceipt: 'rrcpt',
 } as const;
 
 export type AwknIdKind = keyof typeof AWKN_ID_PREFIXES;

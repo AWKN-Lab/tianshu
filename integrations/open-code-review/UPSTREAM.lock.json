@@ -1,0 +1,10 @@
+{
+  "schema": "awkn-third-party-source-lock/v1",
+  "name": "open-code-review",
+  "upstream": "https://github.com/alibaba/open-code-review",
+  "commit": "08040752143057781b40aa091b50edfa5895960b",
+  "license": "Apache-2.0",
+  "protocol": "ocr-delegate-spec/v1",
+  "integrationRoot": "integrations/open-code-review",
+  "runtimeExternalCheckoutAllowed": false
+}
