@@ -6,7 +6,12 @@ import type {
   ObserveMemoryUsageInput,
   RememberInteractionInput,
 } from './backend.js';
-import { AwknMemoryOsBackend, type MemoryOsDiagnostic } from './awkn-memory-os-backend.js';
+import {
+  AwknMemoryOsBackend,
+  MemoryHttpError,
+  MemoryProtocolError,
+  type MemoryOsDiagnostic,
+} from './awkn-memory-os-backend.js';
 import { MemoryAuthorityOutboxProcessor } from './authority-outbox.js';
 import {
   AwknMemoryAuthorityClient,
@@ -23,6 +28,18 @@ function configuredMode(): MemoryBackendMode {
 
 function remoteConfigured(mode: MemoryBackendMode): boolean {
   return mode === 'memory-os' || Boolean(process.env.AWKN_MEMORY_OS_URL);
+}
+
+function isTransportFailure(error: unknown): boolean {
+  return error instanceof TypeError
+    || (error instanceof Error && error.name === 'AbortError');
+}
+
+function mayFallbackToLocal(mode: MemoryBackendMode, error: unknown): boolean {
+  if (mode !== 'auto') return false;
+  if (error instanceof MemoryProtocolError) return false;
+  if (error instanceof MemoryHttpError) return error.status >= 500;
+  return isTransportFailure(error);
 }
 
 export interface MemoryRouterDiagnostic {
@@ -84,7 +101,8 @@ export class MemoryBackendRouter {
       await this.flushAuthorityOutbox(5).catch(() => ({ delivered: 0, failed: 1, pending: 0 }));
       try {
         return await this.remote.compileContext(input);
-      } catch {
+      } catch (error) {
+        if (!mayFallbackToLocal(this.mode, error)) throw error;
         const fallback = await this.local.compileContext(input);
         return { ...fallback, stale: true };
       }
