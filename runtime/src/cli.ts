@@ -109,6 +109,14 @@ function usage(): void {
           scan-drafts         扫描 derived 目录待补全草稿（M3 进阶-18）
           complete-drafts     触发 awkn-复盘总结 15.1 补全草稿（需 LLM，M3 进阶-18）
 
+  migrate 数据库迁移 backup/restore 管理（Step 4）
+          status              显示当前 DB schema version + 最近 backup 状态
+          list-backups        列出所有 migration backup（按时间倒序）
+          restore-latest [--confirm]
+                              从最近一次 backup 恢复 DB（破坏性操作，需 --confirm）
+          restore --backup <path> [--confirm]
+                              从指定 backup 恢复 DB（破坏性操作，需 --confirm）
+
 环境变量：
   AWKN_LLM_PROVIDER       默认 LLM provider（trae|codex|minimax）
   AWKN_CODEX_API_KEY      CODEX API key
@@ -202,6 +210,9 @@ async function main(): Promise<void> {
         break;
       case 'evolve':
         await handleEvolve(subcommand);
+        break;
+      case 'migrate':
+        await handleMigrate(subcommand);
         break;
       default:
         usage();
@@ -650,6 +661,122 @@ async function handleEvolve(sub: string): Promise<void> {
     default:
       console.error('Unknown evolve subcommand:', sub);
       console.error('可用：detect | list | resolve | stats | scan-drafts | complete-drafts');
+      process.exit(1);
+  }
+}
+
+/**
+ * Resolve the database file path without forcing getDb() to open a connection.
+ * Used by migrate restore commands which must operate on a closed database.
+ */
+function resolveDbPath(): string {
+  return process.env.AWKN_DB_PATH
+    ?? resolve(__dirname, '..', '..', 'data', 'awkn-engine.db');
+}
+
+async function handleMigrate(sub: string): Promise<void> {
+  const args = parseArgs(process.argv.slice(4));
+
+  switch (sub) {
+    case 'status': {
+      const db = getDb();
+      const versions = db.prepare('SELECT version, name, applied_at FROM schema_migrations ORDER BY version').all() as Array<{
+        version: number;
+        name: string;
+        applied_at: string;
+      }>;
+      const dbPath = db.name;
+      const { listMigrationBackups } = await import('./store/migration-backup.js');
+      const backups = dbPath && dbPath !== ':memory:' ? listMigrationBackups(dbPath) : [];
+      console.log(JSON.stringify({
+        dbPath: dbPath || '(in-memory)',
+        currentVersion: versions.length > 0 ? versions[versions.length - 1]!.version : 0,
+        appliedMigrations: versions,
+        backupCount: backups.length,
+        latestBackup: backups[0] ?? null,
+      }, null, 2));
+      break;
+    }
+    case 'list-backups': {
+      const dbPath = resolveDbPath();
+      const { listMigrationBackups } = await import('./store/migration-backup.js');
+      const backups = listMigrationBackups(dbPath);
+      if (backups.length === 0) {
+        console.log(JSON.stringify({ dbPath, backups: [], message: '无 migration backup' }, null, 2));
+      } else {
+        console.log(JSON.stringify({ dbPath, backups }, null, 2));
+      }
+      break;
+    }
+    case 'restore-latest': {
+      const dbPath = resolveDbPath();
+      const { listMigrationBackups, restoreFromBackup } = await import('./store/migration-backup.js');
+      const backups = listMigrationBackups(dbPath);
+      if (backups.length === 0) {
+        console.error(`无可用 backup（dbPath=${dbPath}）。无法 restore。`);
+        process.exit(1);
+      }
+      const latest = backups[0]!;
+      if (args.confirm !== 'true') {
+        console.log(JSON.stringify({
+          action: 'restore-latest',
+          targetBackup: latest,
+          originalPath: latest.originalPath,
+          message: '破坏性操作。确认执行请加 --confirm true',
+        }, null, 2));
+        break;
+      }
+      // Close any open db handle before restore (Windows file lock)
+      closeDb();
+      const displacedPath = restoreFromBackup(latest);
+      console.log(JSON.stringify({
+        action: 'restore-latest',
+        restoredFrom: latest.backupPath,
+        restoredTo: latest.originalPath,
+        displacedOriginal: displacedPath,
+        message: 'DB 已从 backup 恢复。原文件已重命名为 displaced 文件保留。下次 getDb() 将使用恢复后的文件。',
+      }, null, 2));
+      break;
+    }
+    case 'restore': {
+      const backupPath = args.backup;
+      if (!backupPath) {
+        console.error('用法：awkn-engine migrate restore --backup <path> [--confirm true]');
+        process.exit(1);
+      }
+      const dbPath = resolveDbPath();
+      const { listMigrationBackups, restoreFromBackup } = await import('./store/migration-backup.js');
+      const backups = listMigrationBackups(dbPath);
+      const target = backups.find((b) => b.backupPath === backupPath);
+      if (!target) {
+        console.error(`指定的 backup 不在 listMigrationBackups 结果中：${backupPath}`);
+        console.error('可用 backups:');
+        for (const b of backups) console.error(`  ${b.backupPath}`);
+        process.exit(1);
+      }
+      if (args.confirm !== 'true') {
+        console.log(JSON.stringify({
+          action: 'restore',
+          targetBackup: target,
+          originalPath: target.originalPath,
+          message: '破坏性操作。确认执行请加 --confirm true',
+        }, null, 2));
+        break;
+      }
+      closeDb();
+      const displacedPath = restoreFromBackup(target);
+      console.log(JSON.stringify({
+        action: 'restore',
+        restoredFrom: target.backupPath,
+        restoredTo: target.originalPath,
+        displacedOriginal: displacedPath,
+        message: 'DB 已从指定 backup 恢复。原文件已重命名为 displaced 文件保留。',
+      }, null, 2));
+      break;
+    }
+    default:
+      console.error('Unknown migrate subcommand:', sub);
+      console.error('可用：status | list-backups | restore-latest | restore --backup <path>');
       process.exit(1);
   }
 }

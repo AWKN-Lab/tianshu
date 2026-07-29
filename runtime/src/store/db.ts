@@ -15,10 +15,19 @@ export function getDb(dbPath?: string): Database.Database {
   // so a module-level const would miss the env var set by test files.
   const resolvedPath = dbPath ?? process.env.AWKN_DB_PATH ?? resolve(__dirname, '..', '..', 'data', 'awkn-engine.db');
   mkdirSync(dirname(resolvedPath), { recursive: true });
-  dbInstance = new Database(resolvedPath);
-  dbInstance.pragma('journal_mode = WAL');
-  dbInstance.pragma('foreign_keys = ON');
-  runAgentOsMigrations(dbInstance);
+  const db = new Database(resolvedPath);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+  try {
+    runAgentOsMigrations(db);
+  } catch (err) {
+    // Migration failed and (if file DB) auto-restored from backup.
+    // The db handle is now closed — must not cache it.
+    // Reset dbInstance to null so next getDb() call re-opens from restored file.
+    dbInstance = null;
+    throw err;
+  }
+  dbInstance = db;
   return dbInstance;
 }
 

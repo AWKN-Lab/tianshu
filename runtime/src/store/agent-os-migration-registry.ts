@@ -1,6 +1,11 @@
 import type Database from 'better-sqlite3';
 import { applyClaimLedgerMigrationV12 } from './claim-ledger-migration-v12.js';
-import { backupBeforeMigration, type MigrationBackup } from './migration-backup.js';
+import {
+  backupBeforeMigration,
+  cleanupOldBackups,
+  restoreFromBackup,
+  type MigrationBackup,
+} from './migration-backup.js';
 import { runAllMigrations as runLegacyAndCompatibilityMigrations } from './migration-registry-v2.js';
 
 interface AgentOsMigration {
@@ -247,6 +252,12 @@ export function resetLastMigrationBackup(): void {
   lastMigrationBackup = null;
 }
 
+/**
+ * Default number of recent backups to retain after successful migrations.
+ * Override via AWKN_MIGRATION_BACKUP_KEEP env var.
+ */
+const DEFAULT_BACKUP_KEEP_COUNT = 5;
+
 function applyAgentOsMigrations(db: Database.Database, maximumVersion = Number.MAX_SAFE_INTEGER): void {
   const applied = new Set(
     db.prepare('SELECT version FROM schema_migrations').all()
@@ -262,18 +273,64 @@ function applyAgentOsMigrations(db: Database.Database, maximumVersion = Number.M
   // Create backup before applying migrations (safety net for migration failures)
   // Skip for in-memory databases (tests) or when path is not a file
   const dbPath = db.name;
-  if (dbPath && dbPath !== ':memory:' && dbPath !== '') {
+  const isFileDb = dbPath && dbPath !== ':memory:' && dbPath !== '';
+  if (isFileDb) {
     lastMigrationBackup = backupBeforeMigration(db, dbPath, pending.map((m) => m.version));
   }
 
-  for (const migration of pending) {
-    const apply = db.transaction(() => {
-      migration.up(db);
-      db.prepare('INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)')
-        .run(migration.version, migration.name, new Date().toISOString());
-    });
-    apply();
-    applied.add(migration.version);
+  try {
+    for (const migration of pending) {
+      const apply = db.transaction(() => {
+        migration.up(db);
+        db.prepare('INSERT INTO schema_migrations(version, name, applied_at) VALUES (?, ?, ?)')
+          .run(migration.version, migration.name, new Date().toISOString());
+      });
+      apply();
+      applied.add(migration.version);
+    }
+  } catch (originalError) {
+    // Migration failed: DB may be in a half-migrated state.
+    // Auto-restore from backup to return DB to a known-good pre-migration state.
+    const backup = lastMigrationBackup;
+    const originalMessage = originalError instanceof Error ? originalError.message : String(originalError);
+
+    if (backup) {
+      // Must close db before restore (file lock on Windows)
+      try {
+        db.close();
+      } catch {
+        // db may already be closed or in bad state; continue to restore anyway
+      }
+      try {
+        restoreFromBackup(backup);
+        throw new Error(
+          `Migration failed: ${originalMessage}. Database restored from backup ${backup.backupPath}. `
+          + `Please restart the application to re-open the database.`,
+        );
+      } catch (restoreError) {
+        if (restoreError instanceof Error && restoreError.message.startsWith('Migration failed:')) {
+          throw restoreError;
+        }
+        // Restore itself failed — surface both errors
+        throw new Error(
+          `Migration failed: ${originalMessage}. `
+          + `Auto-restore also failed: ${restoreError instanceof Error ? restoreError.message : String(restoreError)}. `
+          + `Backup is at ${backup.backupPath}. Manual restore required: awkn-engine migrate restore --backup ${backup.backupPath}`,
+        );
+      }
+    } else {
+      // No backup (in-memory DB) — just rethrow
+      throw originalError;
+    }
+  }
+
+  // All migrations succeeded: clean up old backups, keeping only the most recent N.
+  if (isFileDb) {
+    const keepCount = Number.parseInt(process.env.AWKN_MIGRATION_BACKUP_KEEP ?? '', 10);
+    cleanupOldBackups(
+      dbPath,
+      Number.isFinite(keepCount) && keepCount >= 0 ? keepCount : DEFAULT_BACKUP_KEEP_COUNT,
+    );
   }
 }
 
