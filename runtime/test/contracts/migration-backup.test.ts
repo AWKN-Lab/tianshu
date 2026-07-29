@@ -296,25 +296,38 @@ describe('Migration Backup/Restore', () => {
 
   describe('listMigrationBackups and cleanup', () => {
     it('lists backups sorted by creation time', () => {
-      const listDbPath = join(testDir, 'list-test.db');
+      // Use isolated subdirectory to avoid interference from other tests'
+      // backup files in the shared testDir (they would pollute the list
+      // and break the strict ordering assertion on fast CI machines).
+      const listDir = join(testDir, 'list-isolated');
+      mkdirSync(listDir, { recursive: true });
+      const listDbPath = join(listDir, 'list-test.db');
       const db1 = createTestDb(listDbPath);
       const backup1 = backupBeforeMigration(db1, listDbPath, [11]);
       db1.close();
+
+      // Ensure backup2 has a strictly later filename timestamp so that
+      // lexicographic sort is deterministic even on very fast machines
+      // where both backups could land in the same millisecond.
+      const sleepBuf = new Int32Array(new SharedArrayBuffer(4));
+      Atomics.wait(sleepBuf, 0, 0, 50);
 
       const db2 = new Database(listDbPath);
       const backup2 = backupBeforeMigration(db2, listDbPath, [12]);
       db2.close();
 
       const backups = listMigrationBackups(listDbPath);
-      assert.ok(backups.length >= 2);
+      assert.equal(backups.length, 2);
 
-      // Newest first
+      // Newest first (descending filename sort = chronological descending)
       assert.equal(backups[0].backupPath, backup2.backupPath);
       assert.equal(backups[1].backupPath, backup1.backupPath);
     });
 
     it('cleanupOldBackups keeps only N most recent', () => {
-      const cleanupDbPath = join(testDir, 'cleanup-test.db');
+      const cleanupDir = join(testDir, 'cleanup-isolated');
+      mkdirSync(cleanupDir, { recursive: true });
+      const cleanupDbPath = join(cleanupDir, 'cleanup-test.db');
       for (let i = 0; i < 7; i++) {
         const db = createTestDb(cleanupDbPath);
         backupBeforeMigration(db, cleanupDbPath, [11]);
