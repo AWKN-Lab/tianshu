@@ -22,8 +22,125 @@ import { getCorrectionsLedger } from '../evolve/corrections-ledger.js';
 import { collectArtifactBundle } from '../evidence/artifact-bundle.js';
 import { getEventStore } from '../workflow/event-store.js';
 import { generateTraceId, recordCompletedSpan } from '../observability/trace.js';
+import { createEvidenceGainLoop, type EvidenceGainLoop, type CycleEvaluationInput, type CycleEvaluationResult } from '../loop/evidence-loop.js';
+import type { CyclePlanInput } from '../loop/cycle-planner.js';
+import type { DeltaInput } from '../loop/evidence-delta.js';
+import type { DeviationInput } from '../loop/deviation.js';
+import type { EvidenceCyclePlan, Hypothesis, ExpectedEvidence, PlannedAction, CycleBudget } from '../contracts/evidence-loop.js';
 
 const logger = createLogger('AgentLoop');
+
+/**
+ * Feature flag：是否启用 Evidence-Gain Loop 集成（设计文档 07 UPGRADE）。
+ * 默认禁用，确保对现有 L2 行为零变更。启用方式：AWKN_EVIDENCE_LOOP_ENABLED=1。
+ *
+ * 启用后每轮 L2 cycle 会：
+ *   1. planCycle() 生成 EvidenceCyclePlan（含假设、预期证据、计划动作）
+ *   2. 在 gates 执行后 evaluateCycle() 生成 CycleReceipt（含 delta、偏差、策略决策、停止判断）
+ *   3. 根据策略决策（CONTINUE/SWITCH/PAUSE/STOP）控制后续 cycle
+ *   4. CycleReceipt 追加到 EventStore 供可观测性使用
+ */
+function isEvidenceLoopEnabled(): boolean {
+  return process.env.AWKN_EVIDENCE_LOOP_ENABLED === '1' || process.env.AWKN_EVIDENCE_LOOP_ENABLED === 'true';
+}
+
+const ZERO_HASH = '0'.repeat(64);
+
+/** 生成简易本地 ID（不参与跨进程哈希，仅用于 cycle 内部追踪） */
+function localId(prefix: string, cycle: number, salt: string): string {
+  return `${prefix}_${cycle}_${salt}`;
+}
+
+/** 构建 P0 默认假设（当无外部 hypothesis 输入时使用） */
+function buildDefaultHypothesis(objective: string, cycleNumber: number): Hypothesis {
+  return {
+    schema: 'awkn-hypothesis/v1',
+    hypothesisId: localId('hyp', cycleNumber, Date.now().toString(36)),
+    statement: `cycle ${cycleNumber}: 通过质量门验收完成目标 — ${objective.slice(0, 120)}`,
+    rationale: 'L2 循环默认假设：执行 L1 后所有质量门（typecheck/test/lint/review/budget）均通过',
+    assumptions: [
+      'L1 产出的代码变更满足目标语义',
+      '质量门足以验证目标达成',
+      '独立 Reviewer 能识别语义缺陷',
+    ],
+    falsifiable: true,
+    confidence: 0.5,
+  };
+}
+
+/** 构建默认预期证据（质量门通过证据） */
+function buildDefaultExpectedEvidence(cycle: number): ExpectedEvidence[] {
+  return [
+    {
+      schema: 'awkn-expected-evidence/v1',
+      expectedEvidenceId: localId('ee', cycle, 'gates'),
+      description: '所有确定性质量门通过（typecheck + test + lint）',
+      sourceType: 'command',
+      evaluatorId: 'deterministic-gates',
+      successPredicate: { allPassed: true },
+      required: true,
+    },
+    {
+      schema: 'awkn-expected-evidence/v1',
+      expectedEvidenceId: localId('ee', cycle, 'review'),
+      description: '独立 Reviewer 通过（VERDICT: PASS）',
+      sourceType: 'command',
+      evaluatorId: 'independent-reviewer',
+      successPredicate: { verdict: 'PASS' },
+      required: true,
+    },
+    {
+      schema: 'awkn-expected-evidence/v1',
+      expectedEvidenceId: localId('ee', cycle, 'budget'),
+      description: '预算门通过（未超限）',
+      sourceType: 'command',
+      evaluatorId: 'budget-gate',
+      successPredicate: { budgetExhausted: false },
+      required: false,
+    },
+  ];
+}
+
+/** 构建默认计划动作（基于 L1 执行） */
+function buildDefaultPlannedActions(cycle: number, expectedEvidence: ReadonlyArray<ExpectedEvidence>): PlannedAction[] {
+  return [
+    {
+      actionId: localId('act', cycle, 'l1'),
+      description: '执行 L1 工具循环 + 确定性质量门 + 独立 Reviewer',
+      producesEvidenceIds: expectedEvidence.slice(0, 1).map((e) => e.expectedEvidenceId),
+      fingerprint: 'l2-default-cycle',
+    },
+  ];
+}
+
+/** 构建 cycle 预算切片 */
+function buildCycleBudgetSlice(maxTokens: number): CycleBudget {
+  return {
+    maxTokens: Math.max(1, maxTokens),
+    maxDurationMs: 3_600_000,
+    maxCostUsd: 1.0,
+    consumedTokens: 0,
+    consumedDurationMs: 0,
+    consumedCostUsd: 0,
+  };
+}
+
+/** 从 L1 reactState 提取工具执行结果摘要 */
+function extractToolOutcomes(reactState: ReActState): Array<{ toolName: string; succeeded: boolean; errorMessage?: string }> {
+  const observations = reactState.observations ?? [];
+  return observations.map((obs) => ({
+    toolName: obs.toolName,
+    succeeded: !obs.isError,
+    errorMessage: obs.errorMessage,
+  }));
+}
+
+/** 计算 acceptanceProgress（已通过 gate 数 / 总 gate 数） */
+function computeAcceptanceProgress(gates: ReadonlyArray<GateResult>): number {
+  if (gates.length === 0) return 0;
+  const passed = gates.filter((g) => g.passed).length;
+  return passed / gates.length;
+}
 
 export interface AgentLoopConfig {
   maxTurns: number;
@@ -65,9 +182,43 @@ export class AgentLoop {
   private totalTokens = 0;
   private activeRunId?: string;
   private activeTraceId = generateTraceId();
+  /**
+   * Evidence-Gain Loop 协调器实例（懒初始化）。
+   * 当 AWKN_EVIDENCE_LOOP_ENABLED=1 时启用；否则为 null。
+   * 生命周期与 AgentLoop 实例一致，跨 runL2 cycle 共享策略历史。
+   */
+  private evidenceLoop: EvidenceGainLoop | null = null;
+  /** 最近 cycle 的 actionFingerprint 历史（最多保留 3 条），供 REPEATED_PATTERN 诊断 */
+  private recentActionFingerprints: string[] = [];
+  /** 最近 cycle 的 errorFingerprint 历史（最多保留 3 条） */
+  private recentErrorFingerprints: string[] = [];
 
   constructor(config: Partial<AgentLoopConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  /** 获取或初始化 Evidence-Gain Loop 协调器 */
+  private getEvidenceLoop(): EvidenceGainLoop | null {
+    if (!isEvidenceLoopEnabled()) return null;
+    if (this.evidenceLoop === null) {
+      this.evidenceLoop = createEvidenceGainLoop();
+      this.recentActionFingerprints = [];
+      this.recentErrorFingerprints = [];
+    }
+    return this.evidenceLoop;
+  }
+
+  /** 计算 cycle 的 actionFingerprint（基于本轮 gate 通过/失败模式） */
+  private computeActionFingerprint(gates: ReadonlyArray<GateResult>): string {
+    const signature = gates.map((g) => `${g.name}:${g.passed ? '1' : '0'}`).join('|');
+    return signature;
+  }
+
+  /** 计算 errorFingerprint（基于本轮失败的 gate 名+错误首 80 字符） */
+  private computeErrorFingerprint(gates: ReadonlyArray<GateResult>): string | null {
+    const failed = gates.filter((g) => !g.passed);
+    if (failed.length === 0) return null;
+    return failed.map((g) => `${g.name}:${(g.details ?? '').slice(0, 80)}`).join('|');
   }
 
   async runL1(userInput: string, options?: { resumeFrom?: LoopSnapshot }): Promise<AgentLoopResult> {
@@ -329,6 +480,44 @@ export class AgentLoop {
       }
 
       eventStore.appendEvent(run.id, 'l2.cycle.started', { cycle, repairContext });
+
+      // ── Evidence-Gain Loop: planCycle（设计文档 07 UPGRADE 第 2 条） ──
+      // 启用条件：AWKN_EVIDENCE_LOOP_ENABLED=1
+      const evidenceLoop = this.getEvidenceLoop();
+      let cyclePlan: EvidenceCyclePlan | null = null;
+      if (evidenceLoop !== null) {
+        const hypothesis = buildDefaultHypothesis(userInput, cycle);
+        const expectedEvidence = buildDefaultExpectedEvidence(cycle);
+        const plannedActions = buildDefaultPlannedActions(cycle, expectedEvidence);
+        const cyclePlanInput: CyclePlanInput = {
+          runId: run.id,
+          cycleNumber: cycle,
+          objective: userInput.slice(0, 500),
+          hypothesis,
+          expectedEvidence,
+          plannedActions,
+          selectedStrategy: 'l2-default-strategy',
+          policyBundleHash: ZERO_HASH,
+          skillBundleHash: ZERO_HASH,
+          contextManifestHash: ZERO_HASH,
+          budgetSlice: buildCycleBudgetSlice(
+            goal.budget?.maxTokens ?? 100_000,
+          ),
+        };
+        try {
+          cyclePlan = evidenceLoop.planCycle(cyclePlanInput);
+          eventStore.appendEvent(run.id, 'l2.cycle.plan', {
+            cycle,
+            cycleId: cyclePlan.cycleId,
+            hypothesisId: cyclePlan.hypothesis.hypothesisId,
+            expectedEvidenceIds: cyclePlan.expectedEvidence.map((e) => e.expectedEvidenceId),
+          });
+        } catch (err) {
+          logger.warn(`Evidence-Gain Loop planCycle failed (cycle ${cycle}): ${err instanceof Error ? err.message : String(err)}`);
+          cyclePlan = null;
+        }
+      }
+
       const cycleInput = repairContext
         ? `${userInput}\n\n上一轮未通过证据与修复要求：\n${repairContext}`
         : userInput;
@@ -385,6 +574,126 @@ export class AgentLoop {
         artifactDiffSha256: bundle.git.diffSha256,
       });
 
+      // ── Evidence-Gain Loop: evaluateCycle（设计文档 07 UPGRADE 第 3-7 条） ──
+      // 启用条件：AWKN_EVIDENCE_LOOP_ENABLED=1 且 cyclePlan 创建成功
+      if (evidenceLoop !== null && cyclePlan !== null) {
+        const acceptanceProgress = computeAcceptanceProgress(lastResults);
+        const allGatesPassed = lastResults.every((r) => r.passed);
+        const newVerifiedEvidence = allGatesPassed ? 1 : 0;
+        const toolOutcomes = extractToolOutcomes(lastReactState);
+        const hadToolErrors = toolOutcomes.some((t) => !t.succeeded);
+
+        const deltaInput: DeltaInput = {
+          cycleId: cyclePlan.cycleId,
+          acceptanceProgress,
+          uncertaintyReduction: allGatesPassed ? 0.2 : 0,
+          newVerifiedEvidence,
+          strategyElimination: 0,
+          riskReduction: allGatesPassed ? 0.1 : 0,
+          regression: 0,
+          newEvidenceCount: newVerifiedEvidence,
+        };
+
+        const currentActionFingerprint = this.computeActionFingerprint(lastResults);
+        const currentErrorFingerprint = this.computeErrorFingerprint(lastResults);
+
+        const deviationInput: Omit<DeviationInput, 'deltaScore' | 'gainType' | 'acceptanceProgress'> = {
+          gates: lastResults.map((g) => ({
+            name: g.name,
+            passed: g.passed,
+            details: g.details,
+            suggestion: g.suggestion,
+          })),
+          toolExecutions: toolOutcomes,
+          recentActionFingerprints: this.recentActionFingerprints,
+          recentErrorFingerprints: this.recentErrorFingerprints,
+          currentActionFingerprint,
+          hypothesis: cyclePlan.hypothesis.statement,
+          hypothesisRejected: !allGatesPassed && acceptanceProgress === 0,
+          regressionDetected: false,
+        };
+
+        const evalInput: CycleEvaluationInput = {
+          cyclePlan,
+          deltaInput,
+          deviationInput,
+          allRequiredGatesPassed: allGatesPassed,
+          budgetExhausted: !budgetResult.passed,
+          blockedByPolicy: false,
+          reachedMaxCycles: cycle >= this.config.maxL2Cycles,
+          waitingForUser: false,
+          waitingForExternal: false,
+          preconditionFailed: false,
+          actualEvidenceIds: allGatesPassed ? [cyclePlan.expectedEvidence[0]?.expectedEvidenceId].filter(Boolean) as string[] : [],
+          tokens: incrementalTokens,
+          durationMs: Date.now() - cycleStartedAt,
+        };
+
+        try {
+          const evalResult: CycleEvaluationResult = evidenceLoop.evaluateCycle(evalInput);
+          // 更新 fingerprint 历史（最多保留 3 条）
+          this.recentActionFingerprints = [...this.recentActionFingerprints, currentActionFingerprint].slice(-3);
+          if (currentErrorFingerprint !== null) {
+            this.recentErrorFingerprints = [...this.recentErrorFingerprints, currentErrorFingerprint].slice(-3);
+          }
+          // 追加 CycleReceipt 到 EventStore（可观测性，设计文档验收 1）
+          eventStore.appendEvent(run.id, 'l2.cycle.receipt', {
+            cycle,
+            receipt: evalResult.receipt,
+            deltaScore: evalResult.delta.deltaScore,
+            gainType: evalResult.delta.gainType,
+            deviationType: evalResult.deviationType,
+            strategyDecision: evalResult.strategyDecision,
+            stopDecisionType: evalResult.stopDecision.type,
+            shouldContinue: evalResult.shouldContinue,
+          });
+          // 记录策略尝试（供后续 REPEATED_PATTERN 判断）
+          if (evalResult.strategySwitch.shouldSwitch) {
+            evidenceLoop.recordStrategyAttempt({
+              schema: 'awkn-strategy-attempt/v1',
+              strategyId: cyclePlan.selectedStrategy,
+              hypothesis: cyclePlan.hypothesis.statement,
+              actionFingerprint: currentActionFingerprint,
+              resultFingerprint: currentErrorFingerprint ?? 'ok',
+              evidenceDeltaScore: evalResult.delta.deltaScore,
+              failureType: hadToolErrors ? 'EXECUTION_ERROR' : (allGatesPassed ? undefined : 'ACCEPTANCE_MISMATCH'),
+              usedAt: new Date().toISOString(),
+            });
+          }
+          // 停止决策处理（设计文档 07 第八节）
+          if (!evalResult.shouldContinue) {
+            const stopType = evalResult.stopDecision.type;
+            let stopReason: string;
+            if (stopType === 'NO_GAIN_STOP') {
+              stopReason = `Evidence-Gain Loop: 连续无增量停止（cycle ${cycle}）`;
+            } else if (stopType === 'SUCCESS') {
+              // 所有 required gates 通过且 evidence 充分，等同 success
+              goalManager.updateGoal(this.config.goalId, { state: 'achieved' }, 'model');
+              eventStore.transitionRun(run.id, 'succeeded', { cycle, results: lastResults, evidenceLoop: 'success-stop' });
+              this.activeRunId = undefined;
+              return this.buildResult(lastFinalText, lastReactState, totalTurns, cycle, false, undefined, lastResults, true);
+            } else if (stopType === 'FAILURE') {
+              stopReason = `Evidence-Gain Loop: 失败停止（cycle ${cycle}，原因: ${evalResult.stopDecision.reason}）`;
+            } else if (stopType === 'PAUSE') {
+              stopReason = `Evidence-Gain Loop: 暂停（cycle ${cycle}，原因: ${evalResult.stopDecision.reason}）`;
+            } else {
+              stopReason = `Evidence-Gain Loop: 停止条件触发（${stopType}，cycle ${cycle}）`;
+            }
+            logger.info(`Evidence-Gain Loop 触发停止: ${stopType} (cycle ${cycle})`);
+            eventStore.transitionRun(run.id, 'failed', { cycle, reason: stopReason, evidenceLoop: stopType });
+            this.activeRunId = undefined;
+            return this.buildResult(lastFinalText, lastReactState, totalTurns, cycle, true, stopReason, lastResults, false);
+          }
+          // 策略决策影响 repairContext（设计文档 07 第七节）
+          if (evalResult.strategyDecision === 'SWITCH' && evalResult.strategySwitch.nextStrategy) {
+            const switchHint = `\n\n[策略切换建议: ${evalResult.strategySwitch.nextStrategy}（偏差: ${evalResult.deviationType}）]`;
+            repairContext = repairContext + switchHint;
+          }
+        } catch (err) {
+          logger.warn(`Evidence-Gain Loop evaluateCycle failed (cycle ${cycle}): ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
       if (lastResults.every((result) => result.passed)) {
         goalManager.updateGoal(this.config.goalId, { state: 'achieved' }, 'model');
         eventStore.transitionRun(run.id, 'succeeded', { cycle, results: lastResults });
@@ -398,10 +707,23 @@ export class AgentLoop {
         return this.buildResult(lastFinalText, lastReactState, totalTurns, cycle, true, '预算超限', lastResults, false);
       }
 
-      repairContext = lastResults
-        .filter((result) => !result.passed)
-        .map((result) => `[${result.name}] ${result.details ?? 'failed'}${result.suggestion ? `\n修复：${result.suggestion}` : ''}`)
-        .join('\n\n');
+      // 仅在 Evidence-Gain Loop 未提供策略切换提示时，使用默认 repairContext 构建
+      if (!evidenceLoop || cyclePlan === null) {
+        repairContext = lastResults
+          .filter((result) => !result.passed)
+          .map((result) => `[${result.name}] ${result.details ?? 'failed'}${result.suggestion ? `\n修复：${result.suggestion}` : ''}`)
+          .join('\n\n');
+      } else {
+        // Evidence-Gain Loop 启用：在策略切换提示前插入标准 gate 失败信息
+        const gateFailures = lastResults
+          .filter((result) => !result.passed)
+          .map((result) => `[${result.name}] ${result.details ?? 'failed'}${result.suggestion ? `\n修复：${result.suggestion}` : ''}`)
+          .join('\n\n');
+        // 移除上轮追加的 switchHint，重新拼接
+        const switchHintMatch = repairContext.match(/\n\n\[策略切换建议:[^]]+\]/);
+        const switchHint = switchHintMatch ? switchHintMatch[0] : '';
+        repairContext = gateFailures + switchHint;
+      }
       eventStore.transitionRun(run.id, 'retrying', { cycle, repairContext });
       eventStore.transitionRun(run.id, 'running');
     }
