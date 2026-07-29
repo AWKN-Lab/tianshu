@@ -27,7 +27,14 @@
  */
 
 import type { JsonValue } from '../contracts/json-value.js';
-import type { PolicyCondition, PolicyConditionOperator } from '../contracts/policy.js';
+import type {
+  PolicyCondition,
+  PolicyConditionOperator,
+  Policy,
+  CompiledPolicy,
+  PolicyDecisionType,
+} from '../contracts/policy.js';
+import { stableHash } from '../contracts/canonical-json.js';
 
 /** AST 评估错误 */
 export class PolicyAstError extends Error {
@@ -203,4 +210,142 @@ export function evaluateAll(conditions: readonly PolicyCondition[], context: Jso
 /** 批量评估多个 conditions（any 语义） */
 export function evaluateAny(conditions: readonly PolicyCondition[], context: JsonValue): boolean {
   return conditions.some((cond) => evaluateCondition(cond, context));
+}
+
+// ===========================================================================
+// Section: Policy Compilation (Policy → CompiledPolicy AST)
+// ===========================================================================
+
+/**
+ * 编译 Policy 为 CompiledPolicy (AST 形式).
+ *
+ * 编译过程是纯函数: 不修改输入 Policy, 也不读取外部状态.
+ * condition AST 原样保留 (clean 契约使用 operator/field/value/children 形式).
+ */
+export function compilePolicyToAst(policy: Policy): CompiledPolicy {
+  const sourceHash = stableHash(policy.schema, policy as unknown as JsonValue);
+  return {
+    policyId: policy.policyId,
+    version: policy.version,
+    priority: policy.priority,
+    decision: policy.decision,
+    condition: policy.condition,
+    requiredActions: policy.requiredActions,
+    prohibitedActions: policy.prohibitedActions,
+    evidenceRequirements: policy.evidenceRequirements,
+    onFailure: policy.onFailure,
+    sourceHash,
+  };
+}
+
+// ===========================================================================
+// Section: Policy Decision Evaluation
+// ===========================================================================
+
+/** Policy 求值结果 */
+export interface PolicyEvaluationResult {
+  matched: boolean;
+  decision: PolicyDecisionType;
+  requiredActions: readonly string[];
+  prohibitedActions: readonly string[];
+  evidenceRequirements: readonly string[];
+  reasonCodes: string[];
+}
+
+/**
+ * 求值单个 CompiledPolicy 在给定上下文下的决策.
+ *
+ * 如果条件不匹配, 返回 matched=false 和默认决策 ALLOW.
+ * 如果条件匹配, 返回 matched=true 和 Policy 声明的 decision.
+ */
+export function evaluateCompiledPolicy(
+  policy: CompiledPolicy,
+  context: JsonValue,
+): PolicyEvaluationResult {
+  const matched = evaluateCondition(policy.condition, context);
+  if (!matched) {
+    return {
+      matched: false,
+      decision: 'ALLOW',
+      requiredActions: [],
+      prohibitedActions: [],
+      evidenceRequirements: [],
+      reasonCodes: ['CONDITION_NOT_MATCHED'],
+    };
+  }
+  return {
+    matched: true,
+    decision: policy.decision,
+    requiredActions: policy.requiredActions,
+    prohibitedActions: policy.prohibitedActions,
+    evidenceRequirements: policy.evidenceRequirements,
+    reasonCodes: ['CONDITION_MATCHED'],
+  };
+}
+
+// ===========================================================================
+// Section: AST Immutability Guard
+// ===========================================================================
+
+/**
+ * 深度冻结 Policy 条件 AST (防止 Skill 文本改写 Policy AST).
+ *
+ * 设计文档第 8 节 强制规则: Skill 自然语言内容不能修改 Policy.
+ * 通过 Object.freeze 在运行时保护 AST 节点.
+ */
+export function freezeConditionNode<T extends PolicyCondition>(node: T): T {
+  if (node.children && Array.isArray(node.children)) {
+    for (const child of node.children) {
+      freezeConditionNode(child);
+    }
+    Object.freeze(node.children);
+  }
+  if (node.value !== undefined && typeof node.value === 'object' && node.value !== null) {
+    Object.freeze(node.value);
+  }
+  return Object.freeze(node);
+}
+
+/**
+ * 检查条件 AST 是否被冻结 (用于断言 Skill 文本未改写 Policy AST).
+ */
+export function isConditionNodeFrozen(node: PolicyCondition): boolean {
+  if (!Object.isFrozen(node)) return false;
+  if (node.children) {
+    if (!Object.isFrozen(node.children)) return false;
+    return node.children.every((child) => isConditionNodeFrozen(child));
+  }
+  return true;
+}
+
+// ===========================================================================
+// Section: AST Builder Helpers (用于测试和程序化构建)
+// ===========================================================================
+
+export function fieldEquals(field: string, value: JsonValue): PolicyCondition {
+  return { operator: 'eq', field, value };
+}
+
+export function fieldNotEquals(field: string, value: JsonValue): PolicyCondition {
+  return { operator: 'neq', field, value };
+}
+
+export function fieldIn(field: string, values: readonly JsonValue[]): PolicyCondition {
+  return { operator: 'in', field, value: [...values] };
+}
+
+export function fieldGreaterThan(field: string, threshold: number): PolicyCondition {
+  return { operator: 'gt', field, value: threshold };
+}
+
+export function fieldLessThan(field: string, threshold: number): PolicyCondition {
+  return { operator: 'lt', field, value: threshold };
+}
+
+export function allOf(...children: PolicyCondition[]): PolicyCondition {
+  return { operator: 'all', children: [...children] };
+}
+
+export function anyOf(...children: PolicyCondition[]): PolicyCondition {
+  return { operator: 'any', children: [...children] };
 }

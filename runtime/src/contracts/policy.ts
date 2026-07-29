@@ -337,11 +337,17 @@ export type CompiledPolicyBundle = z.infer<typeof CompiledPolicyBundleSchema>;
 /** Policy Bundle ID 前缀 */
 export const POLICY_BUNDLE_ID_PREFIX = 'pb';
 
-/** 生成 Policy Bundle ID */
-export function createPolicyBundleId(): string {
-  return `${POLICY_BUNDLE_ID_PREFIX}_${createAwknId('shadowDiff').slice('sdiff_'.length)}`;
-  // 复用 randomUUID 逻辑，避免在 AWKN_ID_PREFIXES 加新前缀（保持契约稳定）
-  // 实际实现：pb_<32hex>
+/**
+ * 生成 Policy Bundle ID.
+ *
+ * @param contentHash 可选内容 Hash (SHA256 hex). 若提供，则基于内容 Hash 生成确定性 ID
+ *   (相同内容产生相同 ID). 若不提供，则回退到随机 UUID.
+ */
+export function createPolicyBundleId(contentHash?: string): string {
+  if (contentHash && /^[0-9a-f]{64}$/.test(contentHash)) {
+    return `${POLICY_BUNDLE_ID_PREFIX}_${contentHash.slice(0, 32)}`;
+  }
+  return createAwknId('policyBundle');
 }
 
 // ===== Compiler Receipt（awkn-compiler-receipt/v1） =====
