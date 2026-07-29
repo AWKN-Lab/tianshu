@@ -347,7 +347,7 @@ export class AgentLoop {
               errorMessage,
               durationMs: 0,
             });
-            recordFailure(errorMessage);
+            recordLoopFailure(errorMessage);
             continue;
           }
           let args: Record<string, unknown>;

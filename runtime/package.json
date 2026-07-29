@@ -27,7 +27,7 @@
     "postinstall": "npm rebuild better-sqlite3 --silent"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "better-sqlite3": "^11.7.0",
     "cron-parser": "^5.5.0",
     "zod": "^3.24.0"

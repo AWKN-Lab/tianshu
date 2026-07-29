@@ -106,11 +106,11 @@ server.registerTool(
       owner: z.string().optional().describe('目标 owner，默认 user'),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const gm = getGoalManager();
       const hao = args.hao
-        ? args.hao.split(',').map((d) => ({ description: d.trim(), passed: false }))
+        ? args.hao.split(',').map((d: string) => ({ description: d.trim(), passed: false }))
         : [{ description: args.description, passed: false }];
       const goal = gm.create({
         title: args.title,
@@ -136,7 +136,7 @@ server.registerTool(
         .optional(),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const goals = getGoalManager().list({ owner: args.owner, state: args.state });
       return { content: [toText(goals)] };
@@ -152,7 +152,7 @@ server.registerTool(
     description: '查看单个目标详情',
     inputSchema: { goalId: z.string().describe('目标 ID') },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const goal = getGoalManager().read(args.goalId);
       return { content: [toText(goal)] };
@@ -171,7 +171,7 @@ server.registerTool(
       evidence: z.string().describe('JSON 格式的证据（如 {"tsc":"0 errors","tests":"96/96 pass"}）'),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const evidence = JSON.parse(args.evidence);
       const result = getGoalManager().checkDone(args.goalId, evidence);
@@ -191,7 +191,7 @@ server.registerTool(
       reason: z.string().optional(),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const goal = getGoalManager().pauseGoal(args.goalId, args.reason ?? 'paused via MCP');
       return { content: [toText(goal)] };
@@ -210,7 +210,7 @@ server.registerTool(
       reason: z.string().optional(),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const goal = getGoalManager().resumeGoal(args.goalId, args.reason ?? 'resumed via MCP');
       return { content: [toText(goal)] };
@@ -233,7 +233,7 @@ server.registerTool(
       prompt: z.string().describe('任务提示词'),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const loop = new AgentLoop({ cwd: process.cwd(), enableL2: false });
       const result = await loop.runL1(args.prompt);
@@ -255,7 +255,7 @@ server.registerTool(
       maxCycles: z.number().optional().describe('最大循环轮数，默认 50'),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const loop = new AgentLoop({
         cwd: process.cwd(),
@@ -279,7 +279,7 @@ server.registerTool(
       goal: z.string().optional().describe('按 goalId 过滤'),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { getLoopStateManager } = await import('../core/loop-state-manager.js');
       const list = getLoopStateManager().listResumable(args.goal);
@@ -296,7 +296,7 @@ server.registerTool(
     description: '手动清除某 checkpoint（不再 resume）',
     inputSchema: { id: z.string() },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { getLoopStateManager } = await import('../core/loop-state-manager.js');
       getLoopStateManager().clearCheckpoint(args.id, true, 'manual clear via MCP');
@@ -344,7 +344,7 @@ server.registerTool(
     description: '根据用户输入匹配触发的技能',
     inputSchema: { userInput: z.string().describe('用户输入文本') },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const matched = getSkillsManager().matchTriggers(args.userInput);
       return {
@@ -366,7 +366,7 @@ server.registerTool(
     description: '查看技能详情（含 prompt body）',
     inputSchema: { name: z.string().describe('技能名') },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const sm = getSkillsManager();
       const meta = sm.getSkill(args.name);
@@ -408,7 +408,7 @@ server.registerTool(
       prompt: z.string().optional().describe('提示词'),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const results = await hookManager.trigger(args.point as never, {
         point: args.point as HookPoint,
@@ -432,7 +432,7 @@ server.registerTool(
       id: z.string().optional().describe('hook ID（不传自动生成）'),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       hookManager.register({
         id: args.id ?? `mcp-${args.point}-${Date.now()}`,
@@ -465,7 +465,7 @@ server.registerTool(
       payload: z.string().describe('JSON 格式的 payload'),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { getCronJobsManager } = await import('../cron/jobs-manager.js');
       const payload = JSON.parse(args.payload) as Record<string, unknown>;
@@ -488,7 +488,7 @@ server.registerTool(
     description: '列出定时任务',
     inputSchema: { enabledOnly: z.boolean().optional() },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { getCronJobsManager } = await import('../cron/jobs-manager.js');
       const jobs = getCronJobsManager().list({ enabledOnly: args.enabledOnly ?? false });
@@ -505,7 +505,7 @@ server.registerTool(
     description: '查看定时任务详情',
     inputSchema: { jobId: z.string() },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { getCronJobsManager } = await import('../cron/jobs-manager.js');
       const job = getCronJobsManager().read(args.jobId);
@@ -523,7 +523,7 @@ server.registerTool(
     description: '删除定时任务',
     inputSchema: { jobId: z.string() },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { getCronJobsManager } = await import('../cron/jobs-manager.js');
       const result = getCronJobsManager().remove(args.jobId);
@@ -540,7 +540,7 @@ server.registerTool(
     description: '启用定时任务',
     inputSchema: { jobId: z.string() },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { getCronJobsManager } = await import('../cron/jobs-manager.js');
       const job = getCronJobsManager().setEnabled(args.jobId, true);
@@ -557,7 +557,7 @@ server.registerTool(
     description: '禁用定时任务',
     inputSchema: { jobId: z.string() },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { getCronJobsManager } = await import('../cron/jobs-manager.js');
       const job = getCronJobsManager().setEnabled(args.jobId, false);
@@ -574,7 +574,7 @@ server.registerTool(
     description: '手动触发定时任务（不等 cron 调度）',
     inputSchema: { jobId: z.string() },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { getCronEngine } = await import('../cron/engine.js');
       const result = await getCronEngine().triggerJob(args.jobId);
@@ -602,7 +602,7 @@ server.registerTool(
       cicdProvider: z.enum(['trae', 'codex', 'minimax']).optional(),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { runTianhuoCicdLoop } = await import('../orchestrator/tianhuo-cicd-loop.js');
       const result = await runTianhuoCicdLoop({
@@ -633,7 +633,7 @@ server.registerTool(
       maxCycles: z.number().optional().describe('最大循环轮数，默认 5'),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { runPrdCentricLoop } = await import('../orchestrator/prd-centric-loop.js');
       const result = await runPrdCentricLoop({
@@ -687,7 +687,7 @@ server.registerTool(
       sinceHours: z.number().optional(),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { getCorrectionsLedger } = await import('../evolve/corrections-ledger.js');
       const rows = getCorrectionsLedger().list({
@@ -714,7 +714,7 @@ server.registerTool(
       experienceId: z.string().optional(),
     },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { getCorrectionsLedger } = await import('../evolve/corrections-ledger.js');
       const row = getCorrectionsLedger().resolve(args.id, args.resolution, args.experienceId);
@@ -731,7 +731,7 @@ server.registerTool(
     description: '按 source 分组统计 corrections',
     inputSchema: { sinceHours: z.number().optional().describe('默认 24') },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { getCorrectionsLedger } = await import('../evolve/corrections-ledger.js');
       const sinceHours = args.sinceHours ?? 24;
@@ -769,7 +769,7 @@ server.registerTool(
     description: '触发 LLM 补全经验草稿（调用 awkn-复盘总结 15.1 流程）',
     inputSchema: { cwd: z.string().optional() },
   },
-  async (args) => {
+  async (args: any) => {
     try {
       const { completePendingDrafts } = await import('../evolve/experience-writer.js');
       const result = await completePendingDrafts(args.cwd ?? process.cwd());
