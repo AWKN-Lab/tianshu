@@ -30,6 +30,7 @@ export const AWKN_ID_PREFIXES = {
   policyBundle: 'pb',
   skillBundle: 'sb',
   evolveCandidateV2: 'ecv',
+  cycle: 'cycle',
 } as const;
 
 export type AwknIdKind = keyof typeof AWKN_ID_PREFIXES;
