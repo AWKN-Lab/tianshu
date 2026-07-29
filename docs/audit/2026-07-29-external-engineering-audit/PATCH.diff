@@ -1,0 +1,228 @@
+diff --git a/runtime/src/memory/awkn-memory-os-backend.ts b/runtime/src/memory/awkn-memory-os-backend.ts
+index 4112627ff28da56619a7f78d38573a040f3c7eb8..fa59e9063636eee7d1edb73d5eba4d888b174507 100644
+--- a/runtime/src/memory/awkn-memory-os-backend.ts
++++ b/runtime/src/memory/awkn-memory-os-backend.ts
+@@ -49,6 +49,23 @@ export class MemoryProtocolError extends Error {
+   }
+ }
+ 
++export class MemoryHttpError extends Error {
++  readonly status: number;
++  readonly method: string;
++  readonly path: string;
++  readonly responseBody: string;
++
++  constructor(input: { status: number; method: string; path: string; responseBody: string }) {
++    const responseExcerpt = input.responseBody.slice(0, 500);
++    super(`AWKN Memory OS ${input.method} ${input.path} failed: ${input.status} ${responseExcerpt}`);
++    this.name = 'MemoryHttpError';
++    this.status = input.status;
++    this.method = input.method;
++    this.path = input.path;
++    this.responseBody = input.responseBody;
++  }
++}
++
+ export interface MemoryOsDiagnostic {
+   capabilities: MemoryBackendCapabilities;
+   context?: CompiledMemoryContext;
+@@ -121,7 +138,7 @@ export class AwknMemoryOsBackend implements MemoryBackend {
+       include_feedback: false,
+     });
+     const receiptId = String(receipt.receipt_id ?? asObject(receipt.receipt).receipt_id ?? '');
+-    if (!receiptId) throw new Error('AWKN Memory OS context response has no receipt_id');
++    if (!receiptId) throw new MemoryProtocolError('AWKN Memory OS context response has no receipt_id');
+ 
+     const assembledItems = Array.isArray(receipt.items) ? receipt.items : null;
+     if (assembledItems?.length === 0 || Number(receipt.item_count) === 0) {
+@@ -271,7 +288,14 @@ export class AwknMemoryOsBackend implements MemoryBackend {
+       if (response.status >= 500 && queueOnFailure) {
+         return this.queued(method, path, cleanPayload, idempotencyKey, `core-${response.status}`);
+       }
+-      if (!response.ok) throw new Error(`AWKN Memory OS ${method} ${path} failed: ${response.status} ${text.slice(0, 500)}`);
++      if (!response.ok) {
++        throw new MemoryHttpError({
++          status: response.status,
++          method,
++          path,
++          responseBody: text,
++        });
++      }
+       return body;
+     } catch (error) {
+       if (queueOnFailure && (error instanceof TypeError || (error instanceof Error && error.name === 'AbortError'))) {
+diff --git a/runtime/src/memory/router.ts b/runtime/src/memory/router.ts
+index f8253929cd1907b21e55f9cf8a5b369664683d70..0c5a6d26a0707c2f544f27cd37687ab5463cbdeb 100644
+--- a/runtime/src/memory/router.ts
++++ b/runtime/src/memory/router.ts
+@@ -6,7 +6,12 @@ import type {
+   ObserveMemoryUsageInput,
+   RememberInteractionInput,
+ } from './backend.js';
+-import { AwknMemoryOsBackend, type MemoryOsDiagnostic } from './awkn-memory-os-backend.js';
++import {
++  AwknMemoryOsBackend,
++  MemoryHttpError,
++  MemoryProtocolError,
++  type MemoryOsDiagnostic,
++} from './awkn-memory-os-backend.js';
+ import { MemoryAuthorityOutboxProcessor } from './authority-outbox.js';
+ import {
+   AwknMemoryAuthorityClient,
+@@ -25,6 +30,18 @@ function remoteConfigured(mode: MemoryBackendMode): boolean {
+   return mode === 'memory-os' || Boolean(process.env.AWKN_MEMORY_OS_URL);
+ }
+ 
++function isTransportFailure(error: unknown): boolean {
++  return error instanceof TypeError
++    || (error instanceof Error && error.name === 'AbortError');
++}
++
++function mayFallbackToLocal(mode: MemoryBackendMode, error: unknown): boolean {
++  if (mode !== 'auto') return false;
++  if (error instanceof MemoryProtocolError) return false;
++  if (error instanceof MemoryHttpError) return error.status >= 500;
++  return isTransportFailure(error);
++}
++
+ export interface MemoryRouterDiagnostic {
+   mode: MemoryBackendMode;
+   remoteEnabled: boolean;
+@@ -84,7 +101,8 @@ export class MemoryBackendRouter {
+       await this.flushAuthorityOutbox(5).catch(() => ({ delivered: 0, failed: 1, pending: 0 }));
+       try {
+         return await this.remote.compileContext(input);
+-      } catch {
++      } catch (error) {
++        if (!mayFallbackToLocal(this.mode, error)) throw error;
+         const fallback = await this.local.compileContext(input);
+         return { ...fallback, stale: true };
+       }
+diff --git a/runtime/test/contracts/memory-backend-adapter.test.ts b/runtime/test/contracts/memory-backend-adapter.test.ts
+index d8377efe215f0dc247c1bd0d4aca47231b0822c7..a214f52884b10bbcfcc1304ab31fc23af1bf427a 100644
+--- a/runtime/test/contracts/memory-backend-adapter.test.ts
++++ b/runtime/test/contracts/memory-backend-adapter.test.ts
+@@ -4,7 +4,11 @@ import { createServer, type Server } from 'node:http';
+ import { mkdtempSync, rmSync } from 'node:fs';
+ import { tmpdir } from 'node:os';
+ import { join } from 'node:path';
+-import { AwknMemoryOsBackend } from '../../src/memory/awkn-memory-os-backend.js';
++import {
++  AwknMemoryOsBackend,
++  MemoryHttpError,
++  MemoryProtocolError,
++} from '../../src/memory/awkn-memory-os-backend.js';
+ import { inspectMemoryPayload, MemoryDlpBlockedError, guardMemoryPayload } from '../../src/memory/dlp.js';
+ import { LocalMemoryBackend } from '../../src/memory/local-backend.js';
+ import { MemoryOutbox } from '../../src/memory/outbox.js';
+@@ -19,7 +23,11 @@ afterEach(async () => {
+   for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true });
+ });
+ 
+-async function startMemoryServer(input: { emptyContext?: boolean } = {}): Promise<{
++async function startMemoryServer(input: {
++  emptyContext?: boolean;
++  protocolMajor?: number;
++  projectsStatus?: number;
++} = {}): Promise<{
+   url: string;
+   requests: Array<{ method: string; path: string }>;
+ }> {
+@@ -30,12 +38,17 @@ async function startMemoryServer(input: { emptyContext?: boolean } = {}): Promis
+     response.setHeader('content-type', 'application/json');
+     if (path === '/api/v1/protocol') {
+       response.end(JSON.stringify({
+-        protocol: 'awkn-core-sdk/1.0', major: 1, minor: 0, schema_version: 17,
++        protocol: 'awkn-core-sdk/1.0', major: input.protocolMajor ?? 1, minor: 0, schema_version: 17,
+         min_sdk_version: '0.9.0', features: ['context-ledger-v1', 'observed-usage-v1'],
+       }));
+       return;
+     }
+     if (path === '/api/v1/projects') {
++      if (input.projectsStatus !== undefined) {
++        response.statusCode = input.projectsStatus;
++        response.end(JSON.stringify({ error: 'project access denied' }));
++        return;
++      }
+       response.end(JSON.stringify([{ project_id: 'project-1' }]));
+       return;
+     }
+@@ -122,7 +135,7 @@ describe('Memory backend adapter', () => {
+     assert.equal(diagnostic.remote?.outbox.pending, 0);
+   });
+ 
+-  it('falls back to local memory and marks the context stale when Core is unavailable', async () => {
++  it('falls back to stale local context on transport failure only in auto mode', async () => {
+     const projectId = `fallback-${Date.now()}-${Math.random()}`;
+     getMemoryService().put({
+       type: 'project_semantic', scopeId: projectId, key: 'architecture',
+@@ -134,13 +147,68 @@ describe('Memory backend adapter', () => {
+       baseUrl: 'http://127.0.0.1:1', timeoutMs: 30,
+       outbox: new MemoryOutbox(join(directory, 'outbox.jsonl')),
+     });
+-    const router = new MemoryBackendRouter({ mode: 'memory-os', remote, local: new LocalMemoryBackend() });
++    const router = new MemoryBackendRouter({ mode: 'auto', remote, local: new LocalMemoryBackend() });
+     const context = await router.compileAndRender({ projectId, sessionId: projectId, query: 'public API upgrade' });
+     assert.equal(context.backend, 'local');
+     assert.equal(context.stale, true);
+     assert.match(context.prompt, /Preserve the existing public API/);
+   });
+ 
++  it('fails closed on transport failure in explicit memory-os mode', async () => {
++    const directory = mkdtempSync(join(tmpdir(), 'awkn-memory-strict-'));
++    temporaryDirectories.push(directory);
++    const remote = new AwknMemoryOsBackend({
++      baseUrl: 'http://127.0.0.1:1', timeoutMs: 30,
++      outbox: new MemoryOutbox(join(directory, 'outbox.jsonl')),
++    });
++    const router = new MemoryBackendRouter({ mode: 'memory-os', remote, local: new LocalMemoryBackend() });
++    await assert.rejects(
++      router.compileAndRender({ projectId: 'project-1', sessionId: 'session-1', query: 'strict mode' }),
++      (error: unknown) => error instanceof TypeError || (error instanceof Error && error.name === 'AbortError'),
++    );
++  });
++
++  it('fails closed on 401 and 403 in auto mode', async () => {
++    for (const status of [401, 403]) {
++      const { url } = await startMemoryServer({ projectsStatus: status });
++      const remote = new AwknMemoryOsBackend({ baseUrl: url, token: 'invalid-token', timeoutMs: 500 });
++      const router = new MemoryBackendRouter({ mode: 'auto', remote, local: new LocalMemoryBackend() });
++      await assert.rejects(
++        router.compileAndRender({ projectId: 'project-1', sessionId: 'session-1', query: 'protected context' }),
++        (error: unknown) => error instanceof MemoryHttpError && error.status === status,
++      );
++    }
++  });
++
++  it('fails closed on incompatible protocol in auto mode', async () => {
++    const { url } = await startMemoryServer({ protocolMajor: 2 });
++    const remote = new AwknMemoryOsBackend({ baseUrl: url, token: 'test-token', timeoutMs: 500 });
++    const router = new MemoryBackendRouter({ mode: 'auto', remote, local: new LocalMemoryBackend() });
++    await assert.rejects(
++      router.compileAndRender({ projectId: 'project-1', sessionId: 'session-1', query: 'protocol check' }),
++      MemoryProtocolError,
++    );
++  });
++
++  it('falls back on Core 5xx in auto mode and preserves strict mode failure', async () => {
++    const autoServer = await startMemoryServer({ projectsStatus: 503 });
++    const autoRemote = new AwknMemoryOsBackend({ baseUrl: autoServer.url, token: 'test-token', timeoutMs: 500 });
++    const autoRouter = new MemoryBackendRouter({ mode: 'auto', remote: autoRemote, local: new LocalMemoryBackend() });
++    const fallback = await autoRouter.compileAndRender({
++      projectId: 'project-1', sessionId: 'session-1', query: 'temporary outage',
++    });
++    assert.equal(fallback.backend, 'local');
++    assert.equal(fallback.stale, true);
++
++    const strictServer = await startMemoryServer({ projectsStatus: 503 });
++    const strictRemote = new AwknMemoryOsBackend({ baseUrl: strictServer.url, token: 'test-token', timeoutMs: 500 });
++    const strictRouter = new MemoryBackendRouter({ mode: 'memory-os', remote: strictRemote, local: new LocalMemoryBackend() });
++    await assert.rejects(
++      strictRouter.compileAndRender({ projectId: 'project-1', sessionId: 'session-1', query: 'temporary outage' }),
++      (error: unknown) => error instanceof MemoryHttpError && error.status === 503,
++    );
++  });
++
+   it('queues capture operations durably on transport failure', async () => {
+     const directory = mkdtempSync(join(tmpdir(), 'awkn-memory-outbox-'));
+     temporaryDirectories.push(directory);
