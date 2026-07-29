@@ -55,7 +55,13 @@ export class ToolRegistry {
     });
 
     try {
-      const approvedNames = new Set(ctx?.approvedToolNames ?? []);
+      // Keep the registry pre-check aligned with ToolPolicy. Previously the
+      // environment allow-list passed policy.ts but was rejected here first.
+      const envApprovedNames = (process.env.AWKN_APPROVED_TOOLS ?? '')
+        .split(',')
+        .map((toolName) => toolName.trim())
+        .filter(Boolean);
+      const approvedNames = new Set([...(ctx?.approvedToolNames ?? []), ...envApprovedNames]);
       if (resolved.permissionLevel === 'confirm' && ctx?.runId && !approvedNames.has(name) && !approvedNames.has('*')) {
         const approvalStore = getApprovalStore();
         const approved = ctx.approvalId

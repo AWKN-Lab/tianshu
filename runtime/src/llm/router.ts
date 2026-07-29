@@ -9,7 +9,6 @@ import { CodexProvider } from './providers/codex.js';
 import { MiniMaxProvider } from './providers/minimax.js';
 
 const logger = createLogger('LlmRouter');
-const ENV_PROVIDER = process.env.AWKN_LLM_PROVIDER as LlmProvider | undefined;
 
 interface MemoryEnrichment {
   request: ChatRequest;
@@ -29,7 +28,7 @@ export class LlmRouter {
   }
 
   private selectProvider(req: ChatRequest): LlmProviderInterface {
-    const explicit = req.provider ?? ENV_PROVIDER;
+    const explicit = req.provider ?? process.env.AWKN_LLM_PROVIDER as LlmProvider | undefined;
     if (explicit) {
       const selected = this.providers.get(explicit);
       if (selected) return selected;

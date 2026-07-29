@@ -24,6 +24,7 @@ const componentRoots = new Set([
   'core',
   'tools',
   'goal',
+  'review',
 ]);
 
 /**
@@ -41,6 +42,7 @@ const strictRoots = new Set([
   'loop',
   'delivery',
   'outcome',
+  'review',
 ]);
 
 /**

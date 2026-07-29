@@ -22,6 +22,11 @@ const SENSITIVE_SEGMENTS = new Set([
 ]);
 const SENSITIVE_EXTENSIONS = new Set(['.pem', '.key', '.p12', '.pfx', '.secret']);
 const DANGEROUS_COMMANDS: RegExp[] = [
+  // Pre-approved exec must not permit irreversible recursive deletion. Block
+  // short/long flags and Unix, PowerShell, and cmd spellings.
+  /\brm\b(?=[^;&|\r\n)]*\s--?(?:[a-z]*r[a-z]*|recursive)\b)[^;&|\r\n)]*/i,
+  /\b(?:Remove-Item|ri|del|erase)\b(?=[^;\r\n)]*-(?:Recurse|Rec|r)\b)/i,
+  /\b(?:rd|rmdir|del)\b(?=[^;&|\r\n)]*\/s\b)/i,
   /(?:^|\s)rm\s+-rf\s+(?:\/|~|\$HOME)(?:\s|$)/i,
   /(?:^|\s)(?:shutdown|reboot|poweroff|halt)(?:\s|$)/i,
   /(?:^|\s)(?:mkfs|fdisk|diskpart|format)(?:\s|$)/i,

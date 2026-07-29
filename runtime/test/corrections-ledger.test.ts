@@ -154,6 +154,16 @@ describe('CorrectionsLedger.record', () => {
     assert.equal(row.experience_id, null);
   });
 
+  it('accepts a stable 64-hex Review Finding fingerprint', () => {
+    const fingerprint = 'a'.repeat(64);
+    const row = new CorrectionsLedger().record({
+      source: 'review:CORRECTNESS',
+      errorText: 'src/a.ts:1 broken invariant',
+      fingerprint,
+    });
+    assert.equal(row.fingerprint, fingerprint);
+  });
+
   it('severity 默认 error', () => {
     const ledger = new CorrectionsLedger();
     const row = ledger.record({ source: 'testGate', errorText: 'fail' });
