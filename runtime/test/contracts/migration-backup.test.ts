@@ -178,7 +178,7 @@ describe('Migration Backup/Restore', () => {
   });
 
   describe('Integration with runAgentOsMigrations', () => {
-    it('creates backup before applying v11/v12 migrations', () => {
+    it('creates backup before applying v11/v12/v13 migrations', () => {
       const integrationDbPath = join(testDir, 'integration-backup.db');
       const db = createTestDb(integrationDbPath);
 
@@ -187,7 +187,7 @@ describe('Migration Backup/Restore', () => {
       const backup = getLastMigrationBackup();
       assert.ok(backup, 'backup should have been created');
       assert.equal(existsSync(backup.backupPath), true);
-      assert.deepEqual(backup.pendingMigrations, [11, 12]);
+      assert.deepEqual(backup.pendingMigrations, [11, 12, 13]);
       assert.equal(backup.contentHash.length, 64);
 
       // Verify migrations were applied
@@ -195,6 +195,7 @@ describe('Migration Backup/Restore', () => {
       const versionList = versions.map((v) => v.version);
       assert.ok(versionList.includes(11));
       assert.ok(versionList.includes(12));
+      assert.ok(versionList.includes(13));
 
       db.close();
     });
