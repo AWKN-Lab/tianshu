@@ -36,6 +36,8 @@ export const AWKN_ID_PREFIXES = {
   reviewUnit: 'runit',
   reviewRun: 'rrun',
   reviewFinding: 'rfnd',
+  policy: 'pol',
+  skill: 'sk',
 } as const;
 
 export type AwknIdKind = keyof typeof AWKN_ID_PREFIXES;
