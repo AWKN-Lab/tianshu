@@ -25,6 +25,7 @@
  */
 
 import { stableHash } from '../contracts/canonical-json.js';
+import { createAwknId } from '../contracts/ids.js';
 import type {
   Policy,
   CompiledPolicy,
@@ -37,7 +38,6 @@ import type {
   PolicyProhibitedAction,
   PolicyEvidenceRequirement,
 } from '../contracts/policy.js';
-import { createPolicyBundleId } from '../contracts/policy.js';
 import type { IntentDecision } from '../contracts/intent.js';
 import type { JsonValue } from '../contracts/json-value.js';
 import type { PolicyRegistry } from './registry.js';
@@ -155,20 +155,7 @@ export function compilePolicyBundle(input: PolicyCompilerInput): PolicyCompilerO
   }
 
   // Step 8: 计算 bundleHash
-  // 先计算不含 bundleId 的内容指纹，用于生成确定性 bundleId (相同内容 → 相同 ID)
-  const contentFingerprint = stableHash(
-    'awkn-policy-bundle-fingerprint/v1',
-    {
-      schema: 'awkn-compiled-policy-bundle/v1',
-      executionId,
-      policies: compiledPolicies,
-      conflicts,
-      decisions: precomputedDecisions,
-      compilerVersion: POLICY_COMPILER_VERSION,
-      sourceVersions,
-    } as unknown as JsonValue,
-  );
-  const bundleId = createPolicyBundleId(contentFingerprint);
+  const bundleId = `pb_${createAwknId('shadowDiff').slice('sdiff_'.length)}`;
   const hashInput: PolicyBundleHashInput = {
     schema: 'awkn-compiled-policy-bundle/v1',
     bundleId,

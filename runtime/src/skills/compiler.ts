@@ -22,6 +22,7 @@
  */
 
 import { stableHash } from '../contracts/canonical-json.js';
+import { createAwknId } from '../contracts/ids.js';
 import type {
   SkillManifest,
   SkillRef,
@@ -34,10 +35,10 @@ import type {
   SkillScore,
   SkillBundleHashInput,
 } from '../contracts/skill.js';
-import { computeSkillScore, createSkillBundleId } from '../contracts/skill.js';
-import { SkillManifestSchema } from '../contracts/skill.js';
 import type { IntentDecision } from '../contracts/intent.js';
 import type { JsonValue } from '../contracts/json-value.js';
+import { computeSkillScore } from '../contracts/skill.js';
+import { SkillManifestSchema } from '../contracts/skill.js';
 
 /** Compiler 版本 */
 export const SKILL_COMPILER_VERSION = 'awkn-skill-compiler/v1';
@@ -272,22 +273,7 @@ export function compileSkillBundle(input: SkillCompilerInput): SkillCompilerOutp
   }
 
   // Step 6: 计算 bundleHash
-  // 先计算不含 bundleId 的内容指纹，用于生成确定性 bundleId (相同内容 → 相同 ID)
-  const contentFingerprint = stableHash(
-    'awkn-skill-bundle-fingerprint/v1',
-    {
-      schema: 'awkn-compiled-skill-bundle/v1',
-      executionId,
-      selectedSkills,
-      rejectedSkills,
-      executionGraph,
-      preflightResults,
-      gates,
-      recoveryPlan,
-      compilerVersion: SKILL_COMPILER_VERSION,
-    } as unknown as JsonValue,
-  );
-  const bundleId = createSkillBundleId(contentFingerprint);
+  const bundleId = `sb_${createAwknId('shadowDiff').slice('sdiff_'.length)}`;
   const hashInput: SkillBundleHashInput = {
     schema: 'awkn-compiled-skill-bundle/v1',
     bundleId,
@@ -339,96 +325,4 @@ export function validateSkillManifest(manifest: unknown): SkillManifest {
     );
   }
   return result.data;
-}
-
-// ===========================================================================
-// Section: DAG Validation (设计文档第 7.2 节 executionGraph 必须形成无环 DAG)
-// ===========================================================================
-
-/** DAG 校验结果（包含缺失依赖、自依赖、环路路径的详细信息） */
-export interface DagValidationResult {
-  /** DAG 是否有效（无缺失依赖、无自依赖、无环） */
-  valid: boolean;
-  /** 缺失依赖清单：[nodeId, missingDepId][] */
-  missingDependencies: Array<{ nodeId: string; missingDep: string }>;
-  /** 自依赖节点列表（nodeId 依赖自身） */
-  selfDependencies: string[];
-  /** 检测到的环路路径，每条路径是 nodeId 数组（首尾相同） */
-  cycles: string[][];
-}
-
-/**
- * 校验 executionGraph 是否形成有效 DAG.
- *
- * 检查三项：
- * 1. 缺失依赖：dependsOn 引用的 nodeId 必须存在
- * 2. 自依赖：node 不能依赖自身
- * 3. 真实环：依赖链不能形成环（DFS 检测）
- *
- * @param nodes executionGraph 节点列表
- * @returns 详细校验结果
- */
-export function validateSkillDag(nodes: readonly SkillExecutionNode[]): DagValidationResult {
-  const nodeIds = new Set(nodes.map((n) => n.nodeId));
-  const missingDependencies: Array<{ nodeId: string; missingDep: string }> = [];
-  const selfDependencies: string[] = [];
-
-  for (const node of nodes) {
-    for (const depId of node.dependsOn) {
-      if (!nodeIds.has(depId)) {
-        missingDependencies.push({ nodeId: node.nodeId, missingDep: depId });
-      }
-      if (depId === node.nodeId) {
-        selfDependencies.push(node.nodeId);
-      }
-    }
-  }
-
-  // 环检测：DFS
-  const cycles: string[][] = [];
-  const adjacency = new Map<string, string[]>();
-  for (const node of nodes) {
-    adjacency.set(node.nodeId, [...node.dependsOn]);
-  }
-  const visited = new Set<string>();
-  const recursionStack = new Set<string>();
-  const path: string[] = [];
-
-  function dfs(nodeId: string): void {
-    if (recursionStack.has(nodeId)) {
-      const cycleStart = path.indexOf(nodeId);
-      if (cycleStart >= 0) {
-        cycles.push([...path.slice(cycleStart), nodeId]);
-      }
-      return;
-    }
-    if (visited.has(nodeId)) return;
-
-    visited.add(nodeId);
-    recursionStack.add(nodeId);
-    path.push(nodeId);
-
-    const deps = adjacency.get(nodeId) ?? [];
-    for (const dep of deps) {
-      if (adjacency.has(dep)) {
-        dfs(dep);
-      }
-    }
-
-    path.pop();
-    recursionStack.delete(nodeId);
-  }
-
-  for (const node of nodes) {
-    if (!visited.has(node.nodeId)) {
-      dfs(node.nodeId);
-    }
-  }
-
-  return {
-    valid: missingDependencies.length === 0 && selfDependencies.length === 0 && cycles.length === 0,
-    missingDependencies,
-    selfDependencies,
-    cycles,
-  };
 }

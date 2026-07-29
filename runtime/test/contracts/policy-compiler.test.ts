@@ -611,14 +611,9 @@ describe('Policy Bundle Store', () => {
       executionId: execId, intentDecision: makeIntent(),
       context: { user: { id: 'u1' } }, registry, compiledAt: now,
     });
-    // Register a second policy so out2 has different matched policies → different content fingerprint → different bundleId
-    registry.register(
-      makePolicy({ policyId: 'core.test-policy-extra', priority: 600 }),
-      now,
-    );
     const out2 = compilePolicyBundle({
       executionId: execId, intentDecision: makeIntent(),
-      context: { user: { id: 'u2' } }, registry, compiledAt: now,
+      context: { user: { id: 'u1' } }, registry, compiledAt: now,
     });
 
     store.store(out1.bundle, '2026-07-28T10:00:00.000Z');
@@ -640,14 +635,9 @@ describe('Policy Bundle Store', () => {
       executionId: execId, intentDecision: makeIntent(),
       context: { user: { id: 'u1' } }, registry, compiledAt: now,
     });
-    // Register a second policy so out2 has different matched policies → different content fingerprint → different bundleId
-    registry.register(
-      makePolicy({ policyId: 'core.test-policy-extra', priority: 600 }),
-      now,
-    );
     const out2 = compilePolicyBundle({
       executionId: execId, intentDecision: makeIntent(),
-      context: { user: { id: 'u2' } }, registry, compiledAt: now,
+      context: { user: { id: 'u1' } }, registry, compiledAt: now,
     });
 
     store.store(out1.bundle, '2026-07-28T10:00:00.000Z');
