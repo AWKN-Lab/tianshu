@@ -102,8 +102,8 @@ export class AgentLoop {
         logger.warn(`Failed to save checkpoint: ${String(err)}`);
       }
     };
-    const clearCheckpoint = (reason: string): void => {
-      try { checkpointManager?.clearCheckpoint(checkpointId, true, reason); } catch { /* audit failure must not mask result */ }
+    const clearCheckpoint = (terminated: boolean, reason: string): void => {
+      try { checkpointManager?.clearCheckpoint(checkpointId, terminated, reason); } catch { /* audit failure must not mask result */ }
     };
     const recordLoopFailure = (errorText: string, severity: 'error' | 'fatal' = 'error'): void => {
       try {
@@ -123,7 +123,6 @@ export class AgentLoop {
     };
     const terminate = async (reason: string, text = finalText): Promise<AgentLoopResult> => {
       finalText = text;
-      clearCheckpoint(reason);
       await stopSession();
       return this.buildResult(finalText, reactState, turn, 0, true, reason);
     };
@@ -164,6 +163,7 @@ export class AgentLoop {
         logger.error(`LLM call failed: ${message}`);
         if (this.loopMonitor.recordFailure()) {
           recordLoopFailure(`LLM 连续失败 3 次: ${message}`, 'fatal');
+          clearCheckpoint(true, 'LLM 连续失败 3 次');
           return terminate('LLM 连续失败 3 次');
         }
         saveCheckpoint();
@@ -174,6 +174,7 @@ export class AgentLoop {
       const tokenAnomaly = this.loopMonitor.recordTokenUsage(response.usage.totalTokens);
       if (tokenAnomaly) {
         recordLoopFailure(`token 异常增长: current=${response.usage.totalTokens}`);
+        clearCheckpoint(true, 'token anomaly');
         return terminate('token anomaly', '[token 异常增长，循环已终止]');
       }
 
@@ -260,6 +261,7 @@ export class AgentLoop {
 
           if (this.loopMonitor.recordToolCall(toolName)) {
             recordLoopFailure(`工具调用重复模式: ${toolName}`, 'fatal');
+            clearCheckpoint(true, 'repeating pattern');
             return terminate('repeating pattern', '[循环异常：检测到工具调用重复模式，已终止]');
           }
         }
@@ -269,6 +271,7 @@ export class AgentLoop {
           if (reactState.lastReflection && !reactState.lastReflection.shouldContinue) {
             const reason = `reflection stop: ${reactState.lastReflection.reason}`;
             recordLoopFailure(`反思停止: ${reactState.lastReflection.reason}`);
+            clearCheckpoint(true, reason);
             return terminate(reason, `[reflection stop] ${reactState.lastReflection.reason}`);
           }
         }
@@ -283,7 +286,7 @@ export class AgentLoop {
     }
 
     const reachedMax = turn >= this.config.maxTurns && !finalText;
-    clearCheckpoint(reachedMax ? `达到 L1 最大轮数 ${this.config.maxTurns}` : '循环正常结束');
+    clearCheckpoint(true, reachedMax ? `达到 L1 最大轮数 ${this.config.maxTurns}` : '循环正常结束');
     await stopSession();
     return this.buildResult(finalText, reactState, turn, 0, reachedMax, reachedMax ? `达到 L1 最大轮数 ${this.config.maxTurns}` : undefined);
   }
