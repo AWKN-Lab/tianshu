@@ -49,6 +49,23 @@ export class MemoryProtocolError extends Error {
   }
 }
 
+export class MemoryHttpError extends Error {
+  readonly status: number;
+  readonly method: string;
+  readonly path: string;
+  readonly responseBody: string;
+
+  constructor(input: { status: number; method: string; path: string; responseBody: string }) {
+    const responseExcerpt = input.responseBody.slice(0, 500);
+    super(`AWKN Memory OS ${input.method} ${input.path} failed: ${input.status} ${responseExcerpt}`);
+    this.name = 'MemoryHttpError';
+    this.status = input.status;
+    this.method = input.method;
+    this.path = input.path;
+    this.responseBody = input.responseBody;
+  }
+}
+
 export interface MemoryOsDiagnostic {
   capabilities: MemoryBackendCapabilities;
   context?: CompiledMemoryContext;
@@ -121,7 +138,7 @@ export class AwknMemoryOsBackend implements MemoryBackend {
       include_feedback: false,
     });
     const receiptId = String(receipt.receipt_id ?? asObject(receipt.receipt).receipt_id ?? '');
-    if (!receiptId) throw new Error('AWKN Memory OS context response has no receipt_id');
+    if (!receiptId) throw new MemoryProtocolError('AWKN Memory OS context response has no receipt_id');
 
     const assembledItems = Array.isArray(receipt.items) ? receipt.items : null;
     if (assembledItems?.length === 0 || Number(receipt.item_count) === 0) {
@@ -271,7 +288,14 @@ export class AwknMemoryOsBackend implements MemoryBackend {
       if (response.status >= 500 && queueOnFailure) {
         return this.queued(method, path, cleanPayload, idempotencyKey, `core-${response.status}`);
       }
-      if (!response.ok) throw new Error(`AWKN Memory OS ${method} ${path} failed: ${response.status} ${text.slice(0, 500)}`);
+      if (!response.ok) {
+        throw new MemoryHttpError({
+          status: response.status,
+          method,
+          path,
+          responseBody: text,
+        });
+      }
       return body;
     } catch (error) {
       if (queueOnFailure && (error instanceof TypeError || (error instanceof Error && error.name === 'AbortError'))) {
