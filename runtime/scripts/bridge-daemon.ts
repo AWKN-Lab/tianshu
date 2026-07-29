@@ -205,6 +205,12 @@ async function main(): Promise<void> {
     }
   }
 
+  // PR1 P2-2: 输出确定性 ready 标记，供测试 waitForReady 解析（替代固定 sleep 1s）
+  // 标记格式：BRIDGE_DAEMON_READY pid=<pid> dir=<bridge_dir>
+  // 在 provider 初始化后、轮询循环开始前输出，确保 daemon 真正准备好处理请求
+  const readyMarker = process.env.AWKN_BRIDGE_READY_MARKER ?? 'BRIDGE_DAEMON_READY';
+  process.stdout.write(`${readyMarker} pid=${process.pid} dir=${BRIDGE_DIR}\n`);
+
   // 轮询循环
   let processed = 0;
   while (running) {
