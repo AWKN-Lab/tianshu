@@ -6,14 +6,16 @@ import { runAgentOsMigrations } from './agent-os-migration-registry.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const DEFAULT_DB_PATH = process.env.AWKN_DB_PATH ?? resolve(__dirname, '..', '..', 'data', 'awkn-engine.db');
-
 let dbInstance: Database.Database | null = null;
 
-export function getDb(dbPath: string = DEFAULT_DB_PATH): Database.Database {
+export function getDb(dbPath?: string): Database.Database {
   if (dbInstance) return dbInstance;
-  mkdirSync(dirname(dbPath), { recursive: true });
-  dbInstance = new Database(dbPath);
+  // Read AWKN_DB_PATH at call time (not import time) so tests can set it
+  // after importing the module. ESM imports are hoisted before module body,
+  // so a module-level const would miss the env var set by test files.
+  const resolvedPath = dbPath ?? process.env.AWKN_DB_PATH ?? resolve(__dirname, '..', '..', 'data', 'awkn-engine.db');
+  mkdirSync(dirname(resolvedPath), { recursive: true });
+  dbInstance = new Database(resolvedPath);
   dbInstance.pragma('journal_mode = WAL');
   dbInstance.pragma('foreign_keys = ON');
   runAgentOsMigrations(dbInstance);
