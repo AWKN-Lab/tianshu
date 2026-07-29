@@ -332,13 +332,18 @@ describe('Migration Backup/Restore', () => {
         const db = createTestDb(cleanupDbPath);
         backupBeforeMigration(db, cleanupDbPath, [11]);
         db.close();
+        // Ensure distinct filename timestamps — on fast CI machines the
+        // loop can complete within the same millisecond, causing identical
+        // backup filenames and silent overwrites.
+        const sleepBuf = new Int32Array(new SharedArrayBuffer(4));
+        Atomics.wait(sleepBuf, 0, 0, 10);
       }
 
       const before = listMigrationBackups(cleanupDbPath);
-      assert.ok(before.length >= 7);
+      assert.equal(before.length, 7);
 
       const removed = cleanupOldBackups(cleanupDbPath, 3);
-      assert.equal(removed, before.length - 3);
+      assert.equal(removed, 4);
 
       const after = listMigrationBackups(cleanupDbPath);
       assert.equal(after.length, 3);
@@ -347,15 +352,20 @@ describe('Migration Backup/Restore', () => {
 
   describe('Step 4: migration failure auto-restore + cleanup integration', () => {
     it('auto-cleans old backups after successful migration (cleanupOldBackups wired)', () => {
-      const cleanupDbPath = join(testDir, 'auto-cleanup.db');
+      const autoCleanupDir = join(testDir, 'auto-cleanup-isolated');
+      mkdirSync(autoCleanupDir, { recursive: true });
+      const cleanupDbPath = join(autoCleanupDir, 'auto-cleanup.db');
       // Pre-create 7 stale backups (exceeding default keepCount=5)
       for (let i = 0; i < 7; i++) {
         const db = createTestDb(cleanupDbPath);
         backupBeforeMigration(db, cleanupDbPath, [11]);
         db.close();
+        // Ensure distinct filename timestamps (see cleanupOldBackups test).
+        const sleepBuf = new Int32Array(new SharedArrayBuffer(4));
+        Atomics.wait(sleepBuf, 0, 0, 10);
       }
       const staleCount = listMigrationBackups(cleanupDbPath).length;
-      assert.ok(staleCount >= 7, `expected >=7 stale backups, got ${staleCount}`);
+      assert.equal(staleCount, 7);
 
       // Run migration — should trigger cleanupOldBackups(dbPath, 5) on success
       const db = createTestDb(cleanupDbPath);
