@@ -1,0 +1,10 @@
+{
+  "directDbImports": 20,
+  "moduleSingletons": 12,
+  "processEnvInCoreLayers": 0,
+  "crossComponentImports": 22,
+  "legacyExceptionsUsed": 1,
+  "blockingViolations": 0
+}
+Architecture report: /mnt/data/awkn-audit-work/runtime/architecture-scan.json
+ARCH-004 legacy exception skills/manager.ts → WP-AOS-07
