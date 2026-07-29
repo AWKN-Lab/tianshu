@@ -23,7 +23,10 @@ export type ContextRenderErrorCode =
   | 'RENDER_HASH_MISMATCH'
   | 'SECTION_ORDER_VIOLATION'
   | 'ITEM_DUPLICATE_ACROSS_SECTIONS'
-  | 'ITEMS_NOT_SORTED';
+  | 'ITEMS_NOT_SORTED'
+  | 'RENDERED_TEXT_MISMATCH'
+  | 'ITEM_SECTION_MISMATCH'
+  | 'ITEM_CONTENT_HASH_MISMATCH';
 
 export class ContextRenderError extends Error {
   constructor(readonly code: ContextRenderErrorCode, message: string) {
@@ -158,6 +161,7 @@ export function bindContextRender(value: ContextRenderInput): ImmutableContextRe
  * - Sections follow SECTION_ORDER (no out-of-order sections)
  * - itemId is unique across all sections (no duplicates)
  * - Each section's items are sorted by Unicode code point
+ * - Each item's `section` field matches its containing section's `section`
  *
  * These invariants protect the Render Hash: if any invariant is violated,
  * the rendered text would differ from a canonical re-rendering, breaking
@@ -200,6 +204,12 @@ function assertCrossFieldInvariants(sections: readonly ContextRenderSection[]): 
         );
       }
       seenItemIds.add(item.itemId);
+      if (item.section !== section.section) {
+        throw new ContextRenderError(
+          'ITEM_SECTION_MISMATCH',
+          `item ${item.itemId} declares section "${item.section}" but is nested under section "${section.section}"`,
+        );
+      }
     }
   }
 }
@@ -212,8 +222,18 @@ function assertCrossFieldInvariants(sections: readonly ContextRenderSection[]): 
  * renderHash and validates cross-field invariants, providing fail-closed
  * protection against partial corruption or malicious tampering.
  *
- * Throws ContextRenderError with code RENDER_HASH_MISMATCH if the stored
- * hash does not match the recomputed hash.
+ * Verifications performed (in order):
+ * 1. Recompute renderHash from projection and compare with stored hash
+ * 2. Validate cross-field invariants (section order, item uniqueness, item sort, item.section match)
+ * 3. Recompute contextRenderText(sections) and compare with stored renderedText
+ * 4. For each item, recompute contextRenderSourceHash(item.content) and compare with item.contentHash
+ *
+ * Throws ContextRenderError with code:
+ * - RENDER_HASH_MISMATCH if stored hash does not match recomputed hash
+ * - RENDERED_TEXT_MISMATCH if stored renderedText does not match recomputed text
+ * - ITEM_CONTENT_HASH_MISMATCH if an item's content does not match its declared contentHash
+ * - SECTION_ORDER_VIOLATION / ITEM_DUPLICATE_ACROSS_SECTIONS / ITEMS_NOT_SORTED / ITEM_SECTION_MISMATCH
+ *   if any cross-field invariant is violated
  */
 export function verifyImmutableRender(render: ImmutableContextRender): void {
   const { renderHash, ...projection } = render;
@@ -225,4 +245,30 @@ export function verifyImmutableRender(render: ImmutableContextRender): void {
     );
   }
   assertCrossFieldInvariants(render.sections);
+
+  // P2-1: validate renderedText matches recomputed canonical text from sections
+  // Prevents a hash-consistent record from replaying different context than the
+  // sections used for auditing (e.g., when produced outside bindContextRender).
+  const computedRenderedText = contextRenderText(render.sections);
+  if (computedRenderedText !== render.renderedText) {
+    throw new ContextRenderError(
+      'RENDERED_TEXT_MISMATCH',
+      'ImmutableContextRender.renderedText does not match recomputed canonical text from sections (possible tampering or corruption)',
+    );
+  }
+
+  // P2-3: revalidate each item's content hash
+  // Prevents a faulty alternate producer or recomputed-outer-hash record from
+  // breaking the content-to-manifest binding represented by the item.
+  for (const section of render.sections) {
+    for (const item of section.items) {
+      const computedItemHash = contextRenderSourceHash(item.content);
+      if (computedItemHash !== item.contentHash) {
+        throw new ContextRenderError(
+          'ITEM_CONTENT_HASH_MISMATCH',
+          `item ${item.itemId} content does not match its declared contentHash (possible tampering or corruption)`,
+        );
+      }
+    }
+  }
 }

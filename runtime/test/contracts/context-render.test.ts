@@ -4,6 +4,7 @@ import {
   ContextRenderInputSchema,
   ImmutableContextRenderSchema,
   contextRenderSourceHash,
+  contextRenderText,
   immutableContextRenderHash,
   type ContextCandidate,
   type ContextManifest,
@@ -247,6 +248,76 @@ describe('verifyImmutableRender (read-time integrity)', () => {
     assert.throws(
       () => verifyImmutableRender(tampered),
       (error: unknown) => error instanceof ContextRenderError && error.code === 'RENDER_HASH_MISMATCH',
+    );
+  });
+
+  it('rejects a tampered renderedText that does not match recomputed canonical text (P2-1)', () => {
+    const render = bindContextRender(renderInput());
+    // Tamper renderedText but recompute renderHash so hash check passes.
+    // Without P2-1 fix, a hash-consistent record could replay different context
+    // than the sections used for auditing.
+    const tamperedRenderedText = render.renderedText + '\n// tampered trailer';
+    const { renderHash: _oldHash, ...projection } = { ...render, renderedText: tamperedRenderedText };
+    const recomputedHash = immutableContextRenderHash(projection);
+    const tampered = { ...render, renderedText: tamperedRenderedText, renderHash: recomputedHash };
+    assert.throws(
+      () => verifyImmutableRender(tampered),
+      (error: unknown) => error instanceof ContextRenderError && error.code === 'RENDERED_TEXT_MISMATCH',
+    );
+  });
+
+  it('rejects an item whose section does not match its container (P2-2)', () => {
+    const render = bindContextRender(renderInput());
+    // Move one item's `section` field to a different valid section while
+    // keeping it nested under its original container. Without P2-2 fix,
+    // consumers grouping by outer section vs item field could interpret the
+    // same verified render differently.
+    const tamperedSections = render.sections.map((section, index) =>
+      index === 0 && section.items.length > 0
+        ? {
+            ...section,
+            items: [{ ...section.items[0]!, section: 'KNOWLEDGE' as ContextSection }],
+          }
+        : section,
+    );
+    const { renderHash: _oldHash, ...projection } = { ...render, sections: tamperedSections };
+    const recomputedHash = immutableContextRenderHash(projection);
+    const tampered = { ...render, sections: tamperedSections, renderHash: recomputedHash };
+    assert.throws(
+      () => verifyImmutableRender(tampered),
+      (error: unknown) => error instanceof ContextRenderError && error.code === 'ITEM_SECTION_MISMATCH',
+    );
+  });
+
+  it('rejects an item whose content does not match its declared contentHash (P2-3)', () => {
+    const render = bindContextRender(renderInput());
+    // Tamper one item's content but keep its declared contentHash unchanged.
+    // Recompute renderedText and renderHash so prior checks (hash + renderedText)
+    // pass, forcing verification to reach the item content hash check.
+    const tamperedSections = render.sections.map((section, index) =>
+      index === 0 && section.items.length > 0
+        ? {
+            ...section,
+            items: [{ ...section.items[0]!, content: { tampered: true } as JsonValue }],
+          }
+        : section,
+    );
+    const recomputedRenderedText = contextRenderText(tamperedSections);
+    const { renderHash: _oldHash, ...projection } = {
+      ...render,
+      sections: tamperedSections,
+      renderedText: recomputedRenderedText,
+    };
+    const recomputedHash = immutableContextRenderHash(projection);
+    const tampered = {
+      ...render,
+      sections: tamperedSections,
+      renderedText: recomputedRenderedText,
+      renderHash: recomputedHash,
+    };
+    assert.throws(
+      () => verifyImmutableRender(tampered),
+      (error: unknown) => error instanceof ContextRenderError && error.code === 'ITEM_CONTENT_HASH_MISMATCH',
     );
   });
 });
