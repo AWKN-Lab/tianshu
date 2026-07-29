@@ -155,6 +155,8 @@ export interface AgentLoopConfig {
   reviewProvider?: LlmProvider;
   reviewPrompt?: string;
   approvedTools?: string[];
+  /** Tools hidden from this loop. Skill sub-loops use this to prevent recursive skill dispatch. */
+  excludedTools?: string[];
 }
 
 export const DEFAULT_CONFIG: AgentLoopConfig = {
@@ -300,7 +302,7 @@ export class AgentLoop {
 
       const request: ChatRequest = {
         messages,
-        tools: toolRegistry.toFunctionDefinitions().map((tool) => ({ type: 'function' as const, function: tool })),
+        tools: toolRegistry.toFunctionDefinitions(this.config.excludedTools).map((tool) => ({ type: 'function' as const, function: tool })),
         callSource: this.config.callSource ?? 'main_dialogue',
         provider: this.config.provider,
         traceId: this.activeTraceId,
@@ -334,6 +336,20 @@ export class AgentLoop {
 
         for (const toolCall of response.toolCalls) {
           const toolName = toolCall.function.name;
+          if (this.config.excludedTools?.includes(toolName)) {
+            const errorMessage = `Tool "${toolName}" is unavailable in this loop`;
+            messages.push({ role: 'tool', toolCallId: toolCall.id, content: `[error] ${errorMessage}` });
+            reactState = recordObservation(reactState, {
+              toolName,
+              args: {},
+              result: '',
+              isError: true,
+              errorMessage,
+              durationMs: 0,
+            });
+            recordFailure(errorMessage);
+            continue;
+          }
           let args: Record<string, unknown>;
           try {
             const parsed = JSON.parse(toolCall.function.arguments) as unknown;

@@ -48,6 +48,7 @@ async function main(): Promise<void> {
     assert(src.includes('result.terminated'), '源码应含 result.terminated 检查');
     assert(src.includes('Skill "${skillName}" terminated'), 'throw error message 应含 skill 名');
     assert(src.includes('M3 进阶-7'), '源码应含 M3 进阶-7 修复注释');
+    assert(src.includes("excludedTools: ['skill']"), '技能子循环应隐藏 skill，防止递归找技能');
     // 确认 throw 在 return 之前（排除注释行 — 注释里也有 "return result.finalText"）
     // 用正则找非注释的代码行
     const codeLines = src.split('\n').filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*'));

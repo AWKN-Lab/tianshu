@@ -237,7 +237,13 @@ export async function completePendingDrafts(cwd: string): Promise<{
   let completed = 0;
   for (const draft of pending) {
     try {
-      const loop = new AgentLoop({ cwd, enableL2: false, callSource: 'skill_tool', systemPrompt: skillBody });
+      const loop = new AgentLoop({
+        cwd,
+        enableL2: false,
+        callSource: 'skill_tool',
+        systemPrompt: skillBody,
+        excludedTools: ['skill'],
+      });
       const result = await loop.runL1(`读取并完善候选经验文件 ${draft.filePath}。补充根因和可执行工程规则，保留 DRAFT 状态，等待历史回放。`);
       if (result.terminated) errors.push(`${draft.experienceId}: ${result.terminationReason ?? 'terminated'}`);
       else completed++;

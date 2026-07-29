@@ -78,6 +78,14 @@ runtime/data/drafts/
 runtime/data/*.log
 # architecture-scan.json 是 check:architecture 生成的报告（不入仓）
 runtime/architecture-scan.json
+# 运行时 trace、prompt 请求、memory outbox 等 JSONL 产物（含嵌套路径 runtime/runtime/）
+runtime/**/*.jsonl
+# 嵌套 llm-bridge 目录（如 runtime/runtime/data/llm-bridge/，疑似路径配置错误产生）
+runtime/**/data/llm-bridge/
+
+# ===== 根目录日志（非 runtime 内部）=====
+logs/
+logs/**
 
 # ===== 测试临时产物 =====
 *.test.log

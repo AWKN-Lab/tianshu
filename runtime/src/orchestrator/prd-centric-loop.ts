@@ -61,6 +61,7 @@ async function callSkill(skillName: string, input: string, cwd: string): Promise
     enableL2: false,
     callSource: 'skill_tool',
     systemPrompt: body,
+    excludedTools: ['skill'],
   });
   const result = await loop.runL1(input);
 

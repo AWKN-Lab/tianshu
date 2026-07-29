@@ -29,6 +29,7 @@ afterEach(() => {
   delete process.env.AWKN_ALLOW_OUTSIDE_WORKSPACE;
   delete process.env.AWKN_ALLOW_SENSITIVE_PATHS;
   delete process.env.AWKN_TOOL_POLICY_MODE;
+  delete process.env.AWKN_ALLOW_GITHUB_ACTIONS;
 });
 
 describe('ToolPolicy', () => {
@@ -68,5 +69,30 @@ describe('ToolPolicy', () => {
     });
     assert.equal(decision.allowed, false);
     assert.match(decision.reason, /command denied/);
+  });
+
+  it('blocks GitHub Actions commands after approval', () => {
+    const root = mkdtempSync(join(tmpdir(), 'awkn-policy-'));
+    const decision = toolPolicy.evaluate(execTool, {
+      command: 'gh workflow run release.yml --ref main',
+      cwd: root,
+    }, {
+      sessionId: 's', userId: 'u', callSource: 'main_dialogue', workspaceRoot: root,
+      approvedToolNames: ['exec'],
+    });
+    assert.equal(decision.allowed, false);
+    assert.match(decision.reason, /GitHub Actions denied/);
+  });
+
+  it('keeps normal git push available for code hosting', () => {
+    const root = mkdtempSync(join(tmpdir(), 'awkn-policy-'));
+    const decision = toolPolicy.evaluate(execTool, {
+      command: 'git push origin main',
+      cwd: root,
+    }, {
+      sessionId: 's', userId: 'u', callSource: 'main_dialogue', workspaceRoot: root,
+      approvedToolNames: ['exec'],
+    });
+    assert.equal(decision.allowed, true);
   });
 });

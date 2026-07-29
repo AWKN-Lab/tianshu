@@ -29,6 +29,12 @@ const DANGEROUS_COMMANDS: RegExp[] = [
   /powershell[^\n]*-(?:enc|encodedcommand)\b/i,
   /(?:^|\s)(?:sudo|runas)(?:\s|$)/i,
 ];
+const GITHUB_ACTIONS_COMMANDS: RegExp[] = [
+  /\bgh(?:\.exe)?\s+workflow\b/i,
+  /\bgh(?:\.exe)?\s+run\b/i,
+  /\bgh(?:\.exe)?\s+api\b[^\r\n]*(?:\/actions\/|actions\/workflows|actions\/runs)/i,
+  /(?:api\.github\.com|github\.com\/api\/v3)[^\r\n]*(?:\/actions\/|actions\/workflows|actions\/runs)/i,
+];
 
 function approvedNames(ctx?: ExecutionContext): Set<string> {
   const envNames = (process.env.AWKN_APPROVED_TOOLS ?? '')
@@ -80,6 +86,17 @@ export class ToolPolicy {
 
     if (tool.name === 'exec') {
       const command = String(args.command ?? '');
+      if (process.env.AWKN_ALLOW_GITHUB_ACTIONS !== '1') {
+        const githubActions = GITHUB_ACTIONS_COMMANDS.find((pattern) => pattern.test(command));
+        if (githubActions) {
+          return {
+            allowed: false,
+            reason: 'GitHub Actions denied: use local Windows CICD and Aliyun ReleaseBundle deployment',
+            approvalRequired,
+            resolvedPaths,
+          };
+        }
+      }
       const denied = DANGEROUS_COMMANDS.find((pattern) => pattern.test(command));
       if (denied) {
         return { allowed: false, reason: `command denied by policy: ${denied.source}`, approvalRequired, resolvedPaths };
