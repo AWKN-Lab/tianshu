@@ -106,13 +106,14 @@ describe('experience candidate generation', () => {
       sampleIds: ['id-1', 'id-2', 'id-3'],
       suggestedExperienceId: 'EXP-DRV-20260723-001',
     }, 'EXP-DRV-20260723-001');
-    assert.match(markdown, /DRAFT \/ 待回放验证/);
+    assert.match(markdown, /待人工补充/);
     assert.match(markdown, /baseline\/candidate 回放比较/);
     assert.match(markdown, /id-1/);
     assert.match(markdown, /review verdict missing/);
+    assert.match(markdown, /DRAFT/);
   });
 
-  it('creates one DRAFT candidate, keeps corrections open and reuses the fingerprint', () => {
+  it('creates one DRAFT candidate, resolves corrections by fingerprint and reuses the fingerprint', () => {
     const ledger = getCorrectionsLedger();
     for (let index = 0; index < 3; index++) ledger.record({ source: 'reviewGate', errorText: 'auto-extract error' });
     const pattern = new PatternDetector().detectRepeatedFingerprints()[0]!;
@@ -121,12 +122,12 @@ describe('experience candidate generation', () => {
 
     assert.ok(existsSync(first.filePath));
     assert.match(readFileSync(first.filePath, 'utf-8'), /DRAFT/);
-    assert.equal(first.resolvedCorrections, 0);
+    assert.equal(first.resolvedCorrections, 3);
     assert.equal(first.reusedCandidate, false);
     assert.equal(second.reusedCandidate, true);
     assert.equal(second.candidateId, first.candidateId);
     assert.equal(second.experienceId, first.experienceId);
-    assert.equal(ledger.list({ status: 'open' }).length, 3);
+    assert.equal(ledger.list({ status: 'open' }).length, 0);
   });
 
   it('writes distinct candidates for distinct fingerprints', () => {
