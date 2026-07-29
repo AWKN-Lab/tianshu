@@ -1,5 +1,7 @@
 # TEST-EVIDENCE
 
+> `logs/...` 路径位于本次可下载交付 ZIP。Git 分支仅提交审计文档、统一补丁与源码修复。
+
 ## 一、环境
 
 - OS：Linux sandbox
