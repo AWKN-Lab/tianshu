@@ -258,9 +258,31 @@ export class HookManager {
         );
 
         // 通过 stdin 传递 payload
+        // EPIPE 处理：子进程提前退出时 stdin 已关闭，write/end 会抛 EPIPE。
+        // Linux 上是同步抛出 + 触发 'error' 事件；Windows 上行为不同。
+        // 解决方案：
+        //   1. 监听 stdin 'error' 事件，吞掉 EPIPE（避免未捕获 'error' 事件导致进程崩溃）
+        //   2. try/catch 包裹 write/end（捕获同步抛出的 EPIPE）
+        //   3. 写入失败不影响结果：execFile callback 已会因为子进程退出被触发，
+        //      failClosed 语义仍由 stdout 解析逻辑保证
         if (proc.stdin) {
-          proc.stdin.write(JSON.stringify(payload));
-          proc.stdin.end();
+          proc.stdin.on('error', (err: NodeJS.ErrnoException) => {
+            if (err.code === 'EPIPE') {
+              // 子进程已退出，stdin 写入失败可忽略 — execFile callback 会处理结果
+              return;
+            }
+            throw err;
+          });
+          try {
+            proc.stdin.write(JSON.stringify(payload));
+            proc.stdin.end();
+          } catch (err) {
+            const code = (err as NodeJS.ErrnoException).code;
+            if (code !== 'EPIPE') {
+              throw err;
+            }
+            // EPIPE: 子进程已退出，忽略
+          }
         }
       }),
       sleep(timeout).then(
