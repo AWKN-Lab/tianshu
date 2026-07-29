@@ -70,6 +70,8 @@ out/
 # ===== runtime 内部状态（数据库、缓存、上下文快照）=====
 runtime/data/*.db
 runtime/data/*.db-journal
+runtime/data/*.db-shm
+runtime/data/*.db-wal
 runtime/data/cron-contexts/
 runtime/data/llm-bridge/
 runtime/data/drafts/
