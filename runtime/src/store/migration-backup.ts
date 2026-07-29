@@ -194,25 +194,17 @@ export function listMigrationBackups(dbPath: string): MigrationBackup[] {
   for (const entry of readdirSync(dir)) {
     if (!entry.startsWith('.migration-backup-') || !entry.endsWith('.db')) continue;
     const backupPath = join(dir, entry);
-    // Tolerate ENOENT from concurrent test workers that may delete backups
-    // between readdirSync and statSync/computeFileHash. Skip missing files
-    // instead of throwing — they will simply not appear in the list.
-    try {
-      const stat = statSync(backupPath);
-      const contentHash = computeFileHash(backupPath);
-      const createdAt = stat.mtime.toISOString();
+    const stat = statSync(backupPath);
+    const contentHash = computeFileHash(backupPath);
+    const createdAt = stat.mtime.toISOString();
 
-      backups.push({
-        backupPath,
-        originalPath: dbPath,
-        contentHash,
-        createdAt,
-        pendingMigrations: [],
-      });
-    } catch {
-      // backup file was deleted between readdirSync and statSync/computeFileHash
-      // (concurrent test worker cleanup race); skip it
-    }
+    backups.push({
+      backupPath,
+      originalPath: dbPath,
+      contentHash,
+      createdAt,
+      pendingMigrations: [],
+    });
   }
 
   // Sort by backupPath descending — the filename contains an ISO timestamp
