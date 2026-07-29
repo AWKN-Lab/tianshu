@@ -96,6 +96,10 @@ func Generate(repository, fromRef, toRef, version string) (Spec, error) {
 		return Spec{}, fmt.Errorf("resolve repository: %w", err)
 	}
 	root = filepath.Clean(root)
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return Spec{}, fmt.Errorf("resolve real repository path: %w", err)
+	}
 	topLevel, err := git(root, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return Spec{}, err
@@ -104,7 +108,11 @@ func Generate(repository, fromRef, toRef, version string) (Spec, error) {
 	if err != nil {
 		return Spec{}, fmt.Errorf("resolve Git top-level: %w", err)
 	}
-	if !samePath(root, filepath.Clean(resolvedTop)) {
+	realTop, err := filepath.EvalSymlinks(filepath.Clean(resolvedTop))
+	if err != nil {
+		return Spec{}, fmt.Errorf("resolve real Git top-level: %w", err)
+	}
+	if !samePath(filepath.Clean(realRoot), filepath.Clean(realTop)) {
 		return Spec{}, fmt.Errorf("repository must be the Git top-level: %s", strings.TrimSpace(string(topLevel)))
 	}
 

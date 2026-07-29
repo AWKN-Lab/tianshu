@@ -237,7 +237,10 @@ export class NativeGitReviewAdapter implements ReviewSpecProviderPort, ReviewWor
     const root = resolve(request.repositoryRoot);
     const realRoot = await realpath(root);
     const topLevel = resolve((await this.runner.run(root, ['rev-parse', '--show-toplevel'])).trim());
-    if (topLevel.toLowerCase() !== root.toLowerCase()) throw new Error(`repositoryRoot must be Git top-level: ${topLevel}`);
+    const realTopLevel = await realpath(topLevel);
+    if (realTopLevel.toLowerCase() !== realRoot.toLowerCase()) {
+      throw new Error(`repositoryRoot must be Git top-level: ${topLevel}`);
+    }
 
     let fromOid: string;
     let toOid: string;
