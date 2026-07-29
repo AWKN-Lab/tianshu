@@ -1,0 +1,487 @@
+diff --git a/runtime/scripts/bridge-daemon.ts b/runtime/scripts/bridge-daemon.ts
+index aa31d36..5ffc5b9 100644
+--- a/runtime/scripts/bridge-daemon.ts
++++ b/runtime/scripts/bridge-daemon.ts
+@@ -17,7 +17,7 @@
+  *   - 失败也写 resp（含 error 字段）：让 trae 端快速失败，不等 120s timeout
+  *
+  * 环境变量：
+- *   - AWKN_LLM_BRIDGE_DIR: 桥接目录（默认 <cwd>/runtime/data/llm-bridge）
++ *   - AWKN_LLM_BRIDGE_DIR: 绝对桥接目录（默认 <runtime>/data/llm-bridge）
+  *   - AWKN_BRIDGE_PROVIDER: LLM provider（codex/minimax，默认 codex）
+  *   - AWKN_BRIDGE_MOCK: mock 模式（1=用 canned response）
+  *   - AWKN_BRIDGE_POLL_MS: 轮询间隔（默认 500ms）
+@@ -33,10 +33,10 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFile
+ import { resolve } from 'node:path';
+ import { CodexProvider } from '../src/llm/providers/codex.js';
+ import { MiniMaxProvider } from '../src/llm/providers/minimax.js';
++import { resolveLlmBridgeDir } from '../src/llm/bridge-path.js';
+ import type { ChatRequest, LlmProvider, LlmProviderInterface } from '../src/llm/types.js';
+ 
+-const BRIDGE_DIR = process.env.AWKN_LLM_BRIDGE_DIR
+-  ?? resolve(process.cwd(), 'runtime', 'data', 'llm-bridge');
++const BRIDGE_DIR = resolveLlmBridgeDir();
+ const POLL_MS = Number(process.env.AWKN_BRIDGE_POLL_MS) || 500;
+ const MOCK_MODE = process.env.AWKN_BRIDGE_MOCK === '1' || process.env.AWKN_BRIDGE_MOCK === 'true';
+ const MOCK_CONTENT = process.env.AWKN_BRIDGE_MOCK_CONTENT ?? '[mock response from bridge-daemon]';
+@@ -156,26 +156,20 @@ async function processReqFile(
+   }
+ }
+ 
+-/** 写 resp 文件（原子写：先写 tmp 再 rename，避免 trae 读到半写文件）
+- *  M1（2026-07-23）：原版代码注释声称用 rename 实现原子写，但实际用的是
+- *    writeFileSync(respPath, readFileSync(tmpPath, 'utf-8')) —— 这与直接 writeFileSync
+- *    等价，并非原子操作（trae 仍可能在写入瞬间读到半写文件）。
+- *    违反"假成功"模式：注释声称的保证与实际行为不一致。
+- *    修复：真正使用 renameSync 实现 atomic rename。
+- *    Windows 注意：renameSync 在目标文件已存在时会失败（EXCL 语义），
+- *    但本场景下 resp 文件不应已存在（processReqFile 先检查 existsSync(respPath) 跳过），
+- *    所以正常路径不会触发；fallback 用 writeFileSync 直接写（保留原有降级语义）。
++/**
++ * 写 resp 文件：先写唯一临时文件，再原子 rename。
++ * 多 daemon 竞态时保留已存在的响应，其他 rename 错误直接上抛。
+  */
+ function writeResp(respPath: string, resp: BridgeResponse): void {
+-  const tmpPath = respPath + '.tmp';
++  const tmpPath = `${respPath}.${process.pid}.tmp`;
+   writeFileSync(tmpPath, JSON.stringify(resp));
+   try {
+     // rename 是原子的（POSIX + Windows NTFS）
+     renameSync(tmpPath, respPath);
+-  } catch {
+-    // fallback：rename 失败（如 Windows 上目标已存在），直接写
+-    writeFileSync(respPath, JSON.stringify(resp));
++  } catch (error) {
+     rmSync(tmpPath, { force: true });
++    // 另一个 daemon 已赢得写入竞态时保留现有响应；其他错误上抛。
++    if (!existsSync(respPath)) throw error;
+   }
+ }
+ 
+@@ -200,8 +194,7 @@ async function main(): Promise<void> {
+       console.log(`[bridge-daemon] Provider ${PROVIDER_NAME} initialized`);
+     } catch (err) {
+       console.error(`[bridge-daemon] Provider init failed: ${String(err)}`);
+-      console.error('[bridge-daemon] Falling back to MOCK mode. Set AWKN_BRIDGE_MOCK=1 explicitly to suppress this warning.');
+-      // 不退出，用 mock 兜底（但标记为 fallback）
++      throw err;
+     }
+   }
+ 
+@@ -221,7 +214,7 @@ async function main(): Promise<void> {
+     for (const reqPath of reqFiles) {
+       if (!running) break;
+       // mock 模式：provider=null，mockRespond 不需要 provider
+-      // 真实模式：provider 已初始化（若 init 失败且未 mock，跳过等下次重试）
++      // 真实模式：provider 初始化失败会在进入循环前退出
+       if (MOCK_MODE || provider) {
+         await processReqFile(reqPath, MOCK_MODE ? null : provider);
+         processed++;
+diff --git a/runtime/src/llm/bridge-path.ts b/runtime/src/llm/bridge-path.ts
+new file mode 100644
+index 0000000..e5b011a
+--- /dev/null
++++ b/runtime/src/llm/bridge-path.ts
+@@ -0,0 +1,17 @@
++import { dirname, isAbsolute, resolve } from 'node:path';
++import { fileURLToPath } from 'node:url';
++
++const RUNTIME_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
++
++/**
++ * Resolve the multi-process LLM bridge directory without depending on process.cwd().
++ * An explicit override must be absolute so the IDE hook, CLI and daemon share one path.
++ */
++export function resolveLlmBridgeDir(value = process.env.AWKN_LLM_BRIDGE_DIR): string {
++  const configured = value?.trim();
++  if (!configured) return resolve(RUNTIME_ROOT, 'data', 'llm-bridge');
++  if (!isAbsolute(configured)) {
++    throw new Error('AWKN_LLM_BRIDGE_DIR must be an absolute path');
++  }
++  return resolve(configured);
++}
+diff --git a/runtime/src/llm/providers/trae.ts b/runtime/src/llm/providers/trae.ts
+index 72050eb..4c3ae9f 100644
+--- a/runtime/src/llm/providers/trae.ts
++++ b/runtime/src/llm/providers/trae.ts
+@@ -1,14 +1,15 @@
+ import { randomUUID } from 'node:crypto';
+-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
++import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+ import { resolve } from 'node:path';
+ import { createLogger } from '../../core/logger.js';
+ import { hookManager } from '../../core/hook-manager.js';
++import { resolveLlmBridgeDir } from '../bridge-path.js';
+ import { buildBridgeRequest } from '../protocol.js';
+ import type { ChatRequest, ChatResponse, LlmProviderInterface } from '../types.js';
+ 
+ const logger = createLogger('TraeProvider');
+ const TRAE_DEFAULT_MODEL = process.env.AWKN_TRAE_MODEL ?? 'trae-default';
+-const BRIDGE_DIR = process.env.AWKN_LLM_BRIDGE_DIR ?? resolve(process.cwd(), 'runtime', 'data', 'llm-bridge');
++const BRIDGE_DIR = resolveLlmBridgeDir();
+ const BRIDGE_POLL_INTERVAL_MS = 2000;
+ const BRIDGE_TIMEOUT_MS = 120000;
+ 
+@@ -19,6 +20,14 @@ interface BridgeResponse {
+   usage?: ChatResponse['usage'];
+   finishReason?: ChatResponse['finishReason'];
+   finish_reason?: string;
++  error?: string;
++}
++
++export class TraeBridgeRemoteError extends Error {
++  constructor(message: string) {
++    super(message);
++    this.name = 'TraeBridgeRemoteError';
++  }
+ }
+ 
+ export class TraeProvider implements LlmProviderInterface {
+@@ -58,13 +67,20 @@ export class TraeProvider implements LlmProviderInterface {
+     mkdirSync(BRIDGE_DIR, { recursive: true });
+     const reqPath = resolve(BRIDGE_DIR, `req-${id}.json`);
+     const respPath = resolve(BRIDGE_DIR, `resp-${id}.json`);
++    const tmpReqPath = `${reqPath}.${process.pid}.tmp`;
+     const cleanup = (): void => {
+       try { unlinkSync(reqPath); } catch { /* noop */ }
+       try { unlinkSync(respPath); } catch { /* noop */ }
++      try { rmSync(tmpReqPath, { force: true }); } catch { /* noop */ }
+     };
+ 
+     try {
+-      writeFileSync(reqPath, JSON.stringify(buildBridgeRequest(id, req, req.model ?? TRAE_DEFAULT_MODEL)), 'utf-8');
++      writeFileSync(
++        tmpReqPath,
++        JSON.stringify(buildBridgeRequest(id, req, req.model ?? TRAE_DEFAULT_MODEL)),
++        { encoding: 'utf-8', flag: 'wx' },
++      );
++      renameSync(tmpReqPath, reqPath);
+     } catch (err) {
+       cleanup();
+       logger.error(`Failed to write bridge request: ${String(err)}`);
+@@ -77,6 +93,9 @@ export class TraeProvider implements LlmProviderInterface {
+       if (!existsSync(respPath)) continue;
+       try {
+         const parsed = JSON.parse(readFileSync(respPath, 'utf-8')) as BridgeResponse;
++        if (parsed.error?.trim()) {
++          throw new TraeBridgeRemoteError(parsed.error.trim());
++        }
+         const toolCalls = parsed.toolCalls ?? parsed.tool_calls;
+         const content = parsed.content ?? '';
+         if (!content.trim() && !toolCalls?.length) throw new Error('bridge response has empty content and no tool calls');
+@@ -90,8 +109,9 @@ export class TraeProvider implements LlmProviderInterface {
+           finishReason: parsed.finishReason ?? (parsed.finish_reason === 'tool_calls' || toolCalls?.length ? 'tool_calls' : 'stop'),
+         };
+       } catch (err) {
+-        logger.error(`Failed to parse bridge response: ${String(err)}`);
+         cleanup();
++        if (err instanceof TraeBridgeRemoteError) throw err;
++        logger.error(`Failed to parse bridge response: ${String(err)}`);
+         return null;
+       }
+     }
+diff --git a/runtime/src/llm/router.ts b/runtime/src/llm/router.ts
+index 6a8c49c..27861cd 100644
+--- a/runtime/src/llm/router.ts
++++ b/runtime/src/llm/router.ts
+@@ -1,6 +1,6 @@
+ import { createLogger } from '../core/logger.js';
+ import type { CompiledMemoryContext } from '../memory/backend.js';
+-import { getMemoryBackendRouter } from '../memory/router.js';
++import { getMemoryBackendRouter, isMemoryFailClosedError } from '../memory/router.js';
+ import { startSpan } from '../observability/trace.js';
+ import { queryRun } from '../store/db.js';
+ import type { ChatMessage, ChatRequest, ChatResponse, LlmProvider, LlmProviderInterface } from './types.js';
+@@ -70,6 +70,10 @@ export class LlmRouter {
+       span.end('ok', this.responseAttributes(response, durationMs, false));
+       return response;
+     } catch (err) {
++      if (isMemoryFailClosedError(err)) {
++        span.end('error', { 'gen_ai.provider.name': provider.name, 'awkn.memory.fail_closed': true }, err);
++        throw err;
++      }
+       logger.error(`Provider ${provider.name} failed: ${String(err)}`);
+       if (req.fallbackPolicy === 'none') {
+         span.end('error', { 'gen_ai.provider.name': provider.name, 'awkn.fallback.used': false }, err);
+@@ -94,6 +98,14 @@ export class LlmRouter {
+           span.end('ok', this.responseAttributes(response, durationMs, true));
+           return response;
+         } catch (fallbackError) {
++          if (isMemoryFailClosedError(fallbackError)) {
++            span.end('error', {
++              'gen_ai.provider.name': name,
++              'awkn.fallback.used': true,
++              'awkn.memory.fail_closed': true,
++            }, fallbackError);
++            throw fallbackError;
++          }
+           logger.warn(`Fallback ${name} also failed: ${String(fallbackError)}`);
+         }
+       }
+@@ -131,6 +143,7 @@ export class LlmRouter {
+       messages.splice(insertAt, 0, { role: 'system', content: context.prompt });
+       return { request: { ...req, messages }, userText, projectId, sessionId, context };
+     } catch (err) {
++      if (isMemoryFailClosedError(err)) throw err;
+       logger.warn(`Failed to build memory context: ${String(err)}`);
+       return { request: req, userText, projectId, sessionId };
+     }
+@@ -157,6 +170,7 @@ export class LlmRouter {
+         outcome: 'SUCCESS',
+       });
+     } catch (err) {
++      if (isMemoryFailClosedError(err)) throw err;
+       logger.warn(`Failed to persist or finalize memory: ${String(err)}`);
+     }
+   }
+diff --git a/runtime/src/memory/awkn-memory-os-backend.ts b/runtime/src/memory/awkn-memory-os-backend.ts
+index 8bb858e..bd2b421 100644
+--- a/runtime/src/memory/awkn-memory-os-backend.ts
++++ b/runtime/src/memory/awkn-memory-os-backend.ts
+@@ -49,6 +49,25 @@ export class MemoryProtocolError extends Error {
+   }
+ }
+ 
++export class MemoryOsRequestError extends Error {
++  constructor(
++    message: string,
++    readonly status: number,
++    readonly method: string,
++    readonly path: string,
++  ) {
++    super(message);
++    this.name = 'MemoryOsRequestError';
++  }
++}
++
++/** Authentication, authorization and protocol/contract errors must never use local fallback. */
++export function isMemoryOsFailClosedError(error: unknown): boolean {
++  if (error instanceof MemoryProtocolError) return true;
++  if (!(error instanceof MemoryOsRequestError)) return false;
++  return error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429;
++}
++
+ export interface MemoryOsDiagnostic {
+   capabilities: MemoryBackendCapabilities;
+   context?: CompiledMemoryContext;
+@@ -271,7 +290,14 @@ export class AwknMemoryOsBackend implements MemoryBackend {
+       if (response.status >= 500 && queueOnFailure) {
+         return this.queued(method, path, cleanPayload, idempotencyKey, `core-${response.status}`);
+       }
+-      if (!response.ok) throw new Error(`AWKN Memory OS ${method} ${path} failed: ${response.status} ${text.slice(0, 500)}`);
++      if (!response.ok) {
++        throw new MemoryOsRequestError(
++          `AWKN Memory OS ${method} ${path} failed: ${response.status} ${text.slice(0, 500)}`,
++          response.status,
++          method,
++          path,
++        );
++      }
+       return body;
+     } catch (error) {
+       if (queueOnFailure && (error instanceof TypeError || (error instanceof Error && error.name === 'AbortError'))) {
+diff --git a/runtime/src/memory/router.ts b/runtime/src/memory/router.ts
+index fd71f10..ff92e6a 100644
+--- a/runtime/src/memory/router.ts
++++ b/runtime/src/memory/router.ts
+@@ -6,7 +6,11 @@ import type {
+   ObserveMemoryUsageInput,
+   RememberInteractionInput,
+ } from './backend.js';
+-import { AwknMemoryOsBackend, type MemoryOsDiagnostic } from './awkn-memory-os-backend.js';
++import {
++  AwknMemoryOsBackend,
++  isMemoryOsFailClosedError,
++  type MemoryOsDiagnostic,
++} from './awkn-memory-os-backend.js';
+ import { MemoryAuthorityOutboxProcessor } from './authority-outbox.js';
+ import {
+   AwknMemoryAuthorityClient,
+@@ -25,6 +29,17 @@ function remoteConfigured(mode: MemoryBackendMode): boolean {
+   return mode === 'memory-os' || Boolean(process.env.AWKN_MEMORY_OS_URL);
+ }
+ 
++export class MemoryFailClosedError extends Error {
++  constructor(message: string, readonly cause?: unknown) {
++    super(message);
++    this.name = 'MemoryFailClosedError';
++  }
++}
++
++export function isMemoryFailClosedError(error: unknown): boolean {
++  return error instanceof MemoryFailClosedError || isMemoryOsFailClosedError(error);
++}
++
+ export interface MemoryRouterDiagnostic {
+   mode: MemoryBackendMode;
+   remoteEnabled: boolean;
+@@ -84,7 +99,10 @@ export class MemoryBackendRouter {
+       await this.flushAuthorityOutbox(5).catch(() => ({ delivered: 0, failed: 1, pending: 0 }));
+       try {
+         return await this.remote.compileContext(input);
+-      } catch {
++      } catch (error) {
++        if (this.mode === 'memory-os' || isMemoryOsFailClosedError(error)) {
++          throw new MemoryFailClosedError('AWKN Memory OS is authoritative and rejected or could not serve context', error);
++        }
+         const fallback = await this.local.compileContext(input);
+         return { ...fallback, stale: true };
+       }
+@@ -93,9 +111,13 @@ export class MemoryBackendRouter {
+   }
+ 
+   async rememberInteraction(input: RememberInteractionInput): Promise<void> {
+-    await this.local.rememberInteraction(input);
+-    if (!this.isRemoteAuthorityEnabled()) return;
++    if (!this.isRemoteAuthorityEnabled()) {
++      await this.local.rememberInteraction(input);
++      return;
++    }
++    // Remote authority is written first. A 401/403/protocol failure cannot leave a local-only success.
+     await this.remote.rememberInteraction(input);
++    await this.local.rememberInteraction(input);
+     await this.flushAuthorityOutbox(5).catch(() => ({ delivered: 0, failed: 1, pending: 0 }));
+   }
+ 
+diff --git a/runtime/test/contracts/bridge-path.test.ts b/runtime/test/contracts/bridge-path.test.ts
+new file mode 100644
+index 0000000..f6b30c9
+--- /dev/null
++++ b/runtime/test/contracts/bridge-path.test.ts
+@@ -0,0 +1,28 @@
++import { describe, it } from 'node:test';
++import assert from 'node:assert/strict';
++import { isAbsolute } from 'node:path';
++import { resolveLlmBridgeDir } from '../../src/llm/bridge-path.js';
++
++describe('LLM bridge shared path', () => {
++  it('resolves the default bridge directory to an absolute module-relative path', () => {
++    const originalCwd = process.cwd();
++    const before = resolveLlmBridgeDir(undefined);
++    process.chdir(process.platform === 'win32' ? originalCwd.split(/[\\/]/)[0] + '\\' : '/');
++    try {
++      const after = resolveLlmBridgeDir(undefined);
++      assert.equal(after, before);
++      assert.equal(isAbsolute(after), true);
++    } finally {
++      process.chdir(originalCwd);
++    }
++  });
++
++  it('accepts an explicit absolute bridge directory', () => {
++    const absolute = process.platform === 'win32' ? 'C:\\awkn\\llm-bridge' : '/tmp/awkn/llm-bridge';
++    assert.equal(resolveLlmBridgeDir(absolute), absolute);
++  });
++
++  it('rejects a relative override to prevent IDE/CLI/daemon path divergence', () => {
++    assert.throws(() => resolveLlmBridgeDir('runtime/data/llm-bridge'), /must be an absolute path/);
++  });
++});
+diff --git a/runtime/test/contracts/memory-backend-adapter.test.ts b/runtime/test/contracts/memory-backend-adapter.test.ts
+index 4814d85..6c220f7 100644
+--- a/runtime/test/contracts/memory-backend-adapter.test.ts
++++ b/runtime/test/contracts/memory-backend-adapter.test.ts
+@@ -19,7 +19,7 @@ afterEach(async () => {
+   for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true });
+ });
+ 
+-async function startMemoryServer(input: { emptyContext?: boolean } = {}): Promise<{
++async function startMemoryServer(input: { emptyContext?: boolean; projectsStatus?: number } = {}): Promise<{
+   url: string;
+   requests: Array<{ method: string; path: string }>;
+ }> {
+@@ -36,7 +36,12 @@ async function startMemoryServer(input: { emptyContext?: boolean } = {}): Promis
+       return;
+     }
+     if (path === '/api/v1/projects') {
+-      response.end(JSON.stringify([{ project_id: 'project-1' }]));
++      if (input.projectsStatus) {
++        response.statusCode = input.projectsStatus;
++        response.end(JSON.stringify({ error: 'project grant missing' }));
++      } else {
++        response.end(JSON.stringify([{ project_id: 'project-1' }]));
++      }
+       return;
+     }
+     if (path === '/api/v1/context/assemble') {
+@@ -122,7 +127,7 @@ describe('Memory backend adapter', () => {
+     assert.equal(diagnostic.remote?.outbox.pending, 0);
+   });
+ 
+-  it('falls back to local memory and marks the context stale when Core is unavailable', async () => {
++  it('falls back to stale local memory in auto mode on a transport failure', async () => {
+     const projectId = `fallback-${Date.now()}-${Math.random()}`;
+     getMemoryService().put({
+       type: 'project_semantic', scopeId: projectId, key: 'architecture',
+@@ -134,11 +139,44 @@ describe('Memory backend adapter', () => {
+       baseUrl: 'http://127.0.0.1:1', timeoutMs: 30,
+       outbox: new MemoryOutbox(join(directory, 'outbox.jsonl')),
+     });
++    const previousUrl = process.env.AWKN_MEMORY_OS_URL;
++    process.env.AWKN_MEMORY_OS_URL = 'http://127.0.0.1:1';
++    try {
++      const router = new MemoryBackendRouter({ mode: 'auto', remote, local: new LocalMemoryBackend() });
++      const context = await router.compileAndRender({ projectId, sessionId: projectId, query: 'public API upgrade' });
++      assert.equal(context.backend, 'local');
++      assert.equal(context.stale, true);
++      assert.match(context.prompt, /Preserve the existing public API/);
++    } finally {
++      if (previousUrl === undefined) delete process.env.AWKN_MEMORY_OS_URL;
++      else process.env.AWKN_MEMORY_OS_URL = previousUrl;
++    }
++  });
++
++  it('fails closed in forced memory-os mode when the service is unavailable', async () => {
++    const remote = new AwknMemoryOsBackend({ baseUrl: 'http://127.0.0.1:1', timeoutMs: 30 });
+     const router = new MemoryBackendRouter({ mode: 'memory-os', remote, local: new LocalMemoryBackend() });
+-    const context = await router.compileAndRender({ projectId, sessionId: projectId, query: 'public API upgrade' });
+-    assert.equal(context.backend, 'local');
+-    assert.equal(context.stale, true);
+-    assert.match(context.prompt, /Preserve the existing public API/);
++    await assert.rejects(
++      router.compileAndRender({ projectId: 'project-1', sessionId: 'session-1', query: 'must use authority' }),
++      /authoritative and rejected or could not serve context/,
++    );
++  });
++
++  it('fails closed on a missing Project Grant and does not use local fallback', async () => {
++    const { url } = await startMemoryServer({ projectsStatus: 403 });
++    const remote = new AwknMemoryOsBackend({ baseUrl: url, token: 'invalid-grant', timeoutMs: 500 });
++    const previousUrl = process.env.AWKN_MEMORY_OS_URL;
++    process.env.AWKN_MEMORY_OS_URL = url;
++    try {
++      const router = new MemoryBackendRouter({ mode: 'auto', remote, local: new LocalMemoryBackend() });
++      await assert.rejects(
++        router.compileAndRender({ projectId: 'project-1', sessionId: 'session-1', query: 'protected context' }),
++        /authoritative and rejected or could not serve context/,
++      );
++    } finally {
++      if (previousUrl === undefined) delete process.env.AWKN_MEMORY_OS_URL;
++      else process.env.AWKN_MEMORY_OS_URL = previousUrl;
++    }
+   });
+ 
+   it('queues capture operations durably on transport failure', async () => {
+diff --git a/runtime/test/contracts/policy-ast-deep.test.ts b/runtime/test/contracts/policy-ast-deep.test.ts
+index 47935b8..577e9a3 100644
+--- a/runtime/test/contracts/policy-ast-deep.test.ts
++++ b/runtime/test/contracts/policy-ast-deep.test.ts
+@@ -144,14 +144,14 @@ describe('Policy AST Deep Recursion - any/none', () => {
+       assert.equal(evaluateCondition(cond, ctx), false);
+     });
+ 
+-    it('returns true at 10-level depth when no leaf matches', () => {
++    it('returns false at even 10-level depth when the leaf is false', () => {
+       const cond = deepNone(10, fieldEquals('count', 999));
+-      assert.equal(evaluateCondition(cond, ctx), true);
++      assert.equal(evaluateCondition(cond, ctx), false);
+     });
+ 
+-    it('returns false at 10-level depth when leaf matches', () => {
++    it('returns true at even 10-level depth when the leaf is true', () => {
+       const cond = deepNone(10, fieldEquals('count', 5));
+-      assert.equal(evaluateCondition(cond, ctx), false);
++      assert.equal(evaluateCondition(cond, ctx), true);
+     });
+   });
+ });
