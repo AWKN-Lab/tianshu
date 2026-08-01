@@ -7,6 +7,8 @@
 
 import { getEventStore } from '../workflow/event-store.js';
 import { createLogger } from '../core/logger.js';
+import { redactText } from '../core/redaction.js';
+import { acquirePipelineSlot, withPipelineMutex } from './run-guard.js';
 import type {
   PipelineDef,
   JobDef,
@@ -32,8 +34,15 @@ export interface RunPipelineOptions {
   skipGithub?: boolean;
 }
 
-/** 执行完整 Pipeline */
+/** 执行完整 Pipeline（进程内互斥 + 同 SHA 去重 + 并发锁） */
 export async function runPipeline(
+  pipeline: PipelineDef,
+  opts: RunPipelineOptions,
+): Promise<PipelineResult> {
+  return withPipelineMutex(pipeline.name, () => runPipelineUnlocked(pipeline, opts));
+}
+
+async function runPipelineUnlocked(
   pipeline: PipelineDef,
   opts: RunPipelineOptions,
 ): Promise<PipelineResult> {
@@ -44,7 +53,36 @@ export async function runPipeline(
 
   logger.info(`Pipeline "${pipeline.name}" started (trigger=${opts.trigger}, sha=${git.shortSha})`);
 
-  // 1. 创建 EventStore Run
+  // 1. 运行守卫：同 SHA 旧 run 取消 + 并发锁
+  const slot = acquirePipelineSlot(store, `action:${pipeline.name}`, git.sha);
+  if (slot.decision === 'busy') {
+    logger.warn(`Pipeline "${pipeline.name}" rejected: another active run (${slot.activeRunId}) is in progress`);
+    const result: PipelineResult = {
+      pipelineName: pipeline.name,
+      runId: slot.activeRunId,
+      status: 'failed',
+      jobs: [],
+      trigger: opts.trigger,
+      commitSha: git.sha,
+      branch: git.branch,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      durationMs: 0,
+    };
+    if (!opts.skipReport) {
+      try {
+        result.reportPath = generateReport(result, opts.cwd);
+      } catch (err) {
+        logger.warn(`Report generation failed: ${String(err)}`);
+      }
+    }
+    return result;
+  }
+  if (slot.cancelled.length > 0) {
+    logger.info(`Pipeline "${pipeline.name}": superseded stale runs ${slot.cancelled.join(', ')}`);
+  }
+
+  // 2. 创建 EventStore Run
   const run = store.createRun({
     workflowName: `action:${pipeline.name}`,
     payload: { trigger: opts.trigger, commitSha: git.sha, branch: git.branch },
@@ -150,7 +188,7 @@ async function runJob(
       runId,
       stepKey: `${jobId}:${step.name}`,
       stepType: step.type,
-      payload: 'command' in step ? { command: step.command } : {},
+      payload: 'command' in step ? { command: redactText(step.command) } : {},
     });
     store.transitionStep(esStep.id, 'running');
 
@@ -170,8 +208,8 @@ async function runJob(
     store.transitionStep(
       esStep.id,
       result.status === 'passed' ? 'succeeded' : 'failed',
-      { output: result.output.slice(0, 2000) },
-      result.status === 'failed' ? result.output.slice(0, 500) : undefined,
+      { output: redactText(result.output).slice(0, 2000) },
+      result.status === 'failed' ? redactText(result.output).slice(0, 500) : undefined,
     );
 
     stepResults.push(result);

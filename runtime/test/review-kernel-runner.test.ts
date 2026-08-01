@@ -12,6 +12,33 @@ import { runAgentOsMigrations } from '../src/store/agent-os-migration-registry.j
 import { NativeGitReviewAdapter, type OcrCommandRunner } from '../src/review/public.js';
 import { reviewRepositoryTool } from '../src/tools/builtin/review-repository-tool.js';
 
+const TEST_IMPLEMENTER = {
+  schema: 'awkn-actor-ref/v1',
+  actorId: 'model:trae:builder',
+  actorType: 'assistant',
+} as const;
+
+async function emptyDb() {
+  const db = new Database(':memory:');
+  db.pragma('foreign_keys = ON');
+  runAgentOsMigrations(db);
+  return db;
+}
+
+function fakeRouter(content = '{"findings":[]}'): LlmRouter {
+  return {
+    async chat() {
+      return {
+        content,
+        usage: { promptTokens: 2, completionTokens: 1, totalTokens: 3 },
+        provider: 'codex' as const,
+        model: 'review-model',
+        finishReason: 'stop' as const,
+      };
+    },
+  } as unknown as LlmRouter;
+}
+
 describe('review kernel runtime composition', () => {
   it('parses the dedicated rollout flag fail-closed', () => {
     assert.equal(parseReviewRolloutMode(undefined), '0');
@@ -202,6 +229,69 @@ describe('review kernel runtime composition', () => {
       });
       assert.ok(ocrCalls >= 3);
       assert.equal(result.receipt.payload.verdict.status, 'PASS');
+    } finally {
+      db.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('isolates prepare channel failure into a PARTIAL receipt with coverage gap', async () => {
+    const db = await emptyDb();
+    try {
+      const result = await runStructuredWorktreeReview({
+        repositoryRoot: join(tmpdir(), 'awkn-does-not-exist-' + Date.now()),
+        mode: 'enforce',
+        router: fakeRouter(),
+        reviewerProvider: 'codex',
+        implementer: TEST_IMPLEMENTER,
+        db,
+        createdAt: '2026-07-28T08:00:00.000Z',
+      });
+      assert.equal(result.receipt.payload.verdict.status, 'PARTIAL');
+      assert.ok(result.receipt.payload.verdict.reasonCodes.includes('PROVIDER_INVALID'));
+      assert.equal(result.receipt.status, 'PARTIAL');
+      assert.equal(result.receipt.payload.coverage.plannedUnits, 0);
+      assert.equal((db.prepare('SELECT COUNT(*) AS n FROM receipts').get() as { n: number }).n, 1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('isolates plan channel failure into a structured PARTIAL receipt', async () => {
+    const db = await emptyDb();
+    const root = await mkdtemp(join(tmpdir(), 'awkn-kernel-plan-fail-'));
+    try {
+      const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+      git('init');
+      git('config', 'user.email', 'review-test@example.invalid');
+      git('config', 'user.name', 'Review Test');
+      await writeFile(join(root, 'a.ts'), 'export const value = 1;\n');
+      git('add', '.');
+      git('commit', '-m', 'base');
+      const result = await runStructuredWorktreeReview({
+        repositoryRoot: root,
+        mode: 'enforce',
+        router: fakeRouter(),
+        reviewerProvider: 'codex',
+        implementer: TEST_IMPLEMENTER,
+        db,
+        createdAt: '2026-07-28T08:00:00.000Z',
+        ocr: {
+          binaryPath: join(root, 'ocr'),
+          allowedBinaryRoot: root,
+          expectedVersion: '1.2.3-awkn.1',
+          runner: {
+            async run() {
+              return { stdout: Buffer.from('not-json'), stderr: new Uint8Array(), exitCode: 1 };
+            },
+          },
+        },
+        baseRef: '1'.repeat(40),
+        headRef: '2'.repeat(40),
+      });
+      assert.equal(result.receipt.payload.verdict.status, 'PARTIAL');
+      assert.ok(result.receipt.payload.verdict.reasonCodes.includes('PROVIDER_INVALID'));
+      assert.equal(result.receipt.payload.providerError, undefined);
     } finally {
       db.close();
       await rm(root, { recursive: true, force: true });

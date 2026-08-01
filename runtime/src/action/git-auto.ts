@@ -7,6 +7,7 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { assertGitWriteAuthorized } from './git-write-guard.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -45,8 +46,11 @@ export async function getGitContext(cwd: string): Promise<GitContext> {
   };
 }
 
-/** 冻结候选分支（对标 qoder-action repo-setup.ts + branch-naming.ts） */
+/** 冻结候选分支（对标 qoder-action repo-setup.ts + branch-naming.ts）。写入需显式授权。 */
 export async function freezeCandidate(cwd: string, releaseId: string): Promise<string> {
+  assertGitWriteAuthorized('branch');
+  assertGitWriteAuthorized('push');
+  assertGitWriteAuthorized('tag');
   const branchName = `release/${releaseId}`;
   await git(cwd, 'checkout', '-b', branchName);
   await git(cwd, 'push', 'origin', branchName);
@@ -55,8 +59,10 @@ export async function freezeCandidate(cwd: string, releaseId: string): Promise<s
   return branchName;
 }
 
-/** 提交并推送（对标 qoder-action commit-and-push.ts） */
+/** 提交并推送（对标 qoder-action commit-and-push.ts）。写入需显式授权。 */
 export async function commitAndPush(cwd: string, message: string): Promise<string> {
+  assertGitWriteAuthorized('commit');
+  assertGitWriteAuthorized('push');
   await git(cwd, 'add', '-A');
   await git(cwd, 'commit', '-m', message);
   await git(cwd, 'push');

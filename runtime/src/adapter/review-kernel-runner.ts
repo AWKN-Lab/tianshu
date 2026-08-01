@@ -2,19 +2,37 @@ import type Database from 'better-sqlite3';
 import { createHash } from 'node:crypto';
 import {
   EvidenceRecordSchema,
+  REVIEW_PLAN_SCHEMA,
+  REVIEW_RUN_SCHEMA,
+  REVIEW_TARGET_SCHEMA,
+  ReviewPlanSchema,
+  ReviewRunSchema,
+  ReviewTargetSchema,
+  computeReviewPlanHash,
+  computeReviewRuleBundleHash,
   createAwknId,
+  deterministicReviewId,
   type ActorRef,
   type ObjectRef,
+  type ReviewPlan,
   type ReviewReceipt,
+  type ReviewRun,
+  type ReviewTarget,
 } from '../contracts/public.js';
 import type { LlmProvider } from '../llm/types.js';
 import {
   NativeGitReviewAdapter,
   OcrCliSpecProvider,
   OcrRangeWorkspaceAdapter,
+  ReviewCache,
   ReviewService,
+  buildReviewReceipt,
+  calculateReviewCoverage,
+  calculateReviewVerdict,
+  runPreflight,
   type OcrCliSpecProviderOptions,
 } from '../review/public.js';
+import type { ReviewExecutionContext } from '../review/ports/inbound/review-service-port.js';
 import { LlmReviewerAdapter } from './llm-reviewer-adapter.js';
 import { SqliteReviewAuditAdapter } from './sqlite-review-audit-adapter.js';
 import type { LlmRouter } from '../llm/router.js';
@@ -45,6 +63,12 @@ export interface WorktreeReviewInput {
   readonly baseRef?: string;
   readonly headRef?: string;
   readonly ocr?: OcrCliSpecProviderOptions;
+  /** P1-4 指纹缓存开关（默认开启；测试可关闭） */
+  readonly useCache?: boolean;
+  /** P1-1 风险预算：review token 预算，用于计划预算分配 */
+  readonly budgetTokens?: number;
+  /** P1-5 执行预检开关（默认开启；测试可关闭） */
+  readonly preflight?: boolean;
 }
 
 export interface WorktreeReviewResult {
@@ -53,6 +77,117 @@ export interface WorktreeReviewResult {
   readonly executionId: string;
   readonly traceId: string;
   readonly serviceActor: ActorRef;
+}
+
+interface FailureContext {
+  readonly input: WorktreeReviewInput;
+  readonly executionId: string;
+  readonly traceId: string;
+  readonly serviceActor: ActorRef;
+  readonly now: string;
+  readonly error: unknown;
+  readonly target?: ReviewTarget;
+}
+
+function placeholderTargetFingerprint(input: WorktreeReviewInput, now: string): string {
+  return createHash('sha256')
+    .update(`${input.repositoryRoot}\0${input.baseRef ?? 'WORKTREE'}\0${input.headRef ?? 'WORKTREE'}\0${now}`)
+    .digest('hex');
+}
+
+function buildFailureContext(
+  executionId: string,
+  traceId: string,
+  serviceActor: ActorRef,
+): ReviewExecutionContext {
+  return {
+    executionId,
+    traceId,
+    serviceActor,
+    artifactRefs: [],
+    evidence: [],
+  };
+}
+
+/**
+ * 通道失败隔离（P0-3）：任一通道（spec/plan 准备、reviewer 执行、审计持久化）
+ * 失败都必须形成结构化覆盖缺口并产出 PARTIAL/FAIL receipt，
+ * 禁止裸异常绕过审核结论。
+ */
+export async function failingReviewResult(
+  service: ReviewService,
+  failure: FailureContext,
+): Promise<WorktreeReviewResult> {
+  const message = failure.error instanceof Error ? failure.error.message : String(failure.error);
+  const target = failure.target ?? ReviewTargetSchema.parse({
+    schema: REVIEW_TARGET_SCHEMA,
+    targetId: deterministicReviewId('rtgt', placeholderTargetFingerprint(failure.input, failure.now)),
+    mode: failure.input.baseRef !== undefined ? 'COMMIT_RANGE' : 'WORKTREE',
+    repositoryRoot: failure.input.repositoryRoot,
+    baseRef: failure.input.baseRef ?? 'PLANNING_FAILED',
+    headRef: failure.input.headRef ?? 'PLANNING_FAILED',
+    mergeBase: 'PLANNING_FAILED',
+    diffFingerprint: placeholderTargetFingerprint(failure.input, failure.now),
+    prdRefs: (failure.input.contractArtifacts ?? []).filter((artifact) => artifact.kind === 'PRD').map((artifact) => artifact.ref),
+    specRefs: (failure.input.contractArtifacts ?? []).filter((artifact) => artifact.kind === 'SPEC').map((artifact) => artifact.ref),
+    acceptanceCriteriaRefs: (failure.input.contractArtifacts ?? [])
+      .filter((artifact) => artifact.kind === 'ACCEPTANCE_CRITERION').map((artifact) => artifact.ref),
+    includePatterns: [],
+    excludePatterns: [],
+    initiator: failure.serviceActor,
+    implementer: failure.input.implementer,
+    createdAt: failure.now,
+  });
+  const base = {
+    target,
+    provider: 'native-git' as const,
+    providerVersion: 'native-git/v1',
+    ruleBundleHash: computeReviewRuleBundleHash([]),
+    files: [],
+    ruleGroups: [],
+    units: [],
+  };
+  const planHash = computeReviewPlanHash(base);
+  const plan = ReviewPlanSchema.parse({
+    schema: REVIEW_PLAN_SCHEMA,
+    planId: deterministicReviewId('rplan', planHash),
+    ...base,
+    planHash,
+    createdAt: failure.now,
+  });
+  const run = ReviewRunSchema.parse({
+    schema: REVIEW_RUN_SCHEMA,
+    reviewRunId: createAwknId('reviewRun'),
+    plan,
+    providerStatus: 'INVALID',
+    providerError: message,
+    currentTargetFingerprint: target.diffFingerprint,
+    unitResults: [],
+    findings: [],
+    validationErrors: [],
+    totalTokens: 0,
+    startedAt: failure.now,
+    completedAt: failure.now,
+  });
+  const context = buildFailureContext(failure.executionId, failure.traceId, failure.serviceActor);
+  try {
+    const receipt = await service.evaluate(run, context);
+    return { receipt, totalTokens: 0, executionId: context.executionId, traceId: context.traceId, serviceActor: context.serviceActor };
+  } catch (persistError) {
+    const coverage = calculateReviewCoverage(plan, run);
+    const verdict = calculateReviewVerdict(run, coverage, failure.now);
+    const receipt = buildReviewReceipt({
+      executionId: context.executionId,
+      traceId: context.traceId,
+      producer: context.serviceActor,
+      run,
+      coverage,
+      verdict,
+      artifactRefs: [],
+      createdAt: failure.now,
+    });
+    return { receipt, totalTokens: 0, executionId: context.executionId, traceId: context.traceId, serviceActor: context.serviceActor };
+  }
 }
 
 export async function runStructuredWorktreeReview(input: WorktreeReviewInput): Promise<WorktreeReviewResult> {
@@ -106,20 +241,60 @@ export async function runStructuredWorktreeReview(input: WorktreeReviewInput): P
     reviewers: [reviewer],
     audit,
   });
-  const target = await service.prepare({
-    repositoryRoot: input.repositoryRoot,
-    mode: isRange ? 'COMMIT_RANGE' : 'WORKTREE',
-    ...(isRange ? { baseRef: input.baseRef!, headRef: input.headRef! } : {}),
-  }, {
-    initiator: serviceActor,
-    implementer: input.implementer,
-    prdRefs: contractArtifacts.filter((artifact) => artifact.kind === 'PRD').map((artifact) => artifact.ref),
-    specRefs: contractArtifacts.filter((artifact) => artifact.kind === 'SPEC').map((artifact) => artifact.ref),
-    acceptanceCriteriaRefs: contractArtifacts
-      .filter((artifact) => artifact.kind === 'ACCEPTANCE_CRITERION').map((artifact) => artifact.ref),
-    createdAt: now,
-  });
-  const plan = await service.plan(target);
+  let target: ReviewTarget;
+  try {
+    target = await service.prepare({
+      repositoryRoot: input.repositoryRoot,
+      mode: isRange ? 'COMMIT_RANGE' : 'WORKTREE',
+      ...(isRange ? { baseRef: input.baseRef!, headRef: input.headRef! } : {}),
+    }, {
+      initiator: serviceActor,
+      implementer: input.implementer,
+      prdRefs: contractArtifacts.filter((artifact) => artifact.kind === 'PRD').map((artifact) => artifact.ref),
+      specRefs: contractArtifacts.filter((artifact) => artifact.kind === 'SPEC').map((artifact) => artifact.ref),
+      acceptanceCriteriaRefs: contractArtifacts
+        .filter((artifact) => artifact.kind === 'ACCEPTANCE_CRITERION').map((artifact) => artifact.ref),
+      createdAt: now,
+    });
+  } catch (error) {
+    return failingReviewResult(service, { input, executionId, traceId, serviceActor, now, error });
+  }
+  let plan: ReviewPlan;
+  try {
+    plan = await service.plan(target);
+  } catch (error) {
+    return failingReviewResult(service, { input, executionId, traceId, serviceActor, now, error, target });
+  }
+
+  // P1-5 执行预检：规模/敏感/生成物/二进制；BLOCK → 拒绝进入 LLM review
+  if (input.preflight !== false) {
+    const preflightReport = runPreflight(plan.files);
+    if (preflightReport.verdict === 'BLOCK') {
+      return failingReviewResult(service, {
+        input,
+        executionId,
+        traceId,
+        serviceActor,
+        now,
+        error: new Error(
+          `preflight BLOCKED review: ${preflightReport.issues
+            .filter((issue) => issue.severity === 'BLOCK')
+            .map((issue) => issue.message)
+            .join('; ')}`,
+        ),
+        target,
+      });
+    }
+  }
+
+  // P1-4 指纹缓存：同一 diff + 同一规则包直接复用历史 PASS receipt
+  const reviewCache = new ReviewCache(input.db);
+  if (input.useCache !== false) {
+    const cached = reviewCache.lookup(target.diffFingerprint, plan.ruleBundleHash);
+    if (cached !== null && cached.receipt.payload.verdict.status === 'PASS') {
+      return { receipt: cached.receipt, totalTokens: 0, executionId, traceId, serviceActor };
+    }
+  }
   const evidence = EvidenceRecordSchema.parse({
     schema: 'awkn-evidence/v2',
     evidenceId: createAwknId('evidence'),
@@ -175,7 +350,24 @@ export async function runStructuredWorktreeReview(input: WorktreeReviewInput): P
     evidence: [evidence, ...contractEvidence],
     contractEvidenceRefs: contractEvidence.map((record) => record.evidenceId),
   };
-  const run = await service.execute(plan, context);
-  const receipt = await service.evaluate(run, context);
+  let run: ReviewRun;
+  try {
+    run = await service.execute(plan, context);
+  } catch (error) {
+    return failingReviewResult(service, { input, executionId, traceId, serviceActor, now, error, target });
+  }
+  let receipt: ReviewReceipt;
+  try {
+    receipt = await service.evaluate(run, context);
+  } catch (error) {
+    return failingReviewResult(service, { input, executionId, traceId, serviceActor, now, error, target });
+  }
+  if (receipt.payload.verdict.status === 'PASS') {
+    try {
+      reviewCache.store(target.diffFingerprint, plan.ruleBundleHash, receipt);
+    } catch {
+      // 缓存失败不影响审核结论（fail-open）
+    }
+  }
   return { receipt, totalTokens: run.totalTokens, executionId, traceId, serviceActor };
 }

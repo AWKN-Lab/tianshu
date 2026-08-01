@@ -28,6 +28,10 @@ export type StepStatus =
   | 'cancelled'
   | 'policy_blocked';
 
+/** 事件流 schema 版本（P1-2 事件流版本化）：所有写入事件 payload 内嵌此版本 */
+export const EVENT_STREAM_SCHEMA = 'awkn-event-stream/v1';
+const EVENT_STREAM_SCHEMA_KEY = '_eventSchema';
+
 const RUN_TRANSITIONS: Record<RunStatus, RunStatus[]> = {
   created: ['queued', 'running', 'cancelled'],
   queued: ['running', 'cancelled'],
@@ -134,6 +138,27 @@ export class EventStore {
     return queryOne<RunRecord>('SELECT * FROM runs WHERE id = ?', [id]) ?? null;
   }
 
+  /** 查询某 workflow 下仍处于活跃（未终止）状态的 run */
+  findActiveRuns(workflowName: string): RunRecord[] {
+    return queryAll<RunRecord>(
+      `SELECT * FROM runs
+       WHERE workflow_name = ? AND status IN ('created','queued','running','waiting_tool','waiting_approval','retrying')
+       ORDER BY started_at`,
+      [workflowName],
+    );
+  }
+
+  /** 查询某 workflow 下活跃且 payload 中指定键等于给定值的 run（用于同 SHA 去重） */
+  findActiveRunsByPayload(workflowName: string, payloadKey: string, payloadValue: string): RunRecord[] {
+    return queryAll<RunRecord>(
+      `SELECT * FROM runs
+       WHERE workflow_name = ? AND status IN ('created','queued','running','waiting_tool','waiting_approval','retrying')
+         AND json_extract(input_json, ?) = ?
+       ORDER BY started_at`,
+      [workflowName, `$.${payloadKey}`, payloadValue],
+    );
+  }
+
   transitionRun(id: string, status: RunStatus, output?: Record<string, unknown>): RunRecord {
     const existing = this.readRun(id);
     if (!existing) throw new Error(`run ${id} not found`);
@@ -161,7 +186,9 @@ export class EventStore {
 
     if (terminal && process.env.AWKN_DISABLE_MEMORY !== '1') {
       try {
-        getMemoryService().recordRunTrajectory(id);
+        void getMemoryService().recordRunTrajectory(id).catch(() => {
+          // Memory persistence is fail-open for the workflow state transition.
+        });
       } catch {
         // Memory persistence is fail-open for the workflow state transition.
       }
@@ -312,11 +339,18 @@ export class EventStore {
   }
 
   private insertEvent(runId: string, eventType: string, payload: Record<string, unknown>, stepId?: string): number {
+    const versionedPayload = { ...payload, [EVENT_STREAM_SCHEMA_KEY]: EVENT_STREAM_SCHEMA };
     queryRun(
       'INSERT INTO events (run_id, step_id, event_type, payload_json, created_at) VALUES (?, ?, ?, ?, ?)',
-      [runId, stepId ?? null, eventType, JSON.stringify(payload), new Date().toISOString()],
+      [runId, stepId ?? null, eventType, JSON.stringify(versionedPayload), new Date().toISOString()],
     );
     return queryOne<{ id: number }>('SELECT last_insert_rowid() AS id')?.id ?? 0;
+  }
+
+  /** 校验事件 payload 的 schema 版本；缺版本或版本不兼容返回 false */
+  static eventSchemaVersion(payload: Record<string, unknown>): string | null {
+    const version = payload[EVENT_STREAM_SCHEMA_KEY];
+    return typeof version === 'string' && version.length > 0 ? version : null;
   }
 
   private projectDomainEvent(runId: string, eventType: string, payload: Record<string, unknown>): void {

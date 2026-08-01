@@ -9,6 +9,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { AgentLoop } from '../../core/agent-loop.js';
 import { createLogger } from '../../core/logger.js';
+import { redactText } from '../../core/redaction.js';
 import type { AgentStepDef, StepResult } from '../types.js';
 
 const logger = createLogger('AgentStep');
@@ -58,8 +59,8 @@ export async function runAgentStep(step: AgentStepDef, cwd: string): Promise<Ste
       name: step.name,
       type: 'agent',
       status: result.terminated ? 'failed' : 'passed',
-      output: result.finalText.slice(0, 5000),
-      agentSummary: result.finalText.slice(0, 500),
+      output: redactText(result.finalText).slice(0, 5000),
+      agentSummary: redactText(result.finalText).slice(0, 500),
       durationMs: Date.now() - started,
     };
   } catch (err) {
@@ -68,7 +69,7 @@ export async function runAgentStep(step: AgentStepDef, cwd: string): Promise<Ste
       name: step.name,
       type: 'agent',
       status: 'failed',
-      output: String(err).slice(0, 5000),
+      output: redactText(String(err)).slice(0, 5000),
       durationMs: Date.now() - started,
     };
   }

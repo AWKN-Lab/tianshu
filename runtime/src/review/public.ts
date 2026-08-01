@@ -1,5 +1,8 @@
 export * from './application/coverage-calculator.js';
 export * from './application/finding-validator.js';
+export * from './application/preflight.js';
+export * from './application/prompt-injection.js';
+export * from './application/review-cache.js';
 export * from './application/review-planner.js';
 export * from './application/review-receipt.js';
 export * from './application/review-service.js';
@@ -13,3 +16,6 @@ export * from './ports/outbound/review-audit-port.js';
 export * from './ports/outbound/review-spec-provider-port.js';
 export * from './ports/outbound/reviewer-port.js';
 export * from './ports/outbound/review-workspace-port.js';
+export * from './adapters/outbound/native-git-review-adapter.js';
+export * from './adapters/outbound/ocr-cli-spec-provider.js';
+export * from './adapters/outbound/ocr-range-workspace-adapter.js';

@@ -90,7 +90,7 @@ export interface StepResult {
   status: StepStatus;
   output: string;
   durationMs: number;
-  exitCode?: number;
+  exitCode?: number | null;
   agentSummary?: string;
   gateResults?: Array<{ name: string; passed: boolean; details?: string }>;
 }
