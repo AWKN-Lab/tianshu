@@ -126,3 +126,14 @@ integrations/open-code-review-src-tmp/**
 integrations/open-code-review-src-tmp/
 # OCR 构建产物（二进制不入仓，CI 现场构建）
 integrations/open-code-review/bin/
+
+# 独立 MCP 包保留自己的 Git 历史，不作为主仓嵌套内容提交
+/packages/awkn-engine-mcp/
+
+# ===== 运行时状态与产物（不入库）=====
+/runtime/.awkn/
+/runtime/reports/
+/runtime/data/*-evidence.json
+/runtime/check-runs.cjs
+/runtime/check-stuck.cjs
+

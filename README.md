@@ -100,6 +100,24 @@ export AWKN_APPROVED_TOOLS=write,exec,skill
 
 兼容旧行为可临时设置 `AWKN_TOOL_POLICY_MODE=legacy`。正式环境应迁移到 WP-AOS-09 Tool Broker 的受控执行边界。
 
+## 独立审核 MCP
+
+Review Kernel 通过独立 stdio MCP 暴露，避免把完整引擎管理工具 schema 注入只需审核的会话：
+
+```powershell
+node runtime/bin/awkn-review-mcp-server.js
+```
+
+该服务只公开 `review_repository`。调用方必须传入待审核 Git 仓库的绝对路径；实现者身份由
+IDE/MCP 主机通过 `AWKN_REVIEW_IMPLEMENTER_ACTOR_ID` 可信注入，调用方不能自报。仓库经
+`realpath` 解析后还必须位于 `AWKN_REVIEW_ALLOWED_ROOTS` 白名单内。直接调用仅允许
+`mode=enforce`，并返回完整的结构化 `awkn-review-receipt/v1`；只有合法 `PASS` Receipt
+才能通过发布审核门禁。生产入口运行 `dist`，安装/发布前会由 `prepack` 执行构建。
+
+主 MCP 独立包位于 `packages/awkn-engine-mcp`，保留自己的 Git 历史；Codex、TRAE 和通用
+MCP 配置均从该引擎内路径启动。审核阶段必须把完整 Review Receipt 交给天火，纯文本
+`audit=PASS` 不再允许推进。
+
 ## Engine v2 基础能力
 
 - Canonical LLM Protocol：保留多轮 Function Calling 的 `tool_calls` 与 `tool_call_id`；

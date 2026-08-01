@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "mode": "external-or-repository",
-  "rootEnvironmentVariables": ["AWKN_SKILLS_ROOT", "SKILLS_DIR"],
-  "entryFile": "SKILL.md",
-  "maxScanDepth": 12,
-  "ignoredDirectories": [".git", "node_modules", "dist", "build"]
-}
