@@ -28,7 +28,7 @@ export const memorySearchTool: ToolHandler = {
     required: ['query'],
   },
   async execute(args) {
-    const results = getMemoryService().search({
+    const results = await getMemoryService().search({
       query: String(args.query ?? ''),
       types: Array.isArray(args.types) ? args.types.map(memoryType) : undefined,
       scopeIds: Array.isArray(args.scopeIds) ? args.scopeIds.map(String) : undefined,
@@ -68,7 +68,7 @@ export const memoryWriteTool: ToolHandler = {
     required: ['type', 'scopeId', 'key', 'content'],
   },
   async execute(args, ctx) {
-    const entry = getMemoryService().put({
+    const entry = await getMemoryService().put({
       type: memoryType(args.type),
       scopeId: String(args.scopeId),
       key: String(args.key),
@@ -143,7 +143,7 @@ export const memoryRollbackTool: ToolHandler = {
     required: ['type', 'scopeId', 'key', 'version'],
   },
   async execute(args) {
-    return JSON.stringify(getMemoryService().rollback(memoryType(args.type), String(args.scopeId), String(args.key), Number(args.version)), null, 2);
+    return JSON.stringify(await getMemoryService().rollback(memoryType(args.type), String(args.scopeId), String(args.key), Number(args.version)), null, 2);
   },
 };
 
@@ -166,7 +166,7 @@ export const memoryCompressTool: ToolHandler = {
     required: ['type', 'scopeId'],
   },
   async execute(args) {
-    return JSON.stringify(getMemoryService().compress({
+    return JSON.stringify(await getMemoryService().compress({
       type: memoryType(args.type),
       scopeId: String(args.scopeId),
       key: args.key === undefined ? undefined : String(args.key),

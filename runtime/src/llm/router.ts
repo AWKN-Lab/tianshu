@@ -1,6 +1,8 @@
 import { createLogger } from '../core/logger.js';
 import type { CompiledMemoryContext } from '../memory/backend.js';
 import { getMemoryBackendRouter } from '../memory/router.js';
+import { getMemoryService } from '../memory/service.js';
+import { enqueueExtraction, ensureExtractionWorker } from '../memory/extract/runner.js';
 import { startSpan } from '../observability/trace.js';
 import { queryRun } from '../store/db.js';
 import type { ChatMessage, ChatRequest, ChatResponse, LlmProvider, LlmProviderInterface } from './types.js';
@@ -155,8 +157,29 @@ export class LlmRouter {
         responseText: response.content,
         outcome: 'SUCCESS',
       });
+      this.extractInBackground(enrichment, response.content, traceId);
     } catch (err) {
       logger.warn(`Failed to persist or finalize memory: ${String(err)}`);
+    }
+  }
+
+  private extractInBackground(enrichment: MemoryEnrichment, assistantText: string, traceId?: string): void {
+    if (process.env.AWKN_DISABLE_MEMORY_EXTRACTION === '1') return;
+    try {
+      ensureExtractionWorker(() => ({
+        chat: (request) => this.chat(request),
+        put: (input) => getMemoryService().put(input),
+      }));
+      enqueueExtraction({
+        userText: enrichment.userText,
+        assistantText,
+        projectId: enrichment.projectId,
+        sessionId: enrichment.sessionId,
+        traceId,
+      });
+      logger.info('Memory extraction enqueued');
+    } catch (err) {
+      logger.warn(`Memory extraction enqueue failed: ${String(err)}`);
     }
   }
 

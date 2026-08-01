@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 describe('runtime memory integration', () => {
-  it('persists a terminal Run as task trajectory memory', () => {
+  it('persists a terminal Run as task trajectory memory', async () => {
     const projectId = `trajectory-${Date.now()}-${Math.random()}`;
     process.env.AWKN_PROJECT_ID = projectId;
     const store = new EventStore();
@@ -25,13 +25,18 @@ describe('runtime memory integration', () => {
     });
     store.transitionRun(run.id, 'succeeded', { outcome: 'completed' });
 
-    const results = getMemoryService().search({
-      query: 'memory integration completed run',
-      types: ['task_trajectory'],
-      scopeIds: [projectId],
-      limit: 10,
-    });
-    assert.ok(results.some((result) => result.entry.source_run_id === run.id));
+    let found = false;
+    for (let attempt = 0; attempt < 20 && !found; attempt++) {
+      const results = await getMemoryService().search({
+        query: 'memory integration completed run',
+        types: ['task_trajectory'],
+        scopeIds: [projectId],
+        limit: 10,
+      });
+      found = results.some((result) => result.entry.source_run_id === run.id);
+      if (!found) await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.ok(found, 'task trajectory memory should be searchable after run completion');
   });
 
   it('exposes memory tools to the Agent tool registry bootstrap', () => {

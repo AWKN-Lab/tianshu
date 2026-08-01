@@ -255,6 +255,67 @@ const AGENT_OS_MIGRATIONS: readonly AgentOsMigration[] = [
       `);
     },
   },
+  {
+    version: 15,
+    name: 'memory-hierarchical-layers',
+    up(db) {
+      const tableExists = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_entries'").get() as { name: string } | undefined) !== undefined;
+      if (!tableExists) return;
+      const columns = (db.prepare('PRAGMA table_info(memory_entries)').all() as Array<{ name: string }>)
+        .map((row) => row.name);
+      if (!columns.includes('dir_path')) {
+        db.exec(`ALTER TABLE memory_entries ADD COLUMN dir_path TEXT NOT NULL DEFAULT ''`);
+      }
+      if (!columns.includes('level')) {
+        db.exec(`ALTER TABLE memory_entries ADD COLUMN level INTEGER NOT NULL DEFAULT 2`);
+      }
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_memory_dir_scope
+          ON memory_entries(status, scope_id, memory_type, dir_path);
+        CREATE INDEX IF NOT EXISTS idx_memory_dir_level
+          ON memory_entries(level, status);
+      `);
+    },
+  },
+  {
+    version: 16,
+    name: 'review-cache-by-fingerprint',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS review_cache (
+          id TEXT PRIMARY KEY,
+          diff_fingerprint TEXT NOT NULL,
+          rule_bundle_hash TEXT NOT NULL,
+          verdict TEXT NOT NULL,
+          receipt_json TEXT NOT NULL,
+          cached_at TEXT NOT NULL,
+          hit_count INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_review_cache_lookup
+          ON review_cache(diff_fingerprint, rule_bundle_hash);
+      `);
+    },
+  },
+  {
+    version: 17,
+    name: 'memory-extraction-log',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS memory_extraction_log (
+          input_hash TEXT PRIMARY KEY,
+          raw_user TEXT NOT NULL,
+          raw_assistant TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'raw',
+          ops_json TEXT,
+          model TEXT,
+          error TEXT,
+          created_at TEXT NOT NULL,
+          extracted_at TEXT
+        );
+      `);
+    },
+  },
 ] as const;
 
 /**
