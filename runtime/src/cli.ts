@@ -19,35 +19,13 @@ import { hookManager } from './core/hook-manager.js';
 import type { HookPoint } from './core/hook-types.js';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync } from 'node:fs';
 import type { LlmProvider } from './llm/types.js';
+import { loadRuntimeEnv } from './config/runtime-env.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-/** 加载 runtime/.env 文件（不引入 dotenv，手动解析，不覆盖已有环境变量） */
-function loadEnv(): void {
-  const envPath = resolve(__dirname, '..', '.env');
-  try {
-    const content = readFileSync(envPath, 'utf-8');
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eqIdx = trimmed.indexOf('=');
-      if (eqIdx === -1) continue;
-      const key = trimmed.slice(0, eqIdx).trim();
-      const val = trimmed.slice(eqIdx + 1).trim();
-      if (!key) continue;
-      if (process.env[key] === undefined) {
-        process.env[key] = val;
-      }
-    }
-  } catch {
-    // .env 不存在或读取失败，忽略
-  }
-}
-
-loadEnv();
+loadRuntimeEnv();
 
 const command = process.argv[2];
 const subcommand = process.argv[3];
