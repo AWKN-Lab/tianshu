@@ -1,12 +1,12 @@
 /**
- * MCP server 冒烟测试：spawn server → initialize → tools/list → tools/call(awkn_skill_list)
+ * MCP server 冒烟测试：spawn server → initialize → tools/list → tools/call
  */
 import { spawn } from 'node:child_process';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const serverBin = resolve(__dirname, '..', 'bin', 'awkn-mcp-server.js');
+const serverSource = resolve(__dirname, '..', 'src', 'mcp', 'server.ts');
 
 let msgId = 0;
 function makeRequest(method: string, params?: unknown): string {
@@ -18,12 +18,13 @@ function makeNotification(method: string, params?: unknown): string {
 }
 
 async function main(): Promise<void> {
-  const child = spawn('node', [serverBin], {
+  const child = spawn(process.execPath, ['--import', 'tsx', serverSource], {
     stdio: ['pipe', 'pipe', 'inherit'],
     cwd: resolve(__dirname, '..'),
     env: {
       ...process.env,
       AWKN_DISABLE_EVOLVE: '1', // 测试时关闭 evolve hook
+      AWKN_DB_PATH: ':memory:', // 隔离正式运行库，避免 MCP 进程间锁竞争
     },
   });
 
@@ -63,7 +64,7 @@ async function main(): Promise<void> {
           pendingResolvers.delete(id);
           reject(new Error(`timeout waiting for ${method} (id=${id})`));
         }
-      }, 10000);
+      }, 120000);
     });
   }
 
@@ -103,12 +104,38 @@ async function main(): Promise<void> {
     const text = callResult?.content?.[0]?.text ?? '';
     console.log(`awkn_skill_list result: ${text.slice(0, 200)}`);
 
+    // 5. 验证部署完成后自动进入复盘，而不是提前结束链路
+    console.log('\n--- calling awkn_tianhuo_advance: deploy → retrospective ---');
+    const advanceResp = await sendAndWait('tools/call', {
+      name: 'awkn_tianhuo_advance',
+      arguments: {
+        currentCapability: 'deploy',
+        evidence: JSON.stringify({ deployment: 'PASS', checkedAt: new Date().toISOString() }),
+        outcome: 'pass',
+      },
+    });
+    const advanceText = (advanceResp as { result?: { content?: { text: string }[] } })
+      .result?.content?.[0]?.text ?? '';
+    const advanceResult = JSON.parse(advanceText) as {
+      nextCapability?: { id?: string } | null;
+    };
+    if (advanceResult.nextCapability?.id !== 'retrospective') {
+      throw new Error(`expected deploy to advance to retrospective, got ${advanceText}`);
+    }
+
     // 验证
-    const expectedToolCount = 31;
+    const expectedToolCount = 34;
     if (tools.length < expectedToolCount) {
       throw new Error(`expected >= ${expectedToolCount} tools, got ${tools.length}`);
     }
-    console.log(`\n✅ PASS: ${tools.length} tools registered, awkn_skill_list responded`);
+    // 验证天火三件套已注册
+    const toolNames = tools.map((t) => t.name);
+    for (const required of ['awkn_tianhuo_start', 'awkn_tianhuo_advance', 'awkn_tianhuo_status']) {
+      if (!toolNames.includes(required)) {
+        throw new Error(`missing required tianhuo tool: ${required}`);
+      }
+    }
+    console.log(`\n✅ PASS: ${tools.length} tools registered, tianhuo trio present, deploy advances to retrospective`);
   } finally {
     child.kill('SIGTERM');
     setTimeout(() => process.exit(0), 500);

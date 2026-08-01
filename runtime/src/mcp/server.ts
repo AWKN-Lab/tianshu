@@ -15,7 +15,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync } from 'node:fs';
+import { loadRuntimeEnv } from '../config/runtime-env.js';
 import type { LlmProvider } from '../llm/types.js';
 import { getDb, closeDb } from '../store/db.js';
 import { getGoalManager } from '../goal/goal-manager.js';
@@ -29,34 +29,16 @@ import type { HookPoint } from '../core/hook-types.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-/** 加载 runtime/.env（与 cli.ts 一致，不覆盖已有环境变量） */
-function loadEnv(): void {
-  const envPath = resolve(__dirname, '..', '..', '.env');
-  try {
-    const content = readFileSync(envPath, 'utf-8');
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eqIdx = trimmed.indexOf('=');
-      if (eqIdx === -1) continue;
-      const key = trimmed.slice(0, eqIdx).trim();
-      const val = trimmed.slice(eqIdx + 1).trim();
-      if (key && process.env[key] === undefined) {
-        process.env[key] = val;
-      }
-    }
-  } catch {
-    // .env 不存在，忽略
-  }
-}
-
 /** 引擎初始化（与 cli.ts main() 一致） */
 function initEngine(): void {
-  loadEnv();
+  loadRuntimeEnv();
   getDb();
   const skillsRoot =
     process.env.AWKN_SKILLS_ROOT ?? resolve(__dirname, '..', '..', '..', 'skills');
-  getSkillsManager(skillsRoot).loadAll();
+  const sm = getSkillsManager(skillsRoot);
+  sm.loadAll();
+  // 加载 capabilities/project/manifest.yaml(hash 校验失败会抛错)
+  sm.loadCapabilities();
   for (const tool of builtinTools) {
     toolRegistry.register(tool);
   }
@@ -373,6 +355,257 @@ server.registerTool(
       const body = sm.getSkillBody(args.name);
       if (!meta) return toError(new Error(`Skill "${args.name}" not found`));
       return { content: [toText({ meta, body })] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+// ============================================================
+// Tianhuo 模块（3 tools）— 能力卡路由,对应 capabilities/project/tianhuo/card.md
+// ============================================================
+
+/**
+ * 任务分类 → 推荐首张能力卡。
+ * 规则参考 agents/tianhuo/agent.prompt#2.0A 项目风险路由。
+ */
+type TaskRoute = 'readonly' | 'minor_change' | 'bug_normal' | 'bug_high_risk' | 'standard_dev' | 'release' | 'new_project';
+
+const ROUTE_TO_FIRST_CAPABILITY: Record<TaskRoute, string | null> = {
+  readonly: null,                                // 直接回答,不建链
+  minor_change: 'execution-check',               // 执行检查 → 工程师 → 新鲜验证
+  bug_normal: 'execution-check',                 // 执行检查 → BUG 修复 → CICD
+  bug_high_risk: 'execution-check',              // 执行检查 → BUG 修复 → 审核 → CICD
+  standard_dev: 'execution-check',               // 执行检查 → 工程师 → 审核 → CICD
+  release: 'audit',                              // 审核 → CICD → 部署
+  new_project: 'prd',                            // PRD → Spec → 工程文档 → ... → 复盘
+};
+
+/**
+ * 能力卡推进链路(参考 agent.prompt 2.0A)。
+ * key = 当前 capability id,value = 下一张卡 id(或 null 表示链路终点)。
+ */
+const CAPABILITY_ADVANCE_MAP: Record<string, string | null> = {
+  // 标准开发链
+  'execution-check': 'engineer',
+  'engineer': 'audit',
+  'audit': 'cicd',
+  'cicd': 'deploy',
+  'deploy': 'retrospective',
+  // BUG 链(走 bugfix 替代 engineer)
+  'bugfix': 'cicd',
+  // 新项目链
+  'prd': 'spec',
+  'spec': 'engineering-docs',
+  'engineering-docs': 'engineer',
+  'retrospective': null,
+};
+
+/**
+ * 简单任务分类器:基于关键词,弱模型友好。
+ * 真正的意图理解由 awkn-意图理解 技能承担,这里只做兜底路由。
+ */
+function classifyTaskRoute(userInput: string): { route: TaskRoute; reason: string } {
+  const text = userInput.toLowerCase();
+  // 只读
+  if (/^(解释|查看|看看|explain|what|how|why|诊断|排查)/.test(text.trim()) ||
+      /^(检查|诊断)下/.test(userInput.trim())) {
+    if (/^(检查|诊断)下/.test(userInput.trim())) {
+      // "检查下怎么回事" 类任务:只读诊断,但用户可能希望后续修复
+      return { route: 'readonly', reason: '关键字命中只读诊断(检查/诊断)' };
+    }
+    return { route: 'readonly', reason: '关键字命中只读解释(解释/查看/看看/how/why)' };
+  }
+  // 发布
+  if (/(发布|上线|deploy|release|ship)/.test(text)) {
+    return { route: 'release', reason: '关键字命中发布场景' };
+  }
+  // 新项目
+  if (/(新项目|从零|from scratch|greenfield)/.test(text)) {
+    return { route: 'new_project', reason: '关键字命中新项目' };
+  }
+  // 高风险 BUG
+  if (/(bug|修复|fix|报错|异常|崩溃)/.test(text) &&
+      /(生产|线上|prod|紧急|urgent|critical|p0|p1)/.test(text)) {
+    return { route: 'bug_high_risk', reason: '关键字命中高风险 BUG(生产/紧急)' };
+  }
+  // 普通 BUG
+  if (/(bug|修复|fix|报错|异常)/.test(text)) {
+    return { route: 'bug_normal', reason: '关键字命中普通 BUG' };
+  }
+  // 小改动
+  if (/(小改|微调|改个|改下|tweak|small change)/.test(text)) {
+    return { route: 'minor_change', reason: '关键字命中小改动' };
+  }
+  // 标准开发
+  return { route: 'standard_dev', reason: '默认走标准开发链' };
+}
+
+server.registerTool(
+  'awkn_tianhuo_start',
+  {
+    description:
+      '天火入口:根据用户输入分类任务,返回推荐的首张能力卡(tianhuo/engineer/audit/cicd/deploy/prd/spec 等)。' +
+      'MCP 不可用时按 capabilities/project/tianhuo/card.md fallback 规则执行单阶段任务。',
+    inputSchema: {
+      userInput: z.string().describe('用户原始输入文本'),
+      requestedCapability: z.string().optional().describe('用户显式点名的能力 id 或 alias(如 tianhuo/天火/engineer)'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const sm = getSkillsManager();
+      // 显式点名优先,绕过分类
+      let capId: string | null = null;
+      if (args.requestedCapability) {
+        const cap = sm.getCapability(args.requestedCapability);
+        capId = cap ? cap.id : null;
+      }
+      const classification = classifyTaskRoute(args.userInput ?? '');
+      if (!capId) {
+        capId = ROUTE_TO_FIRST_CAPABILITY[classification.route];
+      }
+
+      // 始终返回 tianhuo card 作为入口契约
+      const tianhuoCap = sm.getCapability('tianhuo');
+      if (!tianhuoCap) {
+        return toError(new Error('tianhuo capability not loaded. Check capabilities/project/manifest.yaml.'));
+      }
+
+      const nextCap = capId ? sm.getCapability(capId) : null;
+      return {
+        content: [toText({
+          tianhuoCard: tianhuoCap.cardBody,
+          tianhuoCardPath: tianhuoCap.cardPath,
+          tianhuoContentHash: tianhuoCap.contentHash,
+          classification: {
+            route: classification.route,
+            reason: classification.reason,
+          },
+          recommendedFirstCapability: nextCap ? {
+            id: nextCap.id,
+            canonicalSkill: nextCap.canonicalSkill,
+            cardPath: nextCap.cardPath,
+            cardBody: nextCap.cardBody,
+            loopProfile: nextCap.loopProfile,
+            contentHash: nextCap.contentHash,
+          } : null,
+          fallbackNote: 'MCP 不可用时按 tianhuo card.md 第 5 条 fallback:只做当前单阶段任务,不启动自主循环,不执行生产动作',
+        })],
+      };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_tianhuo_advance',
+  {
+    description:
+      '天火推进:接收当前 capability 的 evidence,返回下一张能力卡。' +
+      'evidence 必须是新鲜证据(命令结果/测试结果/审查结论/产物哈希),不得用"已修改/应该通过"代替。',
+    inputSchema: {
+      currentCapability: z.string().describe('当前能力 id(如 execution-check / engineer / audit)'),
+      evidence: z.string().describe('JSON 格式证据(如 {"tsc":"0 errors","tests":"96/96 pass","audit":"PASS"})'),
+      outcome: z.enum(['pass', 'fail', 'blocked']).optional().describe('当前阶段结果,默认 pass'),
+      reason: z.string().optional().describe('推进说明'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const sm = getSkillsManager();
+      const currentId = args.currentCapability;
+      const current = sm.getCapability(currentId);
+      if (!current) {
+        return toError(new Error(`current capability not found: ${currentId}`));
+      }
+      let evidence: unknown;
+      try {
+        evidence = JSON.parse(args.evidence);
+      } catch {
+        return toError(new Error('evidence must be valid JSON'));
+      }
+      const outcome: 'pass' | 'fail' | 'blocked' = args.outcome ?? 'pass';
+
+      // outcome=fail/blocked 不推进,要求用户重做当前阶段
+      if (outcome !== 'pass') {
+        return {
+          content: [toText({
+            currentCapability: currentId,
+            outcome,
+            evidence,
+            nextCapability: null,
+            reason: `outcome=${outcome},不得推进到下一阶段。请重做当前能力卡或回滚。`,
+          })],
+        };
+      }
+
+      const nextId = CAPABILITY_ADVANCE_MAP[currentId] ?? null;
+      if (!nextId) {
+        return {
+          content: [toText({
+            currentCapability: currentId,
+            outcome,
+            evidence,
+            nextCapability: null,
+            reason: '已到达链路终点,无下一张卡。建议进入复盘(retrospective)。',
+          })],
+        };
+      }
+      const next = sm.getCapability(nextId);
+      if (!next) {
+        return toError(new Error(`next capability not loaded: ${nextId}(请检查 manifest.yaml)`));
+      }
+      return {
+        content: [toText({
+          currentCapability: currentId,
+          outcome,
+          evidence,
+          nextCapability: {
+            id: next.id,
+            canonicalSkill: next.canonicalSkill,
+            cardPath: next.cardPath,
+            cardBody: next.cardBody,
+            loopProfile: next.loopProfile,
+            contentHash: next.contentHash,
+          },
+          reason: args.reason ?? `advance from ${currentId} to ${nextId}`,
+        })],
+      };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_tianhuo_status',
+  {
+    description: '天火状态:返回当前已加载的 capability 列表、各自的 loop_profile 和 content_hash',
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      const sm = getSkillsManager();
+      const caps = sm.getCapabilities();
+      return {
+        content: [toText({
+          count: caps.length,
+          capabilitiesRoot: sm.getCapabilitiesRoot(),
+          capabilities: caps.map((c) => ({
+            id: c.id,
+            canonicalSkill: c.canonicalSkill,
+            aliases: c.aliases,
+            cardPath: c.cardPath,
+            fullReferencePath: c.fullReferencePath,
+            loopProfile: c.loopProfile,
+            executionMode: c.executionMode,
+            contentHash: c.contentHash,
+          })),
+          advanceMap: CAPABILITY_ADVANCE_MAP,
+        })],
+      };
     } catch (e) {
       return toError(e);
     }
@@ -774,6 +1007,141 @@ server.registerTool(
       const { completePendingDrafts } = await import('../evolve/experience-writer.js');
       const result = await completePendingDrafts(args.cwd ?? process.cwd());
       return { content: [toText(result)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+// ============================================================
+// Agent 模块（2 tools）— 加载智能体人格与经验
+// ============================================================
+
+/** agents/ 目录相对于 runtime/src/mcp/ 的位置 */
+const AGENTS_ROOT = resolve(__dirname, '..', '..', '..', 'agents');
+
+/** 智能体结构化层定义 */
+const AGENT_LAYERS: Record<string, { dir?: string; files: string[] }> = {
+  prompt: { files: ['agent.prompt'] },
+  soul: { dir: '01-身份与行为', files: ['SOUL.md', 'IDENTITY.md', 'BOUNDARY.md', 'USER.md'] },
+  sop: { dir: '02-流程与规范', files: ['SOP.md', 'AGENTS.md'] },
+  capability: { dir: '03-能力与工具', files: ['CAPABILITY.md', 'CAPABILITY-TREE.md', 'TOOLS.md', 'ENV.md', 'VFM.md'] },
+  memory: { dir: '04-记忆与知识', files: ['MEMORY.md', 'KNOWLEDGE.md', 'ADL.md', 'DECISION.md'] },
+};
+
+server.registerTool(
+  'awkn_agent_load',
+  {
+    description:
+      '加载智能体完整配置（人格、SOP、能力、经验）。' +
+      '可用智能体：tianhuo（天火，全栈编排）、cicd-tester（CICD 审查）。' +
+      'layers 可选：prompt,soul,sop,capability,memory,experience（默认 prompt+soul+sop）。',
+    inputSchema: {
+      agent: z.string().describe('智能体名（tianhuo / cicd-tester）'),
+      layers: z.string().optional().describe('逗号分隔的层名（prompt,soul,sop,capability,memory,experience），默认 prompt,soul,sop'),
+      experienceCategory: z.string().optional().describe('经验分类过滤（决策框架/执行协议/协作网络/踩坑教训/最佳实践/能力进化），不传则返回索引'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const { readFileSync, existsSync, readdirSync } = await import('node:fs');
+      const agentDir = resolve(AGENTS_ROOT, args.agent);
+      if (!existsSync(agentDir)) {
+        const available = readdirSync(AGENTS_ROOT).filter((d) => {
+          const p = resolve(AGENTS_ROOT, d);
+          return existsSync(resolve(p, 'agent.prompt'));
+        });
+        return toError(new Error(`Agent "${args.agent}" not found. Available: ${available.join(', ')}`));
+      }
+
+      const requestedLayers = (args.layers ?? 'prompt,soul,sop').split(',').map((s: string) => s.trim());
+      const result: Record<string, unknown> = { agent: args.agent, layers: {} as Record<string, unknown> };
+      const layers = result.layers as Record<string, unknown>;
+
+      for (const layerName of requestedLayers) {
+        if (layerName === 'experience') {
+          // 经验层特殊处理
+          const qoderExpDir = resolve(agentDir, '.qoder', 'experience');
+          const derivedDir = resolve(agentDir, '04-记忆与知识', 'EXPERIENCE', 'derived');
+
+          if (args.experienceCategory) {
+            // 返回指定分类的经验文件内容
+            const categoryMap: Record<string, string> = {
+              '决策框架': '01-决策框架',
+              '执行协议': '02-执行协议',
+              '协作网络': '03-协作网络',
+              '踩坑教训': '04-踩坑教训',
+              '最佳实践': '05-最佳实践',
+              '能力进化': '06-能力进化',
+            };
+            const subDir = categoryMap[args.experienceCategory];
+            if (subDir && existsSync(resolve(qoderExpDir, subDir))) {
+              const files = readdirSync(resolve(qoderExpDir, subDir)).filter((f) => f.endsWith('.md'));
+              const contents: Record<string, string> = {};
+              for (const f of files) {
+                contents[f] = readFileSync(resolve(qoderExpDir, subDir, f), 'utf-8');
+              }
+              layers.experience = { category: args.experienceCategory, entries: contents };
+            } else {
+              layers.experience = { error: `Category "${args.experienceCategory}" not found` };
+            }
+          } else {
+            // 返回经验索引
+            const indexPath = resolve(qoderExpDir, 'index.json');
+            const index = existsSync(indexPath) ? JSON.parse(readFileSync(indexPath, 'utf-8')) : null;
+            const derivedCount = existsSync(derivedDir) ? readdirSync(derivedDir).filter((f) => f.endsWith('.md')).length : 0;
+            layers.experience = { index, derivedCount, hint: 'Pass experienceCategory to load specific category content' };
+          }
+          continue;
+        }
+
+        const layerDef = AGENT_LAYERS[layerName];
+        if (!layerDef) {
+          layers[layerName] = { error: `Unknown layer "${layerName}". Valid: ${Object.keys(AGENT_LAYERS).join(',')},experience` };
+          continue;
+        }
+
+        const layerContent: Record<string, string> = {};
+        for (const file of layerDef.files) {
+          const filePath = layerDef.dir
+            ? resolve(agentDir, layerDef.dir, file)
+            : resolve(agentDir, file);
+          if (existsSync(filePath)) {
+            layerContent[file] = readFileSync(filePath, 'utf-8');
+          }
+        }
+        if (Object.keys(layerContent).length > 0) {
+          layers[layerName] = layerContent;
+        }
+      }
+
+      return { content: [toText(result)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_agent_list',
+  {
+    description: '列出所有可用智能体及其描述',
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      const { readdirSync, existsSync, readFileSync } = await import('node:fs');
+      const agents = readdirSync(AGENTS_ROOT).filter((d) => {
+        return existsSync(resolve(AGENTS_ROOT, d, 'agent.prompt'));
+      });
+      const result = agents.map((name) => {
+        const soulPath = resolve(AGENTS_ROOT, name, '01-身份与行为', 'SOUL.md');
+        const soul = existsSync(soulPath) ? readFileSync(soulPath, 'utf-8').slice(0, 200) : '';
+        const promptPath = resolve(AGENTS_ROOT, name, 'agent.prompt');
+        const promptPreview = existsSync(promptPath) ? readFileSync(promptPath, 'utf-8').slice(0, 300) : '';
+        return { name, soulPreview: soul, promptPreview };
+      });
+      return { content: [toText({ count: result.length, agents: result })] };
     } catch (e) {
       return toError(e);
     }

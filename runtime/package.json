@@ -6,10 +6,13 @@
   "main": "dist/cli.js",
   "bin": {
     "awkn-engine": "bin/awkn-engine.js",
-    "awkn-mcp-server": "bin/awkn-mcp-server.js"
+    "awkn-mcp-server": "bin/awkn-mcp-server.js",
+    "awkn-review-mcp-server": "bin/awkn-review-mcp-server.js",
+    "awkn-action-runner": "bin/awkn-action-runner.js"
   },
   "scripts": {
     "build": "tsc",
+    "prepack": "npm run build",
     "typecheck": "tsc --noEmit",
     "lint": "node scripts/architecture-scan.mjs",
     "test": "node scripts/run-tests.mjs unit",
