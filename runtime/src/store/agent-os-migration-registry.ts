@@ -423,6 +423,119 @@ const AGENT_OS_MIGRATIONS: readonly AgentOsMigration[] = [
       `);
     },
   },
+  {
+    version: 19,
+    name: 'workflow-execution-control-plane',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS workflow_agent_profile (
+          profile_id TEXT NOT NULL,
+          version TEXT NOT NULL,
+          role TEXT NOT NULL,
+          specialty TEXT NOT NULL,
+          capabilities_json TEXT NOT NULL,
+          input_types_json TEXT NOT NULL,
+          output_types_json TEXT NOT NULL,
+          tool_policy_ref TEXT NOT NULL,
+          independence_group TEXT NOT NULL,
+          provider_policy TEXT NOT NULL,
+          max_concurrent_assignments INTEGER NOT NULL,
+          max_attempts INTEGER NOT NULL,
+          timeout_ms INTEGER NOT NULL,
+          memory_policy TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'DRAFT',
+          source_hash TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (profile_id, version)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_agent_instance (
+          actor_id TEXT NOT NULL,
+          profile_id TEXT NOT NULL,
+          provider_id TEXT NOT NULL,
+          model_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          worker_provider_id TEXT NOT NULL,
+          provider_run_id TEXT NOT NULL,
+          workspace_id TEXT NOT NULL,
+          permission_snapshot_hash TEXT NOT NULL,
+          authorization_envelope_id TEXT NOT NULL,
+          lease_id TEXT NOT NULL,
+          lease_expires_at TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (actor_id, session_id),
+          FOREIGN KEY (authorization_envelope_id) REFERENCES authorization_envelope(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_stage_run (
+          stage_run_id TEXT PRIMARY KEY,
+          mission_id TEXT NOT NULL,
+          work_item_type TEXT NOT NULL,
+          work_item_id TEXT NOT NULL,
+          stage_type TEXT NOT NULL,
+          state TEXT NOT NULL DEFAULT 'READY',
+          required_profile_id TEXT NOT NULL,
+          actor_id TEXT,
+          frozen_input_hash TEXT NOT NULL,
+          frozen_source_sha TEXT,
+          frozen_artifact_digest TEXT,
+          authorization_envelope_id TEXT NOT NULL,
+          input_receipt_ids_json TEXT NOT NULL DEFAULT '[]',
+          output_receipt_id TEXT,
+          attempt INTEGER NOT NULL DEFAULT 0,
+          idempotency_key TEXT NOT NULL UNIQUE,
+          lease_expires_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (authorization_envelope_id) REFERENCES authorization_envelope(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_stage_dependency (
+          mission_id TEXT NOT NULL,
+          work_item_id TEXT NOT NULL,
+          from_stage TEXT NOT NULL,
+          to_stage TEXT NOT NULL,
+          condition TEXT NOT NULL DEFAULT 'on_pass',
+          PRIMARY KEY (work_item_id, from_stage, to_stage)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_worker_event (
+          id TEXT PRIMARY KEY,
+          provider_id TEXT NOT NULL,
+          provider_event_id TEXT NOT NULL,
+          provider_run_id TEXT NOT NULL,
+          event_type TEXT NOT NULL,
+          event_payload_json TEXT NOT NULL,
+          received_at TEXT NOT NULL,
+          UNIQUE(provider_id, provider_event_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_dead_letter (
+          id TEXT PRIMARY KEY,
+          stage_run_id TEXT NOT NULL,
+          mission_id TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          error_text TEXT,
+          attempts INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (stage_run_id) REFERENCES workflow_stage_run(stage_run_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_wf_profile_status ON workflow_agent_profile(status);
+        CREATE INDEX IF NOT EXISTS idx_wf_instance_actor ON workflow_agent_instance(actor_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_instance_lease ON workflow_agent_instance(lease_expires_at);
+        CREATE INDEX IF NOT EXISTS idx_wf_stage_mission ON workflow_stage_run(mission_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_stage_work_item ON workflow_stage_run(work_item_type, work_item_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_stage_state ON workflow_stage_run(state);
+        CREATE INDEX IF NOT EXISTS idx_wf_stage_actor ON workflow_stage_run(actor_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_stage_dep_item ON workflow_stage_dependency(work_item_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_worker_event_run ON workflow_worker_event(provider_run_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_dlq_mission ON workflow_dead_letter(mission_id);
+      `);
+    },
+  },
 ] as const;
 
 /**

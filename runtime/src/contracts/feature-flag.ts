@@ -30,6 +30,14 @@ export const AGENT_OS_FLAGS = [
   'AWKN_INPUT_GATEWAY_V1',
   'AWKN_INTENT_ROUTER_V1',
   'AWKN_CONTEXT_PLANNER_V1',
+  // ── Workflow v2 Flags (Spiral 1-4) ──
+  'AWKN_WORKFLOW_STAGE_V1',
+  'AWKN_WORKER_PROVIDER_V1',
+  'AWKN_RELEASE_AGENT_V1',
+  'AWKN_DEPLOY_AGENT_V1',
+  'AWKN_RECOVERY_AGENT_V1',
+  'AWKN_RETRO_EVOLUTION_V1',
+  'AWKN_HERMES_PROVIDER_V1',
 ] as const;
 
 export type AgentOsFlag = (typeof AGENT_OS_FLAGS)[number];
@@ -71,6 +79,31 @@ export const FEATURE_FLAG_DEPENDENCIES: ReadonlyArray<FeatureFlagDependency> = [
     flag: 'AWKN_CONTEXT_PLANNER_V1',
     requires: [{ flag: 'AWKN_INTENT_ROUTER_V1', minimumValue: 'shadow' }],
   },
+  // ── Workflow v2 依赖链 ──
+  {
+    flag: 'AWKN_WORKER_PROVIDER_V1',
+    requires: [{ flag: 'AWKN_WORKFLOW_STAGE_V1', minimumValue: 'shadow' }],
+  },
+  {
+    flag: 'AWKN_RELEASE_AGENT_V1',
+    requires: [{ flag: 'AWKN_WORKER_PROVIDER_V1', minimumValue: 'shadow' }],
+  },
+  {
+    flag: 'AWKN_DEPLOY_AGENT_V1',
+    requires: [{ flag: 'AWKN_RELEASE_AGENT_V1', minimumValue: 'shadow' }],
+  },
+  {
+    flag: 'AWKN_RECOVERY_AGENT_V1',
+    requires: [{ flag: 'AWKN_WORKER_PROVIDER_V1', minimumValue: 'shadow' }],
+  },
+  {
+    flag: 'AWKN_RETRO_EVOLUTION_V1',
+    requires: [{ flag: 'AWKN_WORKFLOW_STAGE_V1', minimumValue: 'shadow' }],
+  },
+  {
+    flag: 'AWKN_HERMES_PROVIDER_V1',
+    requires: [{ flag: 'AWKN_WORKER_PROVIDER_V1', minimumValue: 'shadow' }],
+  },
 ];
 
 /**
@@ -101,6 +134,13 @@ export const FeatureFlagSnapshotSchema = z.object({
     AWKN_INPUT_GATEWAY_V1: FeatureFlagValueSchema,
     AWKN_INTENT_ROUTER_V1: FeatureFlagValueSchema,
     AWKN_CONTEXT_PLANNER_V1: FeatureFlagValueSchema,
+    AWKN_WORKFLOW_STAGE_V1: FeatureFlagValueSchema,
+    AWKN_WORKER_PROVIDER_V1: FeatureFlagValueSchema,
+    AWKN_RELEASE_AGENT_V1: FeatureFlagValueSchema,
+    AWKN_DEPLOY_AGENT_V1: FeatureFlagValueSchema,
+    AWKN_RECOVERY_AGENT_V1: FeatureFlagValueSchema,
+    AWKN_RETRO_EVOLUTION_V1: FeatureFlagValueSchema,
+    AWKN_HERMES_PROVIDER_V1: FeatureFlagValueSchema,
   }),
   sourceVersions: z.record(z.string(), z.string()),
   sourceHash: z.string().regex(/^[0-9a-f]{64}$/, 'invalid sha256 hash'),

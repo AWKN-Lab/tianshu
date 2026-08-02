@@ -25,6 +25,18 @@ export const ReceiptTypeSchema = z.enum([
   'CYCLE',
   'SHADOW_DIFF',
   'REVIEW',
+  // ── Workflow v2 Receipt Types (Spiral 1) ──
+  'WORKFLOW_ASSIGNMENT',
+  'WORKER_SPAWN',
+  'WORKER_HEARTBEAT',
+  'WORKER_RESULT',
+  'TEST',
+  'SECURITY_REVIEW',
+  'GIT',
+  'RELEASE',
+  'DEPLOY',
+  'RECOVERY',
+  'RETROSPECTIVE',
 ]);
 
 export type ReceiptType = z.infer<typeof ReceiptTypeSchema>;
