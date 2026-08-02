@@ -14,7 +14,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadRuntimeEnv } from '../config/runtime-env.js';
 import type { LlmProvider } from '../llm/types.js';
 import { getDb, closeDb } from '../store/db.js';
@@ -362,137 +362,61 @@ server.registerTool(
 );
 
 // ============================================================
-// Tianhuo 模块（3 tools）— 能力卡路由,对应 capabilities/project/tianhuo/card.md
+// Tianhuo 模块（3 tools）— 转发到 packages/awkn-engine-mcp 唯一路由实现
+//
+// 路由/推进的唯一实现源：packages/awkn-engine-mcp/runtime/src/capabilities/router.ts
+// （TianhuoRouter：路线表 + SQLite 持久化 + 跨进程恢复 + 确定性 Gate + Review Receipt 门禁）。
+// 根目录 runtime 不再维护任务分类与推进链路逻辑，以下三工具按 canonical 契约
+// 动态复用该实现；若 packages 目录缺失，工具返回明确错误并提示使用 awkn-mcp-admin-server.js。
 // ============================================================
 
-/**
- * 任务分类 → 推荐首张能力卡。
- * 规则参考 agents/tianhuo/agent.prompt#2.0A 项目风险路由。
- */
-type TaskRoute = 'readonly' | 'minor_change' | 'bug_normal' | 'bug_high_risk' | 'standard_dev' | 'release' | 'new_project';
+const PACKAGE_CAPABILITIES_DIR = resolve(
+  __dirname,
+  '..', '..', '..',
+  'packages', 'awkn-engine-mcp', 'runtime', 'src', 'capabilities',
+);
 
-const ROUTE_TO_FIRST_CAPABILITY: Record<TaskRoute, string | null> = {
-  readonly: null,                                // 直接回答,不建链
-  minor_change: 'execution-check',               // 执行检查 → 工程师 → 新鲜验证
-  bug_normal: 'execution-check',                 // 执行检查 → BUG 修复 → CICD
-  bug_high_risk: 'execution-check',              // 执行检查 → BUG 修复 → 审核 → CICD
-  standard_dev: 'execution-check',               // 执行检查 → 工程师 → 审核 → CICD
-  release: 'audit',                              // 审核 → CICD → 部署
-  new_project: 'prd',                            // PRD → Spec → 工程文档 → ... → 复盘
-};
+let tianhuoRouter: unknown = null;
 
-/**
- * 能力卡推进链路(参考 agent.prompt 2.0A)。
- * key = 当前 capability id,value = 下一张卡 id(或 null 表示链路终点)。
- */
-const CAPABILITY_ADVANCE_MAP: Record<string, string | null> = {
-  // 标准开发链
-  'execution-check': 'engineer',
-  'engineer': 'audit',
-  'audit': 'cicd',
-  'cicd': 'deploy',
-  'deploy': 'retrospective',
-  // BUG 链(走 bugfix 替代 engineer)
-  'bugfix': 'cicd',
-  // 新项目链
-  'prd': 'spec',
-  'spec': 'engineering-docs',
-  'engineering-docs': 'engineer',
-  'retrospective': null,
-};
-
-/**
- * 简单任务分类器:基于关键词,弱模型友好。
- * 真正的意图理解由 awkn-意图理解 技能承担,这里只做兜底路由。
- */
-function classifyTaskRoute(userInput: string): { route: TaskRoute; reason: string } {
-  const text = userInput.toLowerCase();
-  // 只读
-  if (/^(解释|查看|看看|explain|what|how|why|诊断|排查)/.test(text.trim()) ||
-      /^(检查|诊断)下/.test(userInput.trim())) {
-    if (/^(检查|诊断)下/.test(userInput.trim())) {
-      // "检查下怎么回事" 类任务:只读诊断,但用户可能希望后续修复
-      return { route: 'readonly', reason: '关键字命中只读诊断(检查/诊断)' };
-    }
-    return { route: 'readonly', reason: '关键字命中只读解释(解释/查看/看看/how/why)' };
-  }
-  // 发布
-  if (/(发布|上线|deploy|release|ship)/.test(text)) {
-    return { route: 'release', reason: '关键字命中发布场景' };
-  }
-  // 新项目
-  if (/(新项目|从零|from scratch|greenfield)/.test(text)) {
-    return { route: 'new_project', reason: '关键字命中新项目' };
-  }
-  // 高风险 BUG
-  if (/(bug|修复|fix|报错|异常|崩溃)/.test(text) &&
-      /(生产|线上|prod|紧急|urgent|critical|p0|p1)/.test(text)) {
-    return { route: 'bug_high_risk', reason: '关键字命中高风险 BUG(生产/紧急)' };
-  }
-  // 普通 BUG
-  if (/(bug|修复|fix|报错|异常)/.test(text)) {
-    return { route: 'bug_normal', reason: '关键字命中普通 BUG' };
-  }
-  // 小改动
-  if (/(小改|微调|改个|改下|tweak|small change)/.test(text)) {
-    return { route: 'minor_change', reason: '关键字命中小改动' };
-  }
-  // 标准开发
-  return { route: 'standard_dev', reason: '默认走标准开发链' };
+/** 懒加载 package 的 TianhuoRouter（含 CapabilityManager / AgentLoopPolicyManager） */
+async function getTianhuoRouter(): Promise<{ start: any; advance: any; status: any }> {
+  if (tianhuoRouter) return tianhuoRouter as { start: any; advance: any; status: any };
+  const { CapabilityManager } = await import(pathToFileURL(resolve(PACKAGE_CAPABILITIES_DIR, 'manager.ts')).href);
+  const { AgentLoopPolicyManager } = await import(pathToFileURL(resolve(PACKAGE_CAPABILITIES_DIR, 'agent-loop-policy.ts')).href);
+  const { TianhuoRouter } = await import(pathToFileURL(resolve(PACKAGE_CAPABILITIES_DIR, 'router.ts')).href);
+  const engineRoot = process.env.AWKN_ENGINE_ROOT ?? resolve(__dirname, '..', '..', '..');
+  const capabilitiesRoot =
+    process.env.AWKN_CAPABILITIES_ROOT ?? resolve(engineRoot, 'capabilities');
+  const capabilities = new CapabilityManager(capabilitiesRoot);
+  capabilities.loadAll();
+  const policies = new AgentLoopPolicyManager(capabilitiesRoot, capabilities);
+  tianhuoRouter = new TianhuoRouter(capabilities, policies);
+  return tianhuoRouter as { start: any; advance: any; status: any };
 }
 
 server.registerTool(
   'awkn_tianhuo_start',
   {
     description:
-      '天火入口:根据用户输入分类任务,返回推荐的首张能力卡(tianhuo/engineer/audit/cicd/deploy/prd/spec 等)。' +
-      'MCP 不可用时按 capabilities/project/tianhuo/card.md fallback 规则执行单阶段任务。',
+      '启动天火项目工作流（转发 packages/awkn-engine-mcp TianhuoRouter）；返回 workflowId、首个能力卡、固定内容哈希与 AgentLoop 策略',
     inputSchema: {
-      userInput: z.string().describe('用户原始输入文本'),
-      requestedCapability: z.string().optional().describe('用户显式点名的能力 id 或 alias(如 tianhuo/天火/engineer)'),
+      task: z.string().min(1).describe('用户原始任务，保留显式自主循环措辞'),
+      projectPath: z.string().optional().describe('项目绝对路径，缺省为引擎根目录'),
+      requestedCapability: z.string().optional().describe('用户显式指定的能力，如 engineer / @工程师'),
+      mode: z.enum(['standard', 'preflight', 'production', 'autonomous']).optional(),
     },
   },
   async (args: any) => {
     try {
-      const sm = getSkillsManager();
-      // 显式点名优先,绕过分类
-      let capId: string | null = null;
-      if (args.requestedCapability) {
-        const cap = sm.getCapability(args.requestedCapability);
-        capId = cap ? cap.id : null;
-      }
-      const classification = classifyTaskRoute(args.userInput ?? '');
-      if (!capId) {
-        capId = ROUTE_TO_FIRST_CAPABILITY[classification.route];
-      }
-
-      // 始终返回 tianhuo card 作为入口契约
-      const tianhuoCap = sm.getCapability('tianhuo');
-      if (!tianhuoCap) {
-        return toError(new Error('tianhuo capability not loaded. Check capabilities/project/manifest.yaml.'));
-      }
-
-      const nextCap = capId ? sm.getCapability(capId) : null;
-      return {
-        content: [toText({
-          tianhuoCard: tianhuoCap.cardBody,
-          tianhuoCardPath: tianhuoCap.cardPath,
-          tianhuoContentHash: tianhuoCap.contentHash,
-          classification: {
-            route: classification.route,
-            reason: classification.reason,
-          },
-          recommendedFirstCapability: nextCap ? {
-            id: nextCap.id,
-            canonicalSkill: nextCap.canonicalSkill,
-            cardPath: nextCap.cardPath,
-            cardBody: nextCap.cardBody,
-            loopProfile: nextCap.loopProfile,
-            contentHash: nextCap.contentHash,
-          } : null,
-          fallbackNote: 'MCP 不可用时按 tianhuo card.md 第 5 条 fallback:只做当前单阶段任务,不启动自主循环,不执行生产动作',
-        })],
-      };
+      const router = await getTianhuoRouter();
+      const engineRoot = process.env.AWKN_ENGINE_ROOT ?? resolve(__dirname, '..', '..', '..');
+      const result = router.start({
+        task: args.task,
+        projectPath: args.projectPath ?? engineRoot,
+        requestedCapability: args.requestedCapability?.replace(/^@/, ''),
+        mode: args.mode,
+      });
+      return { content: [toText(result)] };
     } catch (e) {
       return toError(e);
     }
@@ -503,76 +427,21 @@ server.registerTool(
   'awkn_tianhuo_advance',
   {
     description:
-      '天火推进:接收当前 capability 的 evidence,返回下一张能力卡。' +
-      'evidence 必须是新鲜证据(命令结果/测试结果/审查结论/产物哈希),不得用"已修改/应该通过"代替。',
+      '提交当前阶段的新鲜证据并推进（转发 packages/awkn-engine-mcp TianhuoRouter）；门禁不足时保持或暂停当前工作流',
     inputSchema: {
-      currentCapability: z.string().describe('当前能力 id(如 execution-check / engineer / audit)'),
-      evidence: z.string().describe('JSON 格式证据(如 {"tsc":"0 errors","tests":"96/96 pass","audit":"PASS"})'),
-      outcome: z.enum(['pass', 'fail', 'blocked']).optional().describe('当前阶段结果,默认 pass'),
-      reason: z.string().optional().describe('推进说明'),
+      workflowId: z.string().uuid().describe('awkn_tianhuo_start 返回的 workflowId'),
+      status: z.string().describe('pass/success/completed 或 failed/blocked'),
+      evidence: z.array(z.string()).min(1).describe('命令、测试、审核或哈希等新鲜证据'),
+      artifacts: z.array(z.string()).optional(),
+      gateResults: z.record(z.string()).optional(),
+      reviewReceipt: z.record(z.unknown()).optional().describe('audit 阶段必填的完整 awkn-review-receipt/v1'),
     },
   },
   async (args: any) => {
     try {
-      const sm = getSkillsManager();
-      const currentId = args.currentCapability;
-      const current = sm.getCapability(currentId);
-      if (!current) {
-        return toError(new Error(`current capability not found: ${currentId}`));
-      }
-      let evidence: unknown;
-      try {
-        evidence = JSON.parse(args.evidence);
-      } catch {
-        return toError(new Error('evidence must be valid JSON'));
-      }
-      const outcome: 'pass' | 'fail' | 'blocked' = args.outcome ?? 'pass';
-
-      // outcome=fail/blocked 不推进,要求用户重做当前阶段
-      if (outcome !== 'pass') {
-        return {
-          content: [toText({
-            currentCapability: currentId,
-            outcome,
-            evidence,
-            nextCapability: null,
-            reason: `outcome=${outcome},不得推进到下一阶段。请重做当前能力卡或回滚。`,
-          })],
-        };
-      }
-
-      const nextId = CAPABILITY_ADVANCE_MAP[currentId] ?? null;
-      if (!nextId) {
-        return {
-          content: [toText({
-            currentCapability: currentId,
-            outcome,
-            evidence,
-            nextCapability: null,
-            reason: '已到达链路终点,无下一张卡。建议进入复盘(retrospective)。',
-          })],
-        };
-      }
-      const next = sm.getCapability(nextId);
-      if (!next) {
-        return toError(new Error(`next capability not loaded: ${nextId}(请检查 manifest.yaml)`));
-      }
-      return {
-        content: [toText({
-          currentCapability: currentId,
-          outcome,
-          evidence,
-          nextCapability: {
-            id: next.id,
-            canonicalSkill: next.canonicalSkill,
-            cardPath: next.cardPath,
-            cardBody: next.cardBody,
-            loopProfile: next.loopProfile,
-            contentHash: next.contentHash,
-          },
-          reason: args.reason ?? `advance from ${currentId} to ${nextId}`,
-        })],
-      };
+      const router = await getTianhuoRouter();
+      const result = router.advance(args);
+      return { content: [toText(result)] };
     } catch (e) {
       return toError(e);
     }
@@ -582,30 +451,14 @@ server.registerTool(
 server.registerTool(
   'awkn_tianhuo_status',
   {
-    description: '天火状态:返回当前已加载的 capability 列表、各自的 loop_profile 和 content_hash',
-    inputSchema: {},
+    description:
+      '查询或在引擎重启后恢复天火工作流（转发 packages/awkn-engine-mcp TianhuoRouter）；能力内容哈希变化时安全暂停',
+    inputSchema: { workflowId: z.string().uuid().describe('awkn_tianhuo_start 返回的 workflowId') },
   },
-  async () => {
+  async (args: any) => {
     try {
-      const sm = getSkillsManager();
-      const caps = sm.getCapabilities();
-      return {
-        content: [toText({
-          count: caps.length,
-          capabilitiesRoot: sm.getCapabilitiesRoot(),
-          capabilities: caps.map((c) => ({
-            id: c.id,
-            canonicalSkill: c.canonicalSkill,
-            aliases: c.aliases,
-            cardPath: c.cardPath,
-            fullReferencePath: c.fullReferencePath,
-            loopProfile: c.loopProfile,
-            executionMode: c.executionMode,
-            contentHash: c.contentHash,
-          })),
-          advanceMap: CAPABILITY_ADVANCE_MAP,
-        })],
-      };
+      const router = await getTianhuoRouter();
+      return { content: [toText(router.status(args.workflowId))] };
     } catch (e) {
       return toError(e);
     }

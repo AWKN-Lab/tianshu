@@ -104,23 +104,56 @@ async function main(): Promise<void> {
     const text = callResult?.content?.[0]?.text ?? '';
     console.log(`awkn_skill_list result: ${text.slice(0, 200)}`);
 
-    // 5. 验证部署完成后自动进入复盘，而不是提前结束链路
-    console.log('\n--- calling awkn_tianhuo_advance: deploy → retrospective ---');
-    const advanceResp = await sendAndWait('tools/call', {
-      name: 'awkn_tianhuo_advance',
+    // 5. 天火工作流：start → advance × 2 → completed（转发 package TianhuoRouter）
+    console.log('\n--- calling awkn_tianhuo_start ---');
+    const startResp = await sendAndWait('tools/call', {
+      name: 'awkn_tianhuo_start',
       arguments: {
-        currentCapability: 'deploy',
-        evidence: JSON.stringify({ deployment: 'PASS', checkedAt: new Date().toISOString() }),
-        outcome: 'pass',
+        task: '小改：修正 README 排版',
+        projectPath: resolve(__dirname, '..', '..'),
       },
     });
-    const advanceText = (advanceResp as { result?: { content?: { text: string }[] } })
+    const startText = (startResp as { result?: { content?: { text: string }[] } })
       .result?.content?.[0]?.text ?? '';
-    const advanceResult = JSON.parse(advanceText) as {
-      nextCapability?: { id?: string } | null;
+    const startResult = JSON.parse(startText) as {
+      workflowId?: string;
+      capabilityId?: string;
+      route?: string;
     };
-    if (advanceResult.nextCapability?.id !== 'retrospective') {
-      throw new Error(`expected deploy to advance to retrospective, got ${advanceText}`);
+    if (!startResult.workflowId || startResult.capabilityId !== 'execution-check') {
+      throw new Error(`expected execution-check workflow, got ${startText}`);
+    }
+
+    console.log('\n--- calling awkn_tianhuo_advance: execution-check → engineer ---');
+    const advance1Resp = await sendAndWait('tools/call', {
+      name: 'awkn_tianhuo_advance',
+      arguments: {
+        workflowId: startResult.workflowId,
+        status: 'pass',
+        evidence: ['npm run typecheck: 0 errors'],
+      },
+    });
+    const advance1Text = (advance1Resp as { result?: { content?: { text: string }[] } })
+      .result?.content?.[0]?.text ?? '';
+    const advance1Result = JSON.parse(advance1Text) as { capabilityId?: string };
+    if (advance1Result.capabilityId !== 'engineer') {
+      throw new Error(`expected engineer after first advance, got ${advance1Text}`);
+    }
+
+    console.log('\n--- calling awkn_tianhuo_advance: engineer → completed ---');
+    const advance2Resp = await sendAndWait('tools/call', {
+      name: 'awkn_tianhuo_advance',
+      arguments: {
+        workflowId: startResult.workflowId,
+        status: 'pass',
+        evidence: ['tests 120/120 pass'],
+      },
+    });
+    const advance2Text = (advance2Resp as { result?: { content?: { text: string }[] } })
+      .result?.content?.[0]?.text ?? '';
+    const advance2Result = JSON.parse(advance2Text) as { status?: string };
+    if (advance2Result.status !== 'completed') {
+      throw new Error(`expected completed after second advance, got ${advance2Text}`);
     }
 
     // 验证
@@ -135,7 +168,7 @@ async function main(): Promise<void> {
         throw new Error(`missing required tianhuo tool: ${required}`);
       }
     }
-    console.log(`\n✅ PASS: ${tools.length} tools registered, tianhuo trio present, deploy advances to retrospective`);
+    console.log(`\n✅ PASS: ${tools.length} tools registered, tianhuo trio present, workflow completes via package TianhuoRouter`);
   } finally {
     child.kill('SIGTERM');
     setTimeout(() => process.exit(0), 500);
