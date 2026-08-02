@@ -130,8 +130,13 @@ export function globToRegExp(glob: string): RegExp {
     const character = glob[index]!;
     if (character === '*') {
       if (glob[index + 1] === '*') {
-        source += '.*';
-        index += 1;
+        if (glob[index + 2] === '/') {
+          source += '(?:.*/)?';
+          index += 2;
+        } else {
+          source += '.*';
+          index += 1;
+        }
       } else {
         source += '[^/]*';
       }
