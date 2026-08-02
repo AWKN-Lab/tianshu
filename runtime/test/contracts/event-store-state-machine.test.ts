@@ -1,6 +1,27 @@
-import { describe, it } from 'node:test';
+import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventStore } from '../../src/workflow/event-store.js';
+import { queryRun } from '../../src/store/db.js';
+
+after(() => {
+  // 清理本测试创建的 run，避免在共享 EventStore 中留下 stale 'running' 记录
+  // 阻塞 acquirePipelineSlot（E18：EventStore stale lock）
+  for (const workflow of ['state-machine-test', 'failed-cycle-test']) {
+    try {
+      queryRun(
+        `DELETE FROM steps WHERE run_id IN (SELECT id FROM runs WHERE workflow_name = ?)`,
+        [workflow],
+      );
+      queryRun(
+        `DELETE FROM events WHERE run_id IN (SELECT id FROM runs WHERE workflow_name = ?)`,
+        [workflow],
+      );
+      queryRun(`DELETE FROM runs WHERE workflow_name = ?`, [workflow]);
+    } catch {
+      // 清理失败不阻塞测试结论
+    }
+  }
+});
 
 describe('EventStore Run/Step state machine and replay', () => {
   it('projects L2 cycle events into durable Step rows and replays state', () => {

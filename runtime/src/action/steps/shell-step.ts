@@ -14,6 +14,17 @@ import { redactText } from '../../core/redaction.js';
 const MAX_OUTPUT_BYTES = 20 * 1024 * 1024;
 
 /**
+ * 失败输出保留尾部：真实错误（栈/断言/退出码原因）通常出现在输出末尾。
+ * 头部截断（slice(0, N)）会把错误尾部切掉，导致报告不可诊断（运维盲区）。
+ */
+function keepTail(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const head = Math.floor(maxChars * 0.2);
+  const tail = maxChars - head;
+  return `${text.slice(0, head)}\n...[truncated ${text.length - maxChars} chars]...\n${text.slice(-tail)}`;
+}
+
+/**
  * Windows 路径盘符大写规范化。
  *
  * Vite/vitest 的 server.fs.allow 对盘符大小写敏感：
@@ -84,7 +95,7 @@ export async function runShellStep(step: ShellStepDef, cwd: string): Promise<Ste
         name: step.name,
         type: 'shell',
         status: 'failed',
-        output: redactText(`${stdout.text}${stderr.text}`).slice(0, 5000)
+        output: keepTail(redactText(`${stdout.text}${stderr.text}`), 5000)
           || `command timed out after ${step.timeout ?? 300}s`,
         durationMs: Date.now() - started,
         exitCode: null,
@@ -113,7 +124,7 @@ export async function runShellStep(step: ShellStepDef, cwd: string): Promise<Ste
         name: step.name,
         type: 'shell',
         status: code === 0 ? 'passed' : 'failed',
-        output: combined.slice(0, 5000) || `exited with code ${code}`,
+        output: code === 0 ? combined.slice(0, 5000) : keepTail(combined, 5000),
         durationMs: Date.now() - started,
         exitCode: code,
       });
