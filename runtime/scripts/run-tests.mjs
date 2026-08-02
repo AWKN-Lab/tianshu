@@ -1,4 +1,5 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { dirname, sep } from 'node:path';
@@ -78,6 +79,42 @@ if (selected.length === 0) {
   process.exit(1);
 }
 
+// 隔离 EventStore：契约/单元测试绝不允许写生产 data/awkn-engine.db。
+// 除非调用方已显式设置 AWKN_DB_PATH，否则注入临时 db，避免：
+// - 测试 run 污染生产 EventStore（stale 'running' 记录阻塞真实 pipeline）
+// - 与并发 pipeline（win-cicd 等）争抢同一 SQLite 写锁导致偶发失败
+let isolatedDbDir = null;
+if (!process.env.AWKN_DB_PATH && mode !== 'verify') {
+  isolatedDbDir = mkdtempSync(join(tmpdir(), 'awkn-tests-'));
+  process.env.AWKN_DB_PATH = join(isolatedDbDir, 'test.db');
+  console.log(`Isolated AWKN_DB_PATH=${process.env.AWKN_DB_PATH}`);
+}
+
+/**
+ * 测试进程净化 env：剔除宿主运行配置（runtime/.env 经 loadRuntimeEnv 注入），
+ * 避免策略/路由/密钥类变量泄漏进断言（例如 AWKN_APPROVED_TOOLS=exec,write
+ * 使 tool-policy 判定 write 已批准；AWKN_LLM_PROVIDER=codex 劫持 router
+ * provider 选择，导致 CICD（经 action-cli 启动）与本地直跑行为不一致）。
+ * 仅保留隔离 DB 路径，其余 AWKN_* 一律移除。
+ * verify 模式不净化：verify 脚本自给自足（自设 DB/端口/mock），保留宿主 env 无漂移风险。
+ *
+ * 已知边界（净化无效的场景）：
+ * - 测试 spawn 的子进程若自身调用 loadRuntimeEnv（如 src/cli.ts:29、
+ *   src/mcp/server.ts:34 模块顶层加载），会从磁盘重载 runtime/.env，
+ *   携带完整宿主配置（含真实 API key）——净化只作用于本进程 spawn 时传入的 env。
+ * - 不经 run-tests.mjs 的入口（如 `npm run test:coverage` 直跑 node --test）
+ *   不受净化保护，须在干净 env 下运行。
+ */
+function buildTestEnv() {
+  if (mode === 'verify') return process.env;
+  const sanitized = { ...process.env };
+  for (const key of Object.keys(sanitized)) {
+    if (key.startsWith('AWKN_') && key !== 'AWKN_DB_PATH') delete sanitized[key];
+  }
+  return sanitized;
+}
+const testEnv = buildTestEnv();
+
 const relativeFiles = selected.map((file) => toPosix(relative(runtimeRoot, file)));
 console.log(`Running ${relativeFiles.length} ${mode} test file(s)`);
 for (const file of relativeFiles) console.log(`- ${file}`);
@@ -105,7 +142,7 @@ if (nodeTestFiles.length > 0) {
     {
       cwd: runtimeRoot,
       stdio: 'inherit',
-      env: process.env,
+      env: testEnv,
     },
   );
   if (result.error) {
@@ -125,7 +162,7 @@ for (const file of standaloneFiles) {
     {
       cwd: runtimeRoot,
       stdio: 'inherit',
-      env: process.env,
+      env: testEnv,
     },
   );
   if (result.error) {
@@ -133,6 +170,14 @@ for (const file of standaloneFiles) {
     overallStatus = 1;
   } else {
     overallStatus = overallStatus || (result.status ?? 1);
+  }
+}
+
+if (isolatedDbDir) {
+  try {
+    rmSync(isolatedDbDir, { recursive: true, force: true });
+  } catch {
+    // 临时目录清理失败不阻塞退出码
   }
 }
 

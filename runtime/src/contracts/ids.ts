@@ -42,6 +42,22 @@ export const AWKN_ID_PREFIXES = {
   reviewReceipt: 'rrcpt',
   policy: 'pol',
   skill: 'sk',
+  mission: 'msn',
+  component: 'comp',
+  module: 'mod',
+  workPackage: 'wp',
+  workGraph: 'wg',
+  envelope: 'env',
+  releaseBundle: 'rb',
+  deployTarget: 'dt',
+  recoveryPlan: 'rplan2',
+  stageRun: 'srun',
+  agentProfile: 'prof',
+  workerProvider: 'wpv',
+  stageGraph: 'sgraph',
+  lease: 'lease',
+  workerEvent: 'wevt',
+  deadLetter: 'dl',
 } as const;
 
 export type AwknIdKind = keyof typeof AWKN_ID_PREFIXES;

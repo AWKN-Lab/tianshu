@@ -17,6 +17,7 @@ export function getDb(dbPath?: string): Database.Database {
   mkdirSync(dirname(resolvedPath), { recursive: true });
   const db = new Database(resolvedPath);
   db.pragma('journal_mode = WAL');
+  db.pragma('busy_timeout = 5000');
   db.pragma('foreign_keys = ON');
   try {
     runAgentOsMigrations(db);

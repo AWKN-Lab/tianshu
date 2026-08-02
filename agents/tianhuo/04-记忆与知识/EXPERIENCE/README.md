@@ -1,6 +1,6 @@
 # 经验存储模块
 
-**版本**: v6.0
+**版本**: v7.0
 **创建日期**: 2026-04-22
 **目标**: 捕获、存储、结构化天火智能体的执行经验
 **位置**: `04-记忆与知识/EXPERIENCE/`
@@ -53,7 +53,7 @@
 - 相关技能: {技能名}
 
 版本: 1.0
-状态: active
+状态: DRAFT
 ```
 
 ---
@@ -106,7 +106,7 @@
 
 ---
 
-## 五、v6.0 写回规则
+## 五、写回规则
 
 默认启动只读 `MEMORY.md#P0-轻量入口`，不读本目录。
 
@@ -119,6 +119,36 @@
 | 无沉淀价值 | 不写回 | 在 `evolutionWritebackPacket` 写 `none + reason` |
 
 写回必须经过 `evolutionGate`，禁止静默跳过。
+
+---
+
+## 六、v7.0 生命周期与迁徙
+
+经验文件是证据产物，不因写入而成为生效规则。生命周期事实源为 Runtime：
+
+```text
+DRAFT → VALIDATING → APPROVED → ACTIVE
+              └────→ QUARANTINED
+ACTIVE ────────────→ QUARANTINED / RETIRED
+```
+
+| 候选类型 | ACTIVE 投影目标 |
+|---|---|
+| KNOWLEDGE_ONLY | raw / Wiki；不进入 Evolve 状态机 |
+| CONTEXT_RULE | MEMORY.md |
+| TOOL_ROUTE | TOOLS.md |
+| SKILL | 相关技能及测试 |
+| PROJECT_RULE | 项目 AGENTS.md |
+| POLICY | 工作区 AGENTS.md 或治理策略 |
+| PROMPT / MODEL_ROUTE / GATE / DELIVERY_RULE | 对应 Runtime 配置或门禁 |
+
+硬规则：
+
+- DRAFT 只表示已捕获，不关闭 correction。
+- APPROVED 只表示已批准，不等于已部署。
+- ACTIVE 后才关闭关联 correction 并投影目标文件。
+- 回归时进入 QUARANTINED；回滚恢复上一 ACTIVE。
+- AGENTS.md 不再追加原始经验，只接收短、稳定、已激活规则。
 
 ---
 

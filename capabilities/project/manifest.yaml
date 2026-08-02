@@ -1,6 +1,41 @@
 version: 1
 # content_hash is SHA-256 over UTF-8 card content with CRLF canonicalized to LF.
 capabilities:
+  - id: tianhuo
+    version: "1.0.0"
+    canonical_skill: tianhuo
+    aliases:
+      - 天火
+    visibility: public
+    card: project/tianhuo/card.md
+    full_reference: project/tianhuo/reference.md
+    loop_profile: orchestrator
+    allowed_tools: []
+    content_hash: 5e232034474359e76569646c895364afac86d221a261628e9bdc6be47111e187
+  - id: tianjie
+    version: "1.0.0"
+    canonical_skill: awkn-程序员天阶功法
+    aliases:
+      - 天阶功法
+      - 程序员天阶功法
+    visibility: public
+    card: project/tianjie/card.md
+    full_reference: project/tianjie/reference.md
+    loop_profile: orchestrator
+    allowed_tools: []
+    content_hash: a356197fbc409b12a9a3d00637d0b795e5ddb32cc2341bdacd68ffc232414466
+  - id: execution-check
+    version: "1.0.1"
+    canonical_skill: awkn-执行检查
+    aliases:
+      - 执行检查
+      - 改前检查
+    visibility: public
+    card: project/execution-check/card.md
+    full_reference: project/execution-check/reference.md
+    loop_profile: gate
+    allowed_tools: []
+    content_hash: 1d1e9c933ff4701ab773b4657ab1a9af32b1c196a9d108eb6f4bd39ddb611530
   - id: engineer
     version: "1.0.0"
     canonical_skill: engineer
@@ -62,3 +97,51 @@ capabilities:
     loop_profile: default
     allowed_tools: []
     content_hash: fda6e4801d50040cb972741fd933904cd8d547d5052694fe29377df1566d1cd8
+  - id: prd
+    version: "1.0.0"
+    canonical_skill: awkn-prd
+    aliases:
+      - PRD
+      - 产品需求
+    visibility: public
+    card: project/prd/card.md
+    full_reference: project/prd/reference.md
+    loop_profile: prd_spec
+    allowed_tools: []
+    content_hash: 1f44e44a63788f8721444bb09406f27a787b1798a1767f6abcc8a95fc9dd4628
+  - id: spec
+    version: "1.0.0"
+    canonical_skill: awkn-spec
+    aliases:
+      - Spec
+      - 规格
+    visibility: public
+    card: project/spec/card.md
+    full_reference: project/spec/reference.md
+    loop_profile: prd_spec
+    allowed_tools: []
+    content_hash: d83a221d1c37623342d6d19e01a4769406dfa715fab113f5aa5c864d6130f5c6
+  - id: engineering-docs
+    version: "1.0.0"
+    canonical_skill: awkn-工程文档
+    aliases:
+      - 工程文档
+      - 技术方案
+    visibility: public
+    card: project/engineering-docs/card.md
+    full_reference: project/engineering-docs/reference.md
+    loop_profile: single
+    allowed_tools: []
+    content_hash: f1eca3914ecf88f54aa68fb2eab3f277ebc588e775758296d6e7afb8b3c620b0
+  - id: retrospective
+    version: "1.0.0"
+    canonical_skill: AWKN 复盘总结
+    aliases:
+      - 复盘
+      - 复盘总结
+    visibility: public
+    card: project/retrospective/card.md
+    full_reference: project/retrospective/reference.md
+    loop_profile: single
+    allowed_tools: []
+    content_hash: 14a87645978791aab9c5960a5593cfd968592ed8c33eff2f7c8a83e9ea175722

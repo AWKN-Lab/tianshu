@@ -1,6 +1,9 @@
 import { createLogger } from '../core/logger.js';
 import type { CompiledMemoryContext } from '../memory/backend.js';
 import { getMemoryBackendRouter } from '../memory/router.js';
+import { getMemoryService } from '../memory/service.js';
+import { enqueueExtraction, ensureExtractionWorker } from '../memory/extract/runner.js';
+import { getMetricRegistry } from '../observability/metrics.js';
 import { startSpan } from '../observability/trace.js';
 import { queryRun } from '../store/db.js';
 import type { ChatMessage, ChatRequest, ChatResponse, LlmProvider, LlmProviderInterface } from './types.js';
@@ -9,6 +12,8 @@ import { CodexProvider } from './providers/codex.js';
 import { MiniMaxProvider } from './providers/minimax.js';
 
 const logger = createLogger('LlmRouter');
+
+const METRIC_TTL_MS = 5 * 60_000;
 
 interface MemoryEnrichment {
   request: ChatRequest;
@@ -21,10 +26,32 @@ interface MemoryEnrichment {
 export class LlmRouter {
   private providers: Map<LlmProvider, LlmProviderInterface> = new Map();
 
-  constructor() {
+  constructor(injectedProviders?: Array<[LlmProvider, LlmProviderInterface]>) {
     this.providers.set('trae', new TraeProvider());
     this.providers.set('codex', new CodexProvider());
     this.providers.set('minimax', new MiniMaxProvider());
+    if (injectedProviders) {
+      for (const [name, provider] of injectedProviders) this.providers.set(name, provider);
+    }
+    const registry = getMetricRegistry();
+    registry.register({
+      name: 'llm.chat.duration_ms',
+      labelNames: ['provider', 'model', 'call_source', 'fallback'],
+      ttlMs: METRIC_TTL_MS,
+      maxSeries: 500,
+    });
+    registry.register({
+      name: 'llm.chat.tokens',
+      labelNames: ['provider', 'model', 'call_source'],
+      ttlMs: METRIC_TTL_MS,
+      maxSeries: 500,
+    });
+    registry.register({
+      name: 'llm.chat.error',
+      labelNames: ['provider', 'call_source'],
+      ttlMs: METRIC_TTL_MS,
+      maxSeries: 64,
+    });
   }
 
   private selectProvider(req: ChatRequest): LlmProviderInterface {
@@ -66,10 +93,12 @@ export class LlmRouter {
       const durationMs = Date.now() - startedAt;
       this.recordUsage(response, req.callSource, durationMs);
       await this.rememberResponse(enriched, response, req.traceId);
+      this.recordMetrics(response, req.callSource, durationMs, false);
       span.end('ok', this.responseAttributes(response, durationMs, false));
       return response;
     } catch (err) {
       logger.error(`Provider ${provider.name} failed: ${String(err)}`);
+      this.recordErrorMetric(provider.name, req.callSource);
       if (req.fallbackPolicy === 'none') {
         span.end('error', { 'gen_ai.provider.name': provider.name, 'awkn.fallback.used': false }, err);
         throw err;
@@ -89,11 +118,13 @@ export class LlmRouter {
           const durationMs = Date.now() - startedAt;
           this.recordUsage(response, req.callSource, durationMs);
           await this.rememberResponse(enriched, response, req.traceId);
+          this.recordMetrics(response, req.callSource, durationMs, true);
           logger.info(`Fallback to ${name} succeeded`);
           span.end('ok', this.responseAttributes(response, durationMs, true));
           return response;
         } catch (fallbackError) {
           logger.warn(`Fallback ${name} also failed: ${String(fallbackError)}`);
+          this.recordErrorMetric(name, req.callSource);
         }
       }
 
@@ -155,8 +186,29 @@ export class LlmRouter {
         responseText: response.content,
         outcome: 'SUCCESS',
       });
+      this.extractInBackground(enrichment, response.content, traceId);
     } catch (err) {
       logger.warn(`Failed to persist or finalize memory: ${String(err)}`);
+    }
+  }
+
+  private extractInBackground(enrichment: MemoryEnrichment, assistantText: string, traceId?: string): void {
+    if (process.env.AWKN_DISABLE_MEMORY_EXTRACTION === '1') return;
+    try {
+      ensureExtractionWorker(() => ({
+        chat: (request) => this.chat(request),
+        put: (input) => getMemoryService().put(input),
+      }));
+      enqueueExtraction({
+        userText: enrichment.userText,
+        assistantText,
+        projectId: enrichment.projectId,
+        sessionId: enrichment.sessionId,
+        traceId,
+      });
+      logger.info('Memory extraction enqueued');
+    } catch (err) {
+      logger.warn(`Memory extraction enqueue failed: ${String(err)}`);
     }
   }
 
@@ -171,6 +223,25 @@ export class LlmRouter {
       'awkn.fallback.used': fallbackUsed,
       'awkn.duration_ms': durationMs,
     };
+  }
+
+  private recordMetrics(response: ChatResponse, callSource: string | undefined, durationMs: number, fallback: boolean): void {
+    try {
+      const registry = getMetricRegistry();
+      const labels = { provider: response.provider, model: response.model, call_source: callSource ?? 'unknown' };
+      registry.set('llm.chat.duration_ms', { ...labels, fallback: String(fallback) }, durationMs);
+      registry.set('llm.chat.tokens', labels, response.usage.totalTokens);
+    } catch (err) {
+      logger.warn(`Failed to record metrics: ${String(err)}`);
+    }
+  }
+
+  private recordErrorMetric(provider: LlmProvider, callSource: string | undefined): void {
+    try {
+      getMetricRegistry().set('llm.chat.error', { provider, call_source: callSource ?? 'unknown' }, 1);
+    } catch (err) {
+      logger.warn(`Failed to record error metric: ${String(err)}`);
+    }
   }
 
   private recordUsage(response: ChatResponse, callSource: string | undefined, durationMs: number): void {

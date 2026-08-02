@@ -19,35 +19,17 @@ import { hookManager } from './core/hook-manager.js';
 import type { HookPoint } from './core/hook-types.js';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync } from 'node:fs';
 import type { LlmProvider } from './llm/types.js';
+import { loadRuntimeEnv } from './config/runtime-env.js';
+import { resolveEngineRoot } from './engine-root.js';
+import { startWorkflow, getWorkflowStatus, resumeWorkflow, cancelWorkflow } from './workflow/workflow-runtime.js';
+import { getRegisteredProviders } from './worker/provider-registry.js';
+import { getStageRunsByMission } from './workflow/stage-store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-/** 加载 runtime/.env 文件（不引入 dotenv，手动解析，不覆盖已有环境变量） */
-function loadEnv(): void {
-  const envPath = resolve(__dirname, '..', '.env');
-  try {
-    const content = readFileSync(envPath, 'utf-8');
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eqIdx = trimmed.indexOf('=');
-      if (eqIdx === -1) continue;
-      const key = trimmed.slice(0, eqIdx).trim();
-      const val = trimmed.slice(eqIdx + 1).trim();
-      if (!key) continue;
-      if (process.env[key] === undefined) {
-        process.env[key] = val;
-      }
-    }
-  } catch {
-    // .env 不存在或读取失败，忽略
-  }
-}
-
-loadEnv();
+loadRuntimeEnv();
 
 const command = process.argv[2];
 const subcommand = process.argv[3];
@@ -116,6 +98,27 @@ function usage(): void {
                               从最近一次 backup 恢复 DB（破坏性操作，需 --confirm）
           restore --backup <path> [--confirm]
                               从指定 backup 恢复 DB（破坏性操作，需 --confirm）
+
+  review  Review Kernel 独立审核（stream-json 补完）
+          run --repo <path> [--base <ref> --head <ref>]
+              [--output-format json|stream-json]
+              [--provider trae|codex|minimax] [--implementer <actorId>]
+              [--include <glob>]... [--exclude <glob>]... [--authors <name>]...
+              [--max-files N] [--max-lines N]
+              提交范围模式需 AWKN_REVIEW_OCR_VERSION/_SHA256 pins（引擎本地 OCR 二进制）
+
+  workflow  工作流智能体系统管理（FR-037~FR-041）
+          start --goal <missionId> --authorization <file>
+                         启动工作流（authorization 为 JSON：{ envelopeId, frozenInputHash, frozenSourceSha? }）
+          status --mission <missionId>
+                         查询工作流状态汇总
+          resume --mission <missionId>
+                         恢复已暂停/阻塞的工作流
+          cancel --mission <missionId>
+                         取消工作流（所有未完成阶段 → CANCELLED）
+          replay --mission <missionId>
+                         输出 Mission 的 StageRun 执行历史（Receipt 回放）
+          providers      列出已注册的 WorkerProvider
 
 环境变量：
   AWKN_LLM_PROVIDER       默认 LLM provider（trae|codex|minimax）
@@ -213,6 +216,12 @@ async function main(): Promise<void> {
         break;
       case 'migrate':
         await handleMigrate(subcommand);
+        break;
+      case 'review':
+        await handleReview(subcommand);
+        break;
+      case 'workflow':
+        await handleWorkflow(subcommand);
         break;
       default:
         usage();
@@ -546,13 +555,14 @@ async function handleOrchestrate(sub: string): Promise<void> {
         process.exit(1);
       }
       const { runTianhuoCicdLoop } = await import('./orchestrator/tianhuo-cicd-loop.js');
+      const engineRoot = resolveEngineRoot(__dirname);
       const result = await runTianhuoCicdLoop({
         cwd: process.cwd(),
         goalId,
         taskPrompt: task,
         maxCycles: Number(args.maxCycles ?? 10),
-        tianhuoPromptPath: args.tianhuoPrompt ?? 'agents/tianhuo/agent.prompt',
-        cicdTesterPromptPath: args.cicdPrompt ?? 'agents/cicd-tester/agent.prompt',
+        tianhuoPromptPath: args.tianhuoPrompt ?? resolve(engineRoot, 'agents', 'tianhuo', 'agent.prompt'),
+        cicdTesterPromptPath: args.cicdPrompt ?? resolve(engineRoot, 'agents', 'cicd-tester', 'agent.prompt'),
         tianhuoProvider: (args.tianhuoProvider as LlmProvider) ?? 'trae',
         cicdTesterProvider: (args.cicdProvider as LlmProvider) ?? 'codex',
         maxTurnsPerCycle: Number(args.maxTurns ?? 8),
@@ -778,6 +788,198 @@ async function handleMigrate(sub: string): Promise<void> {
       console.error('Unknown migrate subcommand:', sub);
       console.error('可用：status | list-backups | restore-latest | restore --backup <path>');
       process.exit(1);
+  }
+}
+
+const ENGINE_OCR_ROOT = resolve(__dirname, '..', '..', 'integrations', 'open-code-review');
+const DEFAULT_OCR_BINARY = resolve(
+  ENGINE_OCR_ROOT,
+  'bin',
+  process.platform === 'win32' ? 'ocr.exe' : 'ocr',
+);
+
+function splitList(value: string | undefined): string[] | undefined {
+  if (value === undefined || value === '') return undefined;
+  return value.split(',').map((item) => item.trim()).filter((item) => item.length > 0);
+}
+
+/**
+ * review run（stream-json 补完）：
+ * 直接驱动 Review Kernel（WORKTREE / COMMIT_RANGE 两种模式），
+ * 支持 --output-format json | stream-json（NDJSON 事件流，stdout 逐行输出）。
+ */
+async function handleReview(sub: string): Promise<void> {
+  const args = parseArgs(process.argv.slice(4));
+  if (sub !== 'run') {
+    console.error('用法：awkn-engine review run --repo <path> [--base <ref> --head <ref>] [--output-format json|stream-json] ...');
+    process.exit(1);
+  }
+  const repositoryRoot = resolve(args.repo ?? process.cwd());
+  const baseRef = args.base === undefined ? undefined : args.base;
+  const headRef = args.head === undefined ? undefined : args.head;
+  if ((baseRef === undefined) !== (headRef === undefined)) {
+    console.error('--base 与 --head 必须成对提供');
+    process.exit(1);
+  }
+  const format = args['output-format'] ?? 'json';
+  if (format !== 'json' && format !== 'stream-json') {
+    console.error(`不支持的 --output-format：${format}（json | stream-json）`);
+    process.exit(1);
+  }
+  const provider = (args.provider ?? process.env.AWKN_LLM_PROVIDER ?? 'trae') as LlmProvider;
+  const stream = format === 'stream-json';
+  const emit = (event: Record<string, unknown>): void => {
+    if (stream) {
+      console.log(JSON.stringify({ ts: new Date().toISOString(), ...event }));
+    }
+  };
+
+  const ocrBinary = process.env.AWKN_REVIEW_OCR_BINARY ?? DEFAULT_OCR_BINARY;
+  const ocrVersion = process.env.AWKN_REVIEW_OCR_VERSION;
+  const ocrSha256 = process.env.AWKN_REVIEW_OCR_SHA256;
+  if (baseRef !== undefined && (ocrVersion === undefined || ocrSha256 === undefined)) {
+    console.error('提交范围审核需要 AWKN_REVIEW_OCR_VERSION 与 AWKN_REVIEW_OCR_SHA256（引擎本地 OCR 二进制固定）');
+    process.exit(1);
+  }
+
+  const { runStructuredWorktreeReview } = await import('./adapter/review-kernel-runner.js');
+  const { getLlmRouter } = await import('./llm/router.js');
+  const { runAgentOsMigrations } = await import('./store/agent-os-migration-registry.js');
+  await runAgentOsMigrations(getDb());
+
+  emit({ type: 'review.started', repo: repositoryRoot, base: baseRef ?? null, head: headRef ?? null, provider });
+  try {
+    const result = await runStructuredWorktreeReview({
+      repositoryRoot,
+      mode: 'enforce',
+      router: getLlmRouter(),
+      reviewerProvider: provider,
+      implementer: {
+        schema: 'awkn-actor-ref/v1',
+        actorId: args.implementer ?? 'cli:user',
+        actorType: 'assistant',
+      },
+      db: getDb(),
+      includePatterns: splitList(args.include),
+      excludePatterns: splitList(args.exclude),
+      authors: splitList(args.authors),
+      maxFiles: args['max-files'] === undefined ? undefined : Number(args['max-files']),
+      maxLines: args['max-lines'] === undefined ? undefined : Number(args['max-lines']),
+      ...(baseRef === undefined ? {} : {
+        baseRef,
+        headRef: headRef!,
+        ocr: {
+          binaryPath: ocrBinary,
+          allowedBinaryRoot: ENGINE_OCR_ROOT,
+          expectedVersion: ocrVersion!,
+          expectedBinarySha256: ocrSha256!,
+        },
+      }),
+    });
+    emit({ type: 'review.receipt', verdict: result.receipt.payload.verdict.status, totalTokens: result.totalTokens });
+    if (!stream) {
+      console.log(JSON.stringify({
+        verdict: result.receipt.payload.verdict.status,
+        receiptId: result.receipt.receiptId,
+        executionId: result.executionId,
+        traceId: result.traceId,
+        totalTokens: result.totalTokens,
+        findings: result.receipt.payload.findings ?? [],
+      }, null, 2));
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emit({ type: 'review.failed', error: message });
+    if (!stream) console.error(JSON.stringify({ error: message }, null, 2));
+    process.exitCode = 1;
+  }
+}
+
+async function handleWorkflow(sub: string): Promise<void> {
+  const args = parseArgs(process.argv.slice(4));
+
+  switch (sub) {
+    case 'start': {
+      if (!args.goal || !args.authorization) {
+        console.error('用法: awkn-engine workflow start --goal <missionId> --authorization <file>');
+        process.exitCode = 1;
+        return;
+      }
+      const authPath = resolve(args.authorization);
+      const auth = JSON.parse(await import('node:fs').then((fs) => fs.readFileSync(authPath, 'utf-8')));
+      const result = startWorkflow({
+        missionId: args.goal,
+        authorizationEnvelopeId: auth.envelopeId,
+        frozenInputHash: auth.frozenInputHash,
+        frozenSourceSha: auth.frozenSourceSha,
+      });
+      console.log(JSON.stringify(result, null, 2));
+      break;
+    }
+    case 'status': {
+      if (!args.mission) {
+        console.error('用法: awkn-engine workflow status --mission <missionId>');
+        process.exitCode = 1;
+        return;
+      }
+      const status = getWorkflowStatus(args.mission);
+      console.log(JSON.stringify(status, null, 2));
+      break;
+    }
+    case 'resume': {
+      if (!args.mission) {
+        console.error('用法: awkn-engine workflow resume --mission <missionId>');
+        process.exitCode = 1;
+        return;
+      }
+      const result = resumeWorkflow(args.mission);
+      console.log(JSON.stringify(result, null, 2));
+      break;
+    }
+    case 'cancel': {
+      if (!args.mission) {
+        console.error('用法: awkn-engine workflow cancel --mission <missionId>');
+        process.exitCode = 1;
+        return;
+      }
+      const result = cancelWorkflow(args.mission);
+      console.log(JSON.stringify(result, null, 2));
+      break;
+    }
+    case 'replay': {
+      if (!args.mission) {
+        console.error('用法: awkn-engine workflow replay --mission <missionId>');
+        process.exitCode = 1;
+        return;
+      }
+      const runs = getStageRunsByMission(args.mission);
+      console.log(JSON.stringify({
+        missionId: args.mission,
+        totalStages: runs.length,
+        stageRuns: runs.map((r) => ({
+          stageRunId: r.stageRunId,
+          stageType: r.stageType,
+          state: r.state,
+          actorId: r.actorId ?? null,
+          attempt: r.attempt,
+          outputReceiptId: r.outputReceiptId ?? null,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+        })),
+      }, null, 2));
+      break;
+    }
+    case 'providers': {
+      const providers = getRegisteredProviders();
+      console.log(JSON.stringify({
+        count: providers.length,
+        providers: providers.map((p) => ({ providerId: p.providerId })),
+      }, null, 2));
+      break;
+    }
+    default:
+      console.error('未知子命令。可用: start, status, resume, cancel, replay, providers');
+      process.exitCode = 1;
   }
 }
 

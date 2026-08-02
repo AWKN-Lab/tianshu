@@ -255,6 +255,414 @@ const AGENT_OS_MIGRATIONS: readonly AgentOsMigration[] = [
       `);
     },
   },
+  {
+    version: 15,
+    name: 'memory-hierarchical-layers',
+    up(db) {
+      const tableExists = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_entries'").get() as { name: string } | undefined) !== undefined;
+      if (!tableExists) return;
+      const columns = (db.prepare('PRAGMA table_info(memory_entries)').all() as Array<{ name: string }>)
+        .map((row) => row.name);
+      if (!columns.includes('dir_path')) {
+        db.exec(`ALTER TABLE memory_entries ADD COLUMN dir_path TEXT NOT NULL DEFAULT ''`);
+      }
+      if (!columns.includes('level')) {
+        db.exec(`ALTER TABLE memory_entries ADD COLUMN level INTEGER NOT NULL DEFAULT 2`);
+      }
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_memory_dir_scope
+          ON memory_entries(status, scope_id, memory_type, dir_path);
+        CREATE INDEX IF NOT EXISTS idx_memory_dir_level
+          ON memory_entries(level, status);
+      `);
+    },
+  },
+  {
+    version: 16,
+    name: 'review-cache-by-fingerprint',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS review_cache (
+          id TEXT PRIMARY KEY,
+          diff_fingerprint TEXT NOT NULL,
+          rule_bundle_hash TEXT NOT NULL,
+          verdict TEXT NOT NULL,
+          receipt_json TEXT NOT NULL,
+          cached_at TEXT NOT NULL,
+          hit_count INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_review_cache_lookup
+          ON review_cache(diff_fingerprint, rule_bundle_hash);
+      `);
+    },
+  },
+  {
+    version: 17,
+    name: 'memory-extraction-log',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS memory_extraction_log (
+          input_hash TEXT PRIMARY KEY,
+          raw_user TEXT NOT NULL,
+          raw_assistant TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'raw',
+          ops_json TEXT,
+          model TEXT,
+          error TEXT,
+          created_at TEXT NOT NULL,
+          extracted_at TEXT
+        );
+      `);
+    },
+  },
+  {
+    version: 18,
+    name: 'workflow-agent-system-hierarchy',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS workflow_component (
+          id TEXT PRIMARY KEY,
+          mission_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'DRAFT',
+          acceptance_criteria TEXT NOT NULL DEFAULT '[]',
+          frozen_target_hash TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE(mission_id, name),
+          FOREIGN KEY (mission_id) REFERENCES goals(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_module (
+          id TEXT PRIMARY KEY,
+          component_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'DRAFT',
+          boundary TEXT NOT NULL,
+          acceptance_criteria TEXT NOT NULL DEFAULT '[]',
+          frozen_target_hash TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE(component_id, name),
+          FOREIGN KEY (component_id) REFERENCES workflow_component(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_work_package (
+          id TEXT PRIMARY KEY,
+          module_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'DRAFT',
+          scope TEXT NOT NULL,
+          acceptance_criteria TEXT NOT NULL DEFAULT '[]',
+          dependencies TEXT NOT NULL DEFAULT '[]',
+          assigned_actor_id TEXT,
+          engineer_receipt_id TEXT,
+          test_receipt_id TEXT,
+          review_receipt_id TEXT,
+          git_receipt_id TEXT,
+          retro_receipt_id TEXT,
+          frozen_target_hash TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE(module_id, name),
+          FOREIGN KEY (module_id) REFERENCES workflow_module(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS authorization_envelope (
+          id TEXT PRIMARY KEY,
+          mission_id TEXT NOT NULL,
+          user_signature TEXT NOT NULL,
+          scope_directories TEXT NOT NULL,
+          scope_tools TEXT NOT NULL DEFAULT '[]',
+          cost_budget_tokens INTEGER,
+          cost_budget_calls INTEGER,
+          time_limit_hours INTEGER,
+          allow_git_commit INTEGER NOT NULL DEFAULT 0,
+          allow_git_push INTEGER NOT NULL DEFAULT 0,
+          allow_deploy INTEGER NOT NULL DEFAULT 0,
+          allow_external_messages INTEGER NOT NULL DEFAULT 0,
+          allow_paid_actions INTEGER NOT NULL DEFAULT 0,
+          deploy_environments TEXT,
+          created_at TEXT NOT NULL,
+          expires_at TEXT,
+          status TEXT NOT NULL DEFAULT 'ACTIVE',
+          FOREIGN KEY (mission_id) REFERENCES goals(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS authorization_consumption (
+          id TEXT PRIMARY KEY,
+          envelope_id TEXT NOT NULL,
+          actor_id TEXT NOT NULL,
+          action_type TEXT NOT NULL,
+          action_target TEXT NOT NULL,
+          receipt_id TEXT NOT NULL,
+          consumed_at TEXT NOT NULL,
+          FOREIGN KEY (envelope_id) REFERENCES authorization_envelope(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS state_transition_log (
+          id TEXT PRIMARY KEY,
+          work_item_id TEXT NOT NULL,
+          item_type TEXT NOT NULL,
+          from_state TEXT NOT NULL,
+          to_state TEXT NOT NULL,
+          actor_id TEXT NOT NULL,
+          trigger_receipt_id TEXT NOT NULL,
+          input_hash TEXT NOT NULL,
+          idempotency_key TEXT NOT NULL UNIQUE,
+          transitioned_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_wf_component_mission ON workflow_component(mission_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_module_component ON workflow_module(component_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_wp_module ON workflow_work_package(module_id);
+        CREATE INDEX IF NOT EXISTS idx_auth_env_mission ON authorization_envelope(mission_id);
+        CREATE INDEX IF NOT EXISTS idx_auth_consumption_env ON authorization_consumption(envelope_id);
+        CREATE INDEX IF NOT EXISTS idx_state_trans_item ON state_transition_log(work_item_id);
+      `);
+    },
+  },
+  {
+    version: 19,
+    name: 'workflow-execution-control-plane',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS workflow_agent_profile (
+          profile_id TEXT NOT NULL,
+          version TEXT NOT NULL,
+          role TEXT NOT NULL,
+          specialty TEXT NOT NULL,
+          capabilities_json TEXT NOT NULL,
+          input_types_json TEXT NOT NULL,
+          output_types_json TEXT NOT NULL,
+          tool_policy_ref TEXT NOT NULL,
+          independence_group TEXT NOT NULL,
+          provider_policy TEXT NOT NULL,
+          max_concurrent_assignments INTEGER NOT NULL,
+          max_attempts INTEGER NOT NULL,
+          timeout_ms INTEGER NOT NULL,
+          memory_policy TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'DRAFT',
+          source_hash TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (profile_id, version)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_agent_instance (
+          actor_id TEXT NOT NULL,
+          profile_id TEXT NOT NULL,
+          provider_id TEXT NOT NULL,
+          model_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          worker_provider_id TEXT NOT NULL,
+          provider_run_id TEXT NOT NULL,
+          workspace_id TEXT NOT NULL,
+          permission_snapshot_hash TEXT NOT NULL,
+          authorization_envelope_id TEXT NOT NULL,
+          lease_id TEXT NOT NULL,
+          lease_expires_at TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (actor_id, session_id),
+          FOREIGN KEY (authorization_envelope_id) REFERENCES authorization_envelope(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_stage_run (
+          stage_run_id TEXT PRIMARY KEY,
+          mission_id TEXT NOT NULL,
+          work_item_type TEXT NOT NULL,
+          work_item_id TEXT NOT NULL,
+          stage_type TEXT NOT NULL,
+          state TEXT NOT NULL DEFAULT 'READY',
+          required_profile_id TEXT NOT NULL,
+          actor_id TEXT,
+          frozen_input_hash TEXT NOT NULL,
+          frozen_source_sha TEXT,
+          frozen_artifact_digest TEXT,
+          authorization_envelope_id TEXT NOT NULL,
+          input_receipt_ids_json TEXT NOT NULL DEFAULT '[]',
+          output_receipt_id TEXT,
+          attempt INTEGER NOT NULL DEFAULT 0,
+          idempotency_key TEXT NOT NULL UNIQUE,
+          lease_expires_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (authorization_envelope_id) REFERENCES authorization_envelope(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_stage_dependency (
+          mission_id TEXT NOT NULL,
+          work_item_id TEXT NOT NULL,
+          from_stage TEXT NOT NULL,
+          to_stage TEXT NOT NULL,
+          condition TEXT NOT NULL DEFAULT 'on_pass',
+          PRIMARY KEY (work_item_id, from_stage, to_stage)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_worker_event (
+          id TEXT PRIMARY KEY,
+          provider_id TEXT NOT NULL,
+          provider_event_id TEXT NOT NULL,
+          provider_run_id TEXT NOT NULL,
+          event_type TEXT NOT NULL,
+          event_payload_json TEXT NOT NULL,
+          received_at TEXT NOT NULL,
+          UNIQUE(provider_id, provider_event_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_dead_letter (
+          id TEXT PRIMARY KEY,
+          stage_run_id TEXT NOT NULL,
+          mission_id TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          error_text TEXT,
+          attempts INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (stage_run_id) REFERENCES workflow_stage_run(stage_run_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_wf_profile_status ON workflow_agent_profile(status);
+        CREATE INDEX IF NOT EXISTS idx_wf_instance_actor ON workflow_agent_instance(actor_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_instance_lease ON workflow_agent_instance(lease_expires_at);
+        CREATE INDEX IF NOT EXISTS idx_wf_stage_mission ON workflow_stage_run(mission_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_stage_work_item ON workflow_stage_run(work_item_type, work_item_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_stage_state ON workflow_stage_run(state);
+        CREATE INDEX IF NOT EXISTS idx_wf_stage_actor ON workflow_stage_run(actor_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_stage_dep_item ON workflow_stage_dependency(work_item_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_worker_event_run ON workflow_worker_event(provider_run_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_dlq_mission ON workflow_dead_letter(mission_id);
+      `);
+    },
+  },
+  {
+    version: 20,
+    name: 'workflow-release-deploy-recovery-plane',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS workflow_release_bundle (
+          release_bundle_id TEXT PRIMARY KEY,
+          mission_id TEXT NOT NULL,
+          work_item_id TEXT NOT NULL,
+          frozen_source_sha TEXT NOT NULL,
+          artifact_digest TEXT NOT NULL,
+          sbom_digest TEXT NOT NULL,
+          build_receipt_id TEXT,
+          test_receipt_id TEXT,
+          review_receipt_id TEXT,
+          security_receipt_id TEXT,
+          issued_actor_id TEXT NOT NULL,
+          authorization_envelope_id TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'DRAFT',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_release_artifact (
+          artifact_id TEXT PRIMARY KEY,
+          release_bundle_id TEXT NOT NULL,
+          artifact_type TEXT NOT NULL,
+          artifact_path TEXT NOT NULL,
+          artifact_digest TEXT NOT NULL,
+          artifact_size_bytes INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (release_bundle_id) REFERENCES workflow_release_bundle(release_bundle_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_deployment_run (
+          deployment_run_id TEXT PRIMARY KEY,
+          release_bundle_id TEXT NOT NULL,
+          target_environment TEXT NOT NULL,
+          authorization_envelope_id TEXT NOT NULL,
+          gray_stage TEXT NOT NULL DEFAULT 'PENDING',
+          health_status TEXT NOT NULL DEFAULT 'UNKNOWN',
+          final_verdict TEXT,
+          rollback_target_id TEXT,
+          started_at TEXT NOT NULL,
+          completed_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (release_bundle_id) REFERENCES workflow_release_bundle(release_bundle_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_deployment_observation (
+          observation_id TEXT PRIMARY KEY,
+          deployment_run_id TEXT NOT NULL,
+          check_name TEXT NOT NULL,
+          check_result TEXT NOT NULL,
+          detail_json TEXT NOT NULL DEFAULT '{}',
+          observed_at TEXT NOT NULL,
+          FOREIGN KEY (deployment_run_id) REFERENCES workflow_deployment_run(deployment_run_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_rollback_target (
+          rollback_target_id TEXT PRIMARY KEY,
+          deployment_run_id TEXT NOT NULL,
+          previous_release_bundle_id TEXT,
+          previous_source_sha TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (deployment_run_id) REFERENCES workflow_deployment_run(deployment_run_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_recovery_attempt (
+          recovery_attempt_id TEXT PRIMARY KEY,
+          stage_run_id TEXT,
+          deployment_run_id TEXT,
+          failure_class TEXT NOT NULL,
+          recovery_action TEXT NOT NULL,
+          attempt INTEGER NOT NULL DEFAULT 0,
+          max_attempts INTEGER NOT NULL DEFAULT 3,
+          status TEXT NOT NULL DEFAULT 'PENDING',
+          result_detail_json TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_wf_release_mission ON workflow_release_bundle(mission_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_release_status ON workflow_release_bundle(status);
+        CREATE INDEX IF NOT EXISTS idx_wf_release_art_bundle ON workflow_release_artifact(release_bundle_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_deploy_bundle ON workflow_deployment_run(release_bundle_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_deploy_status ON workflow_deployment_run(health_status);
+        CREATE INDEX IF NOT EXISTS idx_wf_obs_deploy ON workflow_deployment_observation(deployment_run_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_rollback_deploy ON workflow_rollback_target(deployment_run_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_recovery_stage ON workflow_recovery_attempt(stage_run_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_recovery_deploy ON workflow_recovery_attempt(deployment_run_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_recovery_status ON workflow_recovery_attempt(status);
+      `);
+    },
+  },
+  {
+    version: 21,
+    name: 'workflow-retrospective-candidate-store',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS workflow_retrospective_candidate (
+          candidate_id TEXT PRIMARY KEY,
+          mission_id TEXT NOT NULL,
+          layer TEXT NOT NULL,
+          work_item_id TEXT NOT NULL,
+          work_item_type TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          lessons_json TEXT NOT NULL DEFAULT '[]',
+          evidence_receipt_ids_json TEXT NOT NULL DEFAULT '[]',
+          proposed_action TEXT NOT NULL,
+          severity TEXT NOT NULL DEFAULT 'INFO',
+          generated_by_actor_id TEXT NOT NULL,
+          generated_at TEXT NOT NULL,
+          evolution_status TEXT NOT NULL DEFAULT 'DRAFT',
+          previous_active_candidate_id TEXT,
+          linked_evolution_candidate_id TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_wf_retro_mission ON workflow_retrospective_candidate(mission_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_retro_layer ON workflow_retrospective_candidate(layer);
+        CREATE INDEX IF NOT EXISTS idx_wf_retro_status ON workflow_retrospective_candidate(evolution_status);
+      `);
+    },
+  },
 ] as const;
 
 /**

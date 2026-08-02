@@ -212,6 +212,8 @@ export const ReviewPlanSchema = z.object({
   files: z.array(ReviewFileSchema),
   ruleGroups: z.array(ReviewRuleGroupSchema),
   units: z.array(ReviewUnitSchema),
+  /** 风险预算分配：unitId -> 分配的 token 预算（可选，不参与 planHash） */
+  budgetAllocation: z.record(z.string(), z.number().int().nonnegative()).optional(),
   planHash: Sha256Schema,
   createdAt: UtcTimestampSchema,
 }).strict().superRefine((value, context) => {

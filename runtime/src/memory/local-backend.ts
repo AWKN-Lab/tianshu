@@ -24,7 +24,7 @@ export class LocalMemoryBackend implements MemoryBackend {
   }
 
   async compileContext(input: CompileMemoryContextInput): Promise<CompiledMemoryContext> {
-    const prompt = getMemoryService().buildContext({
+    const prompt = await getMemoryService().buildContext({
       query: input.query,
       projectId: input.projectId,
       sessionId: input.sessionId ?? input.projectId,
@@ -60,6 +60,6 @@ export class LocalMemoryBackend implements MemoryBackend {
 
   async rememberInteraction(input: RememberInteractionInput): Promise<void> {
     const decision = guardMemoryPayload(input);
-    getMemoryService().recordInteraction(decision.value);
+    await getMemoryService().recordInteraction(decision.value);
   }
 }

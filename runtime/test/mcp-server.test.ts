@@ -1,12 +1,12 @@
 /**
- * MCP server 冒烟测试：spawn server → initialize → tools/list → tools/call(awkn_skill_list)
+ * MCP server 冒烟测试：spawn server → initialize → tools/list → tools/call
  */
 import { spawn } from 'node:child_process';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const serverBin = resolve(__dirname, '..', 'bin', 'awkn-mcp-server.js');
+const serverSource = resolve(__dirname, '..', 'src', 'mcp', 'server.ts');
 
 let msgId = 0;
 function makeRequest(method: string, params?: unknown): string {
@@ -18,12 +18,13 @@ function makeNotification(method: string, params?: unknown): string {
 }
 
 async function main(): Promise<void> {
-  const child = spawn('node', [serverBin], {
+  const child = spawn(process.execPath, ['--import', 'tsx', serverSource], {
     stdio: ['pipe', 'pipe', 'inherit'],
     cwd: resolve(__dirname, '..'),
     env: {
       ...process.env,
       AWKN_DISABLE_EVOLVE: '1', // 测试时关闭 evolve hook
+      AWKN_DB_PATH: ':memory:', // 隔离正式运行库，避免 MCP 进程间锁竞争
     },
   });
 
@@ -63,7 +64,7 @@ async function main(): Promise<void> {
           pendingResolvers.delete(id);
           reject(new Error(`timeout waiting for ${method} (id=${id})`));
         }
-      }, 10000);
+      }, 120000);
     });
   }
 
@@ -103,12 +104,71 @@ async function main(): Promise<void> {
     const text = callResult?.content?.[0]?.text ?? '';
     console.log(`awkn_skill_list result: ${text.slice(0, 200)}`);
 
+    // 5. 天火工作流：start → advance × 2 → completed（转发 package TianhuoRouter）
+    console.log('\n--- calling awkn_tianhuo_start ---');
+    const startResp = await sendAndWait('tools/call', {
+      name: 'awkn_tianhuo_start',
+      arguments: {
+        task: '小改：修正 README 排版',
+        projectPath: resolve(__dirname, '..', '..'),
+      },
+    });
+    const startText = (startResp as { result?: { content?: { text: string }[] } })
+      .result?.content?.[0]?.text ?? '';
+    const startResult = JSON.parse(startText) as {
+      workflowId?: string;
+      capabilityId?: string;
+      route?: string;
+    };
+    if (!startResult.workflowId || startResult.capabilityId !== 'execution-check') {
+      throw new Error(`expected execution-check workflow, got ${startText}`);
+    }
+
+    console.log('\n--- calling awkn_tianhuo_advance: execution-check → engineer ---');
+    const advance1Resp = await sendAndWait('tools/call', {
+      name: 'awkn_tianhuo_advance',
+      arguments: {
+        workflowId: startResult.workflowId,
+        status: 'pass',
+        evidence: ['npm run typecheck: 0 errors'],
+      },
+    });
+    const advance1Text = (advance1Resp as { result?: { content?: { text: string }[] } })
+      .result?.content?.[0]?.text ?? '';
+    const advance1Result = JSON.parse(advance1Text) as { capabilityId?: string };
+    if (advance1Result.capabilityId !== 'engineer') {
+      throw new Error(`expected engineer after first advance, got ${advance1Text}`);
+    }
+
+    console.log('\n--- calling awkn_tianhuo_advance: engineer → completed ---');
+    const advance2Resp = await sendAndWait('tools/call', {
+      name: 'awkn_tianhuo_advance',
+      arguments: {
+        workflowId: startResult.workflowId,
+        status: 'pass',
+        evidence: ['tests 120/120 pass'],
+      },
+    });
+    const advance2Text = (advance2Resp as { result?: { content?: { text: string }[] } })
+      .result?.content?.[0]?.text ?? '';
+    const advance2Result = JSON.parse(advance2Text) as { status?: string };
+    if (advance2Result.status !== 'completed') {
+      throw new Error(`expected completed after second advance, got ${advance2Text}`);
+    }
+
     // 验证
-    const expectedToolCount = 31;
+    const expectedToolCount = 34;
     if (tools.length < expectedToolCount) {
       throw new Error(`expected >= ${expectedToolCount} tools, got ${tools.length}`);
     }
-    console.log(`\n✅ PASS: ${tools.length} tools registered, awkn_skill_list responded`);
+    // 验证天火三件套已注册
+    const toolNames = tools.map((t) => t.name);
+    for (const required of ['awkn_tianhuo_start', 'awkn_tianhuo_advance', 'awkn_tianhuo_status']) {
+      if (!toolNames.includes(required)) {
+        throw new Error(`missing required tianhuo tool: ${required}`);
+      }
+    }
+    console.log(`\n✅ PASS: ${tools.length} tools registered, tianhuo trio present, workflow completes via package TianhuoRouter`);
   } finally {
     child.kill('SIGTERM');
     setTimeout(() => process.exit(0), 500);

@@ -46,6 +46,40 @@ function riskForFile(file: ReviewFile): ReviewRisk {
   return 'LOW';
 }
 
+/** 风险权重：预算按 unit 风险加权分配（P1-1 风险预算分配） */
+export const RISK_WEIGHT: Readonly<Record<ReviewRisk, number>> = {
+  CRITICAL: 4,
+  HIGH: 2,
+  MEDIUM: 1,
+  LOW: 0.5,
+};
+
+/**
+ * 按 unit 风险分配总 token 预算。
+ * 每个 unit 获得 floor(totalTokens * w / Σw)；总权重为 0 时平均分配。
+ * 返回 unitId -> tokens 的映射（纯函数，确定性）。
+ */
+export function allocateRiskBudget(
+  units: readonly Pick<ReviewUnit, 'unitId' | 'risk'>[],
+  totalTokens: number,
+): Record<string, number> {
+  const budget: Record<string, number> = {};
+  if (units.length === 0 || totalTokens <= 0) return budget;
+  const totalWeight = units.reduce((sum, unit) => sum + RISK_WEIGHT[unit.risk], 0);
+  let allocated = 0;
+  for (const unit of units) {
+    const share = totalWeight > 0
+      ? Math.floor((totalTokens * RISK_WEIGHT[unit.risk]) / totalWeight)
+      : Math.floor(totalTokens / units.length);
+    budget[unit.unitId] = share;
+    allocated += share;
+  }
+  if (allocated < totalTokens) {
+    budget[units[0]!.unitId] = (budget[units[0]!.unitId] ?? 0) + (totalTokens - allocated);
+  }
+  return budget;
+}
+
 function unit(
   targetFingerprint: string,
   type: ReviewUnitType,
@@ -175,7 +209,12 @@ export function createReviewTarget(
   });
 }
 
-export function buildReviewPlan(target: ReviewTarget, scope: ReviewScopeSpec, createdAt: string): ReviewPlan {
+export function buildReviewPlan(
+  target: ReviewTarget,
+  scope: ReviewScopeSpec,
+  createdAt: string,
+  options?: { readonly budgetTokens?: number },
+): ReviewPlan {
   if (
     target.repositoryRoot !== scope.repositoryRoot
     || target.baseRef !== scope.baseRef
@@ -242,11 +281,15 @@ export function buildReviewPlan(target: ReviewTarget, scope: ReviewScopeSpec, cr
     units: deduplicatedUnits,
   };
   const planHash = computeReviewPlanHash(base);
-  return ReviewPlanSchema.parse({
+  const parsed = ReviewPlanSchema.parse({
     schema: REVIEW_PLAN_SCHEMA,
     planId: deterministicReviewId('rplan', planHash),
     ...base,
+    ...(options?.budgetTokens !== undefined
+      ? { budgetAllocation: allocateRiskBudget(deduplicatedUnits, options.budgetTokens) }
+      : {}),
     planHash,
     createdAt,
   });
+  return parsed;
 }

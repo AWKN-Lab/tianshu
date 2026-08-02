@@ -36,7 +36,7 @@ export type CorrectionSource =
   | 'manual';
 
 export type CorrectionSeverity = 'info' | 'warn' | 'error' | 'fatal';
-export type CorrectionStatus = 'open' | 'resolved' | 'ignored';
+export type CorrectionStatus = 'open' | 'resolved' | 'verified' | 'ignored';
 
 export interface RecordCorrectionInput {
   goalId?: string;
@@ -245,6 +245,65 @@ export class CorrectionsLedger {
        WHERE fingerprint = ? AND status = 'open'`,
       [resolution, experienceId ?? null, now, fingerprint],
     );
+  }
+
+  /** 按指纹标记整改已验证（新 review 通过同指纹 → 闭环）；open/resolved 一并升级 */
+  verifyByFingerprint(fingerprint: string, verificationRef: string): number {
+    const now = new Date().toISOString();
+    return queryRun(
+      `UPDATE corrections_ledger
+       SET status = 'verified', resolution = ?, updated_at = ?
+       WHERE fingerprint = ? AND status IN ('open', 'resolved')`,
+      [`verified via ${verificationRef}`, now, fingerprint],
+    );
+  }
+
+  /** 指纹整改进度视图（P1-6 工程师消费）：open/resolved/verified/ignored 统计 */
+  fingerprintHealth(fingerprint: string): {
+    fingerprint: string;
+    total: number;
+    open: number;
+    resolved: number;
+    verified: number;
+    ignored: number;
+    latestError: string | null;
+    lastActivity: string | null;
+  } {
+    const row = queryOne<{
+      fingerprint: string;
+      total: number;
+      open: number;
+      resolved: number;
+      verified: number;
+      ignored: number;
+      latestError: string | null;
+      lastActivity: string | null;
+    }>(
+      `SELECT
+         fingerprint,
+         COUNT(*) AS total,
+         COALESCE(SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END), 0) AS open,
+         COALESCE(SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END), 0) AS resolved,
+         COALESCE(SUM(CASE WHEN status = 'verified' THEN 1 ELSE 0 END), 0) AS verified,
+         COALESCE(SUM(CASE WHEN status = 'ignored' THEN 1 ELSE 0 END), 0) AS ignored,
+         (SELECT error_text FROM corrections_ledger c2
+          WHERE c2.fingerprint = corrections_ledger.fingerprint
+          ORDER BY ts DESC LIMIT 1) AS latestError,
+         MAX(ts) AS lastActivity
+       FROM corrections_ledger
+       WHERE fingerprint = ?`,
+      [fingerprint],
+    );
+    return row ?? {
+      fingerprint,
+      total: 0,
+      open: 0,
+      resolved: 0,
+      verified: 0,
+      ignored: 0,
+      latestError: null,
+      lastActivity: null,
+    };
   }
 
   /** 统计：按 source 分组 */

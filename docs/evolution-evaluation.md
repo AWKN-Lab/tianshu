@@ -1,5 +1,7 @@
 # Evolution Evaluation and Promotion
 
+本文件与 `experience-evolution-loop.md` 共同定义经验候选的验证与激活；Runtime 状态和激活历史为生命周期事实源。
+
 经验候选采用以下生命周期：
 
 ```text

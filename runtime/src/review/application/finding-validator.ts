@@ -14,6 +14,133 @@ import type { ReviewArtifactBundle } from '../ports/outbound/review-workspace-po
 export interface FindingValidationResult {
   readonly findings: readonly ReviewFinding[];
   readonly errors: readonly string[];
+  /** 因低置信度被抑制的 Finding 数量 */
+  readonly suppressed: number;
+  /** 因邻近合并而折叠的 Finding 数量 */
+  readonly merged: number;
+}
+
+/** Finding 规范化策略（P0-2：去噪）。 */
+export interface FindingNormalizationOptions {
+  /** 邻近合并的最大行距（含），默认 20 行 */
+  readonly mergeDistance?: number;
+  /** 低置信度抑制阈值；HIGH/CRITICAL 始终保留（已验证），默认 0.35 */
+  readonly confidenceThreshold?: number;
+}
+
+const DEFAULT_MERGE_DISTANCE = 20;
+const DEFAULT_CONFIDENCE_THRESHOLD = 0.35;
+const SEVERITY_RANK: Record<ReviewFinding['severity'], number> = {
+  CRITICAL: 4,
+  HIGH: 3,
+  MEDIUM: 2,
+  LOW: 1,
+  INFO: 0,
+};
+
+function mergeFindings(primary: ReviewFinding, adjacent: readonly ReviewFinding[]): ReviewFinding {
+  const merged = adjacent.reduce<{ startLine: number; endLine: number; severity: ReviewFinding['severity'] }>(
+    (acc, finding) => ({
+      startLine: Math.min(acc.startLine, finding.startLine),
+      endLine: Math.max(acc.endLine, finding.endLine),
+      severity: SEVERITY_RANK[finding.severity] > SEVERITY_RANK[acc.severity] ? finding.severity : acc.severity,
+    }),
+    { startLine: primary.startLine, endLine: primary.endLine, severity: primary.severity },
+  );
+  const evidenceRefs = [...new Set([...primary.evidenceRefs, ...adjacent.flatMap((finding) => finding.evidenceRefs)])].sort();
+  const ruleRefs = sortedUniqueBy(primary.ruleRefs.concat(adjacent.flatMap((finding) => finding.ruleRefs)), (ref) => ref.objectId);
+  const specRefs = sortedUniqueBy(primary.specRefs.concat(adjacent.flatMap((finding) => finding.specRefs)), (ref) => ref.objectId);
+  const verifiedBy = sortedUniqueBy(primary.verifiedBy.concat(adjacent.flatMap((finding) => finding.verifiedBy)), (actor) => actor.actorId);
+  const fingerprint = stableHash(REVIEW_FINDING_SCHEMA, {
+    unitId: primary.unitId,
+    axis: primary.axis,
+    category: primary.category,
+    severity: merged.severity,
+    path: primary.path,
+    startLine: merged.startLine,
+    endLine: merged.endLine,
+    message: primary.message,
+    impact: primary.impact,
+    ruleRefs,
+    specRefs,
+    evidenceRefs,
+  });
+  return {
+    ...primary,
+    findingId: deterministicReviewId('rfnd', fingerprint),
+    fingerprint,
+    startLine: merged.startLine,
+    endLine: merged.endLine,
+    severity: merged.severity,
+    confidence: Math.max(primary.confidence, ...adjacent.map((finding) => finding.confidence)),
+    ruleRefs,
+    specRefs,
+    evidenceRefs,
+    verifiedBy,
+    rationaleSummary: `${primary.rationaleSummary} (merged with ${adjacent.length} adjacent finding${adjacent.length > 1 ? 's' : ''})`,
+  };
+}
+
+function sortedUniqueBy<T>(values: readonly T[], keyOf: (value: T) => string): T[] {
+  const seen = new Set<string>();
+  const unique: T[] = [];
+  for (const value of values) {
+    const key = keyOf(value);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(value);
+  }
+  return unique.sort((left, right) => (keyOf(left) < keyOf(right) ? -1 : keyOf(left) > keyOf(right) ? 1 : 0));
+}
+
+/**
+ * 对已验证的 Findings 做噪声抑制（P0-2）：
+ * 1. 指纹完全相同的重复项（validator 已按 fingerprint 去重）；
+ * 2. 同 unit、同文件、同轴、同类别、行距在 mergeDistance 内的邻近问题合并为一条；
+ * 3. confidence 低于阈值且非 HIGH/CRITICAL 的发现被抑制。
+ * 返回抑制/合并计数，便于审计去噪影响。
+ */
+export function normalizeFindings(
+  findings: readonly ReviewFinding[],
+  options: FindingNormalizationOptions = {},
+): { readonly findings: readonly ReviewFinding[]; readonly suppressed: number; readonly merged: number } {
+  const mergeDistance = options.mergeDistance ?? DEFAULT_MERGE_DISTANCE;
+  const confidenceThreshold = options.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD;
+  const ordered = [...findings].sort((left, right) => {
+    const leftKeys = [left.unitId, left.path, left.axis, left.category, String(left.startLine).padStart(10, '0')];
+    const rightKeys = [right.unitId, right.path, right.axis, right.category, String(right.startLine).padStart(10, '0')];
+    for (let index = 0; index < leftKeys.length; index++) {
+      if (leftKeys[index]! < rightKeys[index]!) return -1;
+      if (leftKeys[index]! > rightKeys[index]!) return 1;
+    }
+    return 0;
+  });
+  let suppressed = 0;
+  let merged = 0;
+  const output: ReviewFinding[] = [];
+
+  for (const finding of ordered) {
+    if (SEVERITY_RANK[finding.severity] < 3 && finding.confidence < confidenceThreshold) {
+      suppressed++;
+      continue;
+    }
+    const last = output.at(-1);
+    if (last !== undefined
+      && last.unitId === finding.unitId
+      && last.path === finding.path
+      && last.axis === finding.axis
+      && last.category === finding.category
+      && finding.startLine - last.endLine <= mergeDistance
+      && finding.endLine - last.startLine <= 10_000) {
+      const mergedFinding = mergeFindings(last, [finding]);
+      output[output.length - 1] = mergedFinding;
+      merged++;
+      continue;
+    }
+    output.push(finding);
+  }
+
+  return { findings: output, suppressed, merged };
 }
 
 function computeFindingFingerprint(unit: ReviewUnit, draft: ReviewFindingDraft): string {
@@ -75,6 +202,7 @@ export function validateFindingDrafts(
   drafts: readonly ReviewFindingDraft[],
   artifacts: ReviewArtifactBundle,
   allowedEvidenceRefs: ReadonlySet<string>,
+  options: FindingNormalizationOptions = {},
 ): FindingValidationResult {
   const reviewablePaths = new Set(plan.files.filter((file) => file.willReview).map((file) => file.path));
   const errors: string[] = [];
@@ -151,5 +279,11 @@ export function validateFindingDrafts(
     findings.set(fingerprint, parsed.data);
   }
 
-  return { findings: [...findings.values()], errors };
+  const normalized = normalizeFindings([...findings.values()], options);
+  return {
+    findings: normalized.findings,
+    errors,
+    suppressed: normalized.suppressed,
+    merged: normalized.merged,
+  };
 }

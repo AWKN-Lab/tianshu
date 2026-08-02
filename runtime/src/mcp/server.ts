@@ -14,8 +14,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { readFileSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { loadRuntimeEnv } from '../config/runtime-env.js';
 import type { LlmProvider } from '../llm/types.js';
 import { getDb, closeDb } from '../store/db.js';
 import { getGoalManager } from '../goal/goal-manager.js';
@@ -25,38 +25,21 @@ import { builtinTools } from '../tools/builtin/index.js';
 import { AgentLoop } from '../core/agent-loop.js';
 import { hookManager } from '../core/hook-manager.js';
 import type { HookPoint } from '../core/hook-types.js';
+import { startWorkflow, getWorkflowStatus, resumeWorkflow, cancelWorkflow } from '../workflow/workflow-runtime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-/** 加载 runtime/.env（与 cli.ts 一致，不覆盖已有环境变量） */
-function loadEnv(): void {
-  const envPath = resolve(__dirname, '..', '..', '.env');
-  try {
-    const content = readFileSync(envPath, 'utf-8');
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eqIdx = trimmed.indexOf('=');
-      if (eqIdx === -1) continue;
-      const key = trimmed.slice(0, eqIdx).trim();
-      const val = trimmed.slice(eqIdx + 1).trim();
-      if (key && process.env[key] === undefined) {
-        process.env[key] = val;
-      }
-    }
-  } catch {
-    // .env 不存在，忽略
-  }
-}
-
 /** 引擎初始化（与 cli.ts main() 一致） */
 function initEngine(): void {
-  loadEnv();
+  loadRuntimeEnv();
   getDb();
   const skillsRoot =
     process.env.AWKN_SKILLS_ROOT ?? resolve(__dirname, '..', '..', '..', 'skills');
-  getSkillsManager(skillsRoot).loadAll();
+  const sm = getSkillsManager(skillsRoot);
+  sm.loadAll();
+  // 加载 capabilities/project/manifest.yaml(hash 校验失败会抛错)
+  sm.loadCapabilities();
   for (const tool of builtinTools) {
     toolRegistry.register(tool);
   }
@@ -373,6 +356,110 @@ server.registerTool(
       const body = sm.getSkillBody(args.name);
       if (!meta) return toError(new Error(`Skill "${args.name}" not found`));
       return { content: [toText({ meta, body })] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+// ============================================================
+// Tianhuo 模块（3 tools）— 转发到 packages/awkn-engine-mcp 唯一路由实现
+//
+// 路由/推进的唯一实现源：packages/awkn-engine-mcp/runtime/src/capabilities/router.ts
+// （TianhuoRouter：路线表 + SQLite 持久化 + 跨进程恢复 + 确定性 Gate + Review Receipt 门禁）。
+// 根目录 runtime 不再维护任务分类与推进链路逻辑，以下三工具按 canonical 契约
+// 动态复用该实现；若 packages 目录缺失，工具返回明确错误并提示使用 awkn-mcp-admin-server.js。
+// ============================================================
+
+const PACKAGE_CAPABILITIES_DIR = resolve(
+  __dirname,
+  '..', '..', '..',
+  'packages', 'awkn-engine-mcp', 'runtime', 'src', 'capabilities',
+);
+
+let tianhuoRouter: unknown = null;
+
+/** 懒加载 package 的 TianhuoRouter（含 CapabilityManager / AgentLoopPolicyManager） */
+async function getTianhuoRouter(): Promise<{ start: any; advance: any; status: any }> {
+  if (tianhuoRouter) return tianhuoRouter as { start: any; advance: any; status: any };
+  const { CapabilityManager } = await import(pathToFileURL(resolve(PACKAGE_CAPABILITIES_DIR, 'manager.ts')).href);
+  const { AgentLoopPolicyManager } = await import(pathToFileURL(resolve(PACKAGE_CAPABILITIES_DIR, 'agent-loop-policy.ts')).href);
+  const { TianhuoRouter } = await import(pathToFileURL(resolve(PACKAGE_CAPABILITIES_DIR, 'router.ts')).href);
+  const engineRoot = process.env.AWKN_ENGINE_ROOT ?? resolve(__dirname, '..', '..', '..');
+  const capabilitiesRoot =
+    process.env.AWKN_CAPABILITIES_ROOT ?? resolve(engineRoot, 'capabilities');
+  const capabilities = new CapabilityManager(capabilitiesRoot);
+  capabilities.loadAll();
+  const policies = new AgentLoopPolicyManager(capabilitiesRoot, capabilities);
+  tianhuoRouter = new TianhuoRouter(capabilities, policies);
+  return tianhuoRouter as { start: any; advance: any; status: any };
+}
+
+server.registerTool(
+  'awkn_tianhuo_start',
+  {
+    description:
+      '启动天火项目工作流（转发 packages/awkn-engine-mcp TianhuoRouter）；返回 workflowId、首个能力卡、固定内容哈希与 AgentLoop 策略',
+    inputSchema: {
+      task: z.string().min(1).describe('用户原始任务，保留显式自主循环措辞'),
+      projectPath: z.string().optional().describe('项目绝对路径，缺省为引擎根目录'),
+      requestedCapability: z.string().optional().describe('用户显式指定的能力，如 engineer / @工程师'),
+      mode: z.enum(['standard', 'preflight', 'production', 'autonomous']).optional(),
+    },
+  },
+  async (args: any) => {
+    try {
+      const router = await getTianhuoRouter();
+      const engineRoot = process.env.AWKN_ENGINE_ROOT ?? resolve(__dirname, '..', '..', '..');
+      const result = router.start({
+        task: args.task,
+        projectPath: args.projectPath ?? engineRoot,
+        requestedCapability: args.requestedCapability?.replace(/^@/, ''),
+        mode: args.mode,
+      });
+      return { content: [toText(result)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_tianhuo_advance',
+  {
+    description:
+      '提交当前阶段的新鲜证据并推进（转发 packages/awkn-engine-mcp TianhuoRouter）；门禁不足时保持或暂停当前工作流',
+    inputSchema: {
+      workflowId: z.string().uuid().describe('awkn_tianhuo_start 返回的 workflowId'),
+      status: z.string().describe('pass/success/completed 或 failed/blocked'),
+      evidence: z.array(z.string()).min(1).describe('命令、测试、审核或哈希等新鲜证据'),
+      artifacts: z.array(z.string()).optional(),
+      gateResults: z.record(z.string()).optional(),
+      reviewReceipt: z.record(z.unknown()).optional().describe('audit 阶段必填的完整 awkn-review-receipt/v1'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const router = await getTianhuoRouter();
+      const result = router.advance(args);
+      return { content: [toText(result)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_tianhuo_status',
+  {
+    description:
+      '查询或在引擎重启后恢复天火工作流（转发 packages/awkn-engine-mcp TianhuoRouter）；能力内容哈希变化时安全暂停',
+    inputSchema: { workflowId: z.string().uuid().describe('awkn_tianhuo_start 返回的 workflowId') },
+  },
+  async (args: any) => {
+    try {
+      const router = await getTianhuoRouter();
+      return { content: [toText(router.status(args.workflowId))] };
     } catch (e) {
       return toError(e);
     }
@@ -773,6 +860,226 @@ server.registerTool(
     try {
       const { completePendingDrafts } = await import('../evolve/experience-writer.js');
       const result = await completePendingDrafts(args.cwd ?? process.cwd());
+      return { content: [toText(result)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+// ============================================================
+// Agent 模块（2 tools）— 加载智能体人格与经验
+// ============================================================
+
+/** agents/ 目录相对于 runtime/src/mcp/ 的位置 */
+const AGENTS_ROOT = resolve(__dirname, '..', '..', '..', 'agents');
+
+/** 智能体结构化层定义 */
+const AGENT_LAYERS: Record<string, { dir?: string; files: string[] }> = {
+  prompt: { files: ['agent.prompt'] },
+  soul: { dir: '01-身份与行为', files: ['SOUL.md', 'IDENTITY.md', 'BOUNDARY.md', 'USER.md'] },
+  sop: { dir: '02-流程与规范', files: ['SOP.md', 'AGENTS.md'] },
+  capability: { dir: '03-能力与工具', files: ['CAPABILITY.md', 'CAPABILITY-TREE.md', 'TOOLS.md', 'ENV.md', 'VFM.md'] },
+  memory: { dir: '04-记忆与知识', files: ['MEMORY.md', 'KNOWLEDGE.md', 'ADL.md', 'DECISION.md'] },
+};
+
+server.registerTool(
+  'awkn_agent_load',
+  {
+    description:
+      '加载智能体完整配置（人格、SOP、能力、经验）。' +
+      '可用智能体：tianhuo（天火，全栈编排）、cicd-tester（CICD 审查）。' +
+      'layers 可选：prompt,soul,sop,capability,memory,experience（默认 prompt+soul+sop）。',
+    inputSchema: {
+      agent: z.string().describe('智能体名（tianhuo / cicd-tester）'),
+      layers: z.string().optional().describe('逗号分隔的层名（prompt,soul,sop,capability,memory,experience），默认 prompt,soul,sop'),
+      experienceCategory: z.string().optional().describe('经验分类过滤（决策框架/执行协议/协作网络/踩坑教训/最佳实践/能力进化），不传则返回索引'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const { readFileSync, existsSync, readdirSync } = await import('node:fs');
+      const agentDir = resolve(AGENTS_ROOT, args.agent);
+      if (!existsSync(agentDir)) {
+        const available = readdirSync(AGENTS_ROOT).filter((d) => {
+          const p = resolve(AGENTS_ROOT, d);
+          return existsSync(resolve(p, 'agent.prompt'));
+        });
+        return toError(new Error(`Agent "${args.agent}" not found. Available: ${available.join(', ')}`));
+      }
+
+      const requestedLayers = (args.layers ?? 'prompt,soul,sop').split(',').map((s: string) => s.trim());
+      const result: Record<string, unknown> = { agent: args.agent, layers: {} as Record<string, unknown> };
+      const layers = result.layers as Record<string, unknown>;
+
+      for (const layerName of requestedLayers) {
+        if (layerName === 'experience') {
+          // 经验层特殊处理
+          const qoderExpDir = resolve(agentDir, '.qoder', 'experience');
+          const derivedDir = resolve(agentDir, '04-记忆与知识', 'EXPERIENCE', 'derived');
+
+          if (args.experienceCategory) {
+            // 返回指定分类的经验文件内容
+            const categoryMap: Record<string, string> = {
+              '决策框架': '01-决策框架',
+              '执行协议': '02-执行协议',
+              '协作网络': '03-协作网络',
+              '踩坑教训': '04-踩坑教训',
+              '最佳实践': '05-最佳实践',
+              '能力进化': '06-能力进化',
+            };
+            const subDir = categoryMap[args.experienceCategory];
+            if (subDir && existsSync(resolve(qoderExpDir, subDir))) {
+              const files = readdirSync(resolve(qoderExpDir, subDir)).filter((f) => f.endsWith('.md'));
+              const contents: Record<string, string> = {};
+              for (const f of files) {
+                contents[f] = readFileSync(resolve(qoderExpDir, subDir, f), 'utf-8');
+              }
+              layers.experience = { category: args.experienceCategory, entries: contents };
+            } else {
+              layers.experience = { error: `Category "${args.experienceCategory}" not found` };
+            }
+          } else {
+            // 返回经验索引
+            const indexPath = resolve(qoderExpDir, 'index.json');
+            const index = existsSync(indexPath) ? JSON.parse(readFileSync(indexPath, 'utf-8')) : null;
+            const derivedCount = existsSync(derivedDir) ? readdirSync(derivedDir).filter((f) => f.endsWith('.md')).length : 0;
+            layers.experience = { index, derivedCount, hint: 'Pass experienceCategory to load specific category content' };
+          }
+          continue;
+        }
+
+        const layerDef = AGENT_LAYERS[layerName];
+        if (!layerDef) {
+          layers[layerName] = { error: `Unknown layer "${layerName}". Valid: ${Object.keys(AGENT_LAYERS).join(',')},experience` };
+          continue;
+        }
+
+        const layerContent: Record<string, string> = {};
+        for (const file of layerDef.files) {
+          const filePath = layerDef.dir
+            ? resolve(agentDir, layerDef.dir, file)
+            : resolve(agentDir, file);
+          if (existsSync(filePath)) {
+            layerContent[file] = readFileSync(filePath, 'utf-8');
+          }
+        }
+        if (Object.keys(layerContent).length > 0) {
+          layers[layerName] = layerContent;
+        }
+      }
+
+      return { content: [toText(result)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_agent_list',
+  {
+    description: '列出所有可用智能体及其描述',
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      const { readdirSync, existsSync, readFileSync } = await import('node:fs');
+      const agents = readdirSync(AGENTS_ROOT).filter((d) => {
+        return existsSync(resolve(AGENTS_ROOT, d, 'agent.prompt'));
+      });
+      const result = agents.map((name) => {
+        const soulPath = resolve(AGENTS_ROOT, name, '01-身份与行为', 'SOUL.md');
+        const soul = existsSync(soulPath) ? readFileSync(soulPath, 'utf-8').slice(0, 200) : '';
+        const promptPath = resolve(AGENTS_ROOT, name, 'agent.prompt');
+        const promptPreview = existsSync(promptPath) ? readFileSync(promptPath, 'utf-8').slice(0, 300) : '';
+        return { name, soulPreview: soul, promptPreview };
+      });
+      return { content: [toText({ count: result.length, agents: result })] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+// ============================================================
+// Workflow v2 — awkn_workflow_* (FR-037~FR-041, 单内核适配)
+// MCP 仅封装同一 WorkflowRuntime，禁止创建第二份状态或第二套调度逻辑
+// ============================================================
+
+server.registerTool(
+  'awkn_workflow_start',
+  {
+    description: '启动工作流智能体系统（初始化 Mission 阶段 + best-effort 分配）',
+    inputSchema: {
+      missionId: z.string().describe('Mission ID (goal_ 开头)'),
+      authorizationEnvelopeId: z.string().describe('Authorization Envelope ID (env_ 开头)'),
+      frozenInputHash: z.string().describe('冻结输入 SHA256 (64 hex)'),
+      frozenSourceSha: z.string().optional().describe('冻结源码 SHA (可选)'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const result = startWorkflow({
+        missionId: args.missionId,
+        authorizationEnvelopeId: args.authorizationEnvelopeId,
+        frozenInputHash: args.frozenInputHash,
+        frozenSourceSha: args.frozenSourceSha,
+      });
+      return { content: [toText(result)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_workflow_status',
+  {
+    description: '查询工作流状态汇总（各状态阶段数 + isComplete）',
+    inputSchema: {
+      missionId: z.string().describe('Mission ID'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const status = getWorkflowStatus(args.missionId);
+      return { content: [toText(status)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_workflow_resume',
+  {
+    description: '恢复已暂停/阻塞的工作流',
+    inputSchema: {
+      missionId: z.string().describe('Mission ID'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const result = resumeWorkflow(args.missionId);
+      return { content: [toText(result)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_workflow_cancel',
+  {
+    description: '取消工作流（所有未完成阶段 → CANCELLED）',
+    inputSchema: {
+      missionId: z.string().describe('Mission ID'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const result = cancelWorkflow(args.missionId);
       return { content: [toText(result)] };
     } catch (e) {
       return toError(e);

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { getDb } from '../store/db.js';
+import { isTransientError } from '../core/retry-policy.js';
 
 export type WorkStatus = 'queued' | 'leased' | 'retry' | 'succeeded' | 'dead';
 
@@ -126,7 +127,8 @@ export class CronWorkStore {
         throw new Error(`work ${id} is not leased by ${workerId}`);
       }
       const now = new Date();
-      if (item.attempt >= item.max_attempts) {
+      // P1-3 瞬态重试：非瞬态错误（语法/权限/客户端错误）不浪费重试，直接 dead
+      if (!isTransientError(error) || item.attempt >= item.max_attempts) {
         this.db.prepare(
           `UPDATE cron_work_items
            SET status = 'dead', lease_owner = NULL, lease_expires_at = NULL,

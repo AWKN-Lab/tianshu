@@ -12,6 +12,14 @@ import type { PipelineResult } from './types.js';
 
 const logger = createLogger('ActionReporter');
 
+/** 失败输出保留尾部（真实错误在末尾），头部 20% + 截断标记 + 尾部 80% */
+function keepTail(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const head = Math.floor(maxChars * 0.2);
+  const tail = maxChars - head;
+  return `${text.slice(0, head)}\n...[truncated ${text.length - maxChars} chars]...\n${text.slice(-tail)}`;
+}
+
 /** 生成报告，返回 Markdown 文件路径 */
 export function generateReport(result: PipelineResult, cwd: string): string {
   const reportsDir = resolve(cwd, 'reports');
@@ -62,7 +70,7 @@ function renderMarkdown(r: PipelineResult): string {
   if (failedSteps.length > 0) {
     lines.push('', '## 失败详情', '');
     for (const s of failedSteps) {
-      lines.push(`### ❌ ${s.name}`, '', '```', s.output.slice(0, 2000), '```', '');
+      lines.push(`### ❌ ${s.name}`, '', '```', keepTail(s.output, 2000), '```', '');
     }
   }
 

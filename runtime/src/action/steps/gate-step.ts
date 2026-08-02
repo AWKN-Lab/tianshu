@@ -19,6 +19,7 @@ import {
 } from '../../gates/quality-gates.js';
 import { resolve } from 'node:path';
 import { existsSync } from 'node:fs';
+import { redactText } from '../../core/redaction.js';
 import type { GateStepDef, StepResult } from '../types.js';
 
 const GATE_MAP: Record<string, (ctx: GateContext) => Promise<GateResult>> = {
@@ -73,9 +74,9 @@ export async function runGateStep(step: GateStepDef, cwd: string): Promise<StepR
     name: step.name,
     type: 'gate',
     status: allPassed ? 'passed' : 'failed',
-    output: allPassed
+    output: redactText(allPassed
       ? `All ${results.length} gates passed`
-      : `Failed: ${failedNames.join(', ')}\n${results.filter((r) => !r.passed).map((r) => `[${r.name}] ${r.details ?? ''}`).join('\n')}`,
+      : `Failed: ${failedNames.join(', ')}\n${results.filter((r) => !r.passed).map((r) => `[${r.name}] ${r.details ?? ''}`).join('\n')}`),
     gateResults: results.map((r) => ({ name: r.name, passed: r.passed, details: r.details })),
     durationMs: Date.now() - started,
   };

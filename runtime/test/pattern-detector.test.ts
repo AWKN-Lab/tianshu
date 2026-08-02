@@ -113,7 +113,7 @@ describe('experience candidate generation', () => {
     assert.match(markdown, /DRAFT/);
   });
 
-  it('creates one DRAFT candidate, resolves corrections by fingerprint and reuses the fingerprint', () => {
+  it('creates one DRAFT candidate, keeps corrections open and reuses the fingerprint', () => {
     const ledger = getCorrectionsLedger();
     for (let index = 0; index < 3; index++) ledger.record({ source: 'reviewGate', errorText: 'auto-extract error' });
     const pattern = new PatternDetector().detectRepeatedFingerprints()[0]!;
@@ -122,12 +122,12 @@ describe('experience candidate generation', () => {
 
     assert.ok(existsSync(first.filePath));
     assert.match(readFileSync(first.filePath, 'utf-8'), /DRAFT/);
-    assert.equal(first.resolvedCorrections, 3);
+    assert.equal(first.resolvedCorrections, 0);
     assert.equal(first.reusedCandidate, false);
     assert.equal(second.reusedCandidate, true);
     assert.equal(second.candidateId, first.candidateId);
     assert.equal(second.experienceId, first.experienceId);
-    assert.equal(ledger.list({ status: 'open' }).length, 0);
+    assert.equal(ledger.list({ status: 'open' }).length, 3);
   });
 
   it('writes distinct candidates for distinct fingerprints', () => {

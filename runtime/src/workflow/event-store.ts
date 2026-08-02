@@ -28,6 +28,10 @@ export type StepStatus =
   | 'cancelled'
   | 'policy_blocked';
 
+/** 事件流 schema 版本（P1-2 事件流版本化）：所有写入事件 payload 内嵌此版本 */
+export const EVENT_STREAM_SCHEMA = 'awkn-event-stream/v1';
+const EVENT_STREAM_SCHEMA_KEY = '_eventSchema';
+
 const RUN_TRANSITIONS: Record<RunStatus, RunStatus[]> = {
   created: ['queued', 'running', 'cancelled'],
   queued: ['running', 'cancelled'],
@@ -102,6 +106,15 @@ export interface ReplayedRun {
   eventCount: number;
 }
 
+export interface GlobalLockResult {
+  acquired: boolean;
+  renewed: boolean;
+  leaseExpiresAt: string;
+}
+
+/** 全局互斥锁默认租期（ms）：owner 崩溃后自动过期接管 */
+export const GLOBAL_LOCK_DEFAULT_LEASE_MS = 30_000;
+
 function assertTransition<T extends string>(kind: string, current: T, next: T, table: Record<T, T[]>): void {
   if (current === next) return;
   if (!table[current].includes(next)) throw new Error(`invalid ${kind} transition ${current} -> ${next}`);
@@ -134,6 +147,27 @@ export class EventStore {
     return queryOne<RunRecord>('SELECT * FROM runs WHERE id = ?', [id]) ?? null;
   }
 
+  /** 查询某 workflow 下仍处于活跃（未终止）状态的 run */
+  findActiveRuns(workflowName: string): RunRecord[] {
+    return queryAll<RunRecord>(
+      `SELECT * FROM runs
+       WHERE workflow_name = ? AND status IN ('created','queued','running','waiting_tool','waiting_approval','retrying')
+       ORDER BY started_at`,
+      [workflowName],
+    );
+  }
+
+  /** 查询某 workflow 下活跃且 payload 中指定键等于给定值的 run（用于同 SHA 去重） */
+  findActiveRunsByPayload(workflowName: string, payloadKey: string, payloadValue: string): RunRecord[] {
+    return queryAll<RunRecord>(
+      `SELECT * FROM runs
+       WHERE workflow_name = ? AND status IN ('created','queued','running','waiting_tool','waiting_approval','retrying')
+         AND json_extract(input_json, ?) = ?
+       ORDER BY started_at`,
+      [workflowName, `$.${payloadKey}`, payloadValue],
+    );
+  }
+
   transitionRun(id: string, status: RunStatus, output?: Record<string, unknown>): RunRecord {
     const existing = this.readRun(id);
     if (!existing) throw new Error(`run ${id} not found`);
@@ -161,7 +195,9 @@ export class EventStore {
 
     if (terminal && process.env.AWKN_DISABLE_MEMORY !== '1') {
       try {
-        getMemoryService().recordRunTrajectory(id);
+        void getMemoryService().recordRunTrajectory(id).catch(() => {
+          // Memory persistence is fail-open for the workflow state transition.
+        });
       } catch {
         // Memory persistence is fail-open for the workflow state transition.
       }
@@ -271,6 +307,22 @@ export class EventStore {
     return queryAll<WorkflowEvent>('SELECT * FROM events WHERE run_id = ? ORDER BY id ASC', [runId]);
   }
 
+  /**
+   * 事件订阅接口（P1-2 补完 · stream-json）：轮询 fromId 之后的新事件。
+   * 返回自增 id > fromId 的事件（按 id 升序，上限 limit），供 NDJSON emitter / 订阅方增量消费。
+   */
+  pollEventsAfter(fromId: number, limit = 200): WorkflowEvent[] {
+    return queryAll<WorkflowEvent>(
+      'SELECT * FROM events WHERE id > ? ORDER BY id ASC LIMIT ?',
+      [fromId, limit],
+    );
+  }
+
+  /** 当前最大事件自增 id（订阅游标初始化用）；无事件时返回 0 */
+  lastEventId(): number {
+    return queryOne<{ id: number }>('SELECT MAX(id) AS id FROM events')?.id ?? 0;
+  }
+
   replayRun(runId: string): ReplayedRun {
     const events = this.listEvents(runId);
     if (events.length === 0) throw new Error(`run ${runId} has no events`);
@@ -312,11 +364,63 @@ export class EventStore {
   }
 
   private insertEvent(runId: string, eventType: string, payload: Record<string, unknown>, stepId?: string): number {
+    const versionedPayload = { ...payload, [EVENT_STREAM_SCHEMA_KEY]: EVENT_STREAM_SCHEMA };
     queryRun(
       'INSERT INTO events (run_id, step_id, event_type, payload_json, created_at) VALUES (?, ?, ?, ?, ?)',
-      [runId, stepId ?? null, eventType, JSON.stringify(payload), new Date().toISOString()],
+      [runId, stepId ?? null, eventType, JSON.stringify(versionedPayload), new Date().toISOString()],
     );
     return queryOne<{ id: number }>('SELECT last_insert_rowid() AS id')?.id ?? 0;
+  }
+
+  /** 校验事件 payload 的 schema 版本；缺版本或版本不兼容返回 false */
+  static eventSchemaVersion(payload: Record<string, unknown>): string | null {
+    const version = payload[EVENT_STREAM_SCHEMA_KEY];
+    return typeof version === 'string' && version.length > 0 ? version : null;
+  }
+
+  /**
+   * 获取全局互斥锁（跨进程/跨项目，共享 db 锚点）。
+   * 表 `global_locks` 惰性建表；事务内「检查存在性 + 写入」保证原子性（WAL + busy_timeout）。
+   * 规则：不存在 → 抢占；存在且未过期 → 同 owner 续租成功，异 owner 失败；
+   * 存在且已过期 → 过期接管（renewed=true）。返回 leaseExpiresAt 供调用方续租。
+   */
+  acquireGlobalLock(lockName: string, owner: string, leaseMs = GLOBAL_LOCK_DEFAULT_LEASE_MS): GlobalLockResult {
+    const now = Date.now();
+    const expiresAt = new Date(now + leaseMs).toISOString();
+    let result: GlobalLockResult = { acquired: false, renewed: false, leaseExpiresAt: expiresAt };
+    transaction(() => {
+      queryRun(
+        `CREATE TABLE IF NOT EXISTS global_locks (
+          lock_name TEXT PRIMARY KEY, owner TEXT NOT NULL,
+          acquired_at TEXT NOT NULL, lease_expires_at TEXT NOT NULL
+        )`,
+      );
+      const existing = queryOne<{ owner: string; lease_expires_at: string }>(
+        'SELECT owner, lease_expires_at FROM global_locks WHERE lock_name = ?',
+        [lockName],
+      );
+      const expired = !existing || new Date(existing.lease_expires_at).getTime() <= now;
+      const sameOwner = existing?.owner === owner;
+      if (!existing || expired || sameOwner) {
+        queryRun(
+          `INSERT INTO global_locks (lock_name, owner, acquired_at, lease_expires_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(lock_name) DO UPDATE SET owner = excluded.owner,
+             acquired_at = excluded.acquired_at, lease_expires_at = excluded.lease_expires_at`,
+          [lockName, owner, new Date(now).toISOString(), expiresAt],
+        );
+        result = { acquired: true, renewed: sameOwner && !expired, leaseExpiresAt: expiresAt };
+      } else {
+        result = { acquired: false, renewed: false, leaseExpiresAt: existing.lease_expires_at };
+      }
+    });
+    return result;
+  }
+
+  /** 释放全局锁：仅当锁的 owner 匹配时才删除（避免误放他人锁） */
+  releaseGlobalLock(lockName: string, owner: string): boolean {
+    const changes = queryRun('DELETE FROM global_locks WHERE lock_name = ? AND owner = ?', [lockName, owner]);
+    return changes > 0;
   }
 
   private projectDomainEvent(runId: string, eventType: string, payload: Record<string, unknown>): void {

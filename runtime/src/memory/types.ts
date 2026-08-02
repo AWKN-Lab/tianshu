@@ -1,5 +1,6 @@
 export type MemoryType = 'working' | 'project_semantic' | 'task_trajectory' | 'engineering_experience';
 export type MemoryStatus = 'active' | 'superseded' | 'invalid' | 'expired';
+export type MemoryLevel = 0 | 1 | 2;
 
 export interface MemoryEntry {
   id: string;
@@ -21,6 +22,8 @@ export interface MemoryEntry {
   last_access_at: string | null;
   created_at: string;
   updated_at: string;
+  dir_path: string;
+  level: MemoryLevel;
 }
 
 export interface MemoryPutInput {
@@ -34,6 +37,8 @@ export interface MemoryPutInput {
   sourceStepId?: string;
   metadata?: Record<string, unknown>;
   expiresAt?: string;
+  dirPath?: string;
+  level?: MemoryLevel;
 }
 
 export interface MemorySearchInput {
@@ -42,6 +47,8 @@ export interface MemorySearchInput {
   scopeIds?: string[];
   limit?: number;
   minScore?: number;
+  /** Recursively expand matched directories into their child entries with score propagation. */
+  hierarchical?: boolean;
 }
 
 export interface MemorySearchResult {
@@ -50,4 +57,17 @@ export interface MemorySearchResult {
   semanticScore: number;
   lexicalScore: number;
   recencyScore: number;
+  /** Directory chain followed to reach this entry, e.g. ['docs', 'docs/auth']. */
+  trail?: string[];
+}
+
+export function normalizeDirPath(path: string | undefined): string {
+  if (!path) return '';
+  return path.trim().replace(/^\/+|\/+$/g, '').replace(/\/+/g, '/');
+}
+
+export function dirSegments(path: string): string[] {
+  const normalized = normalizeDirPath(path);
+  if (!normalized) return [];
+  return normalized.split('/');
 }

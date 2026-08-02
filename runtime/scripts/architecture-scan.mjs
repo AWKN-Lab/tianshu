@@ -163,6 +163,52 @@ for (const file of files) {
   }
 }
 
+// ===== ARCH-007: Migration version continuity check =====
+// 防止合并冲突解决时静默丢失迁移版本（跨文件一致性校验）
+// 触发经验：E104 版本快照陷阱 + 复盘 2026-07-30 行动项 P1
+const migrationRegistryPath = join(srcRoot, 'store', 'agent-os-migration-registry.ts');
+const migrationCheck = (() => {
+  try {
+    const source = readFileSync(migrationRegistryPath, 'utf8');
+    const versions = [];
+    for (const match of source.matchAll(/version:\s*(\d+)/g)) {
+      versions.push(Number.parseInt(match[1], 10));
+    }
+    if (versions.length === 0) {
+      return { ok: false, reason: 'no migration versions found in agent-os-migration-registry.ts', versions: [] };
+    }
+    const duplicates = versions.filter((v, i) => versions.indexOf(v) !== i);
+    const sorted = [...versions].sort((a, b) => a - b);
+    const gaps = [];
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i] !== sorted[i - 1] + 1) {
+        gaps.push({ from: sorted[i - 1], to: sorted[i] });
+      }
+    }
+    const ok = duplicates.length === 0 && gaps.length === 0;
+    return {
+      ok,
+      versions: sorted,
+      latest: sorted[sorted.length - 1],
+      duplicates,
+      gaps,
+      reason: ok
+        ? `migration versions continuous (${sorted[0]}..${sorted[sorted.length - 1]})`
+        : `migration versions broken: duplicates=[${duplicates.join(',')}] gaps=${JSON.stringify(gaps)}`,
+    };
+  } catch (error) {
+    return { ok: false, reason: `failed to read migration registry: ${error instanceof Error ? error.message : String(error)}`, versions: [] };
+  }
+})();
+
+if (!migrationCheck.ok) {
+  registerViolation({
+    rule: 'ARCH-007',
+    file: 'store/agent-os-migration-registry.ts',
+    message: migrationCheck.reason,
+  });
+}
+
 const report = {
   schema: 'awkn-architecture-scan-report/v1',
   generatedAt: new Date().toISOString(),
@@ -180,10 +226,13 @@ const report = {
     crossComponentImports: findings.crossComponentImports.length,
     legacyExceptionsUsed: legacyExceptionsUsed.length,
     blockingViolations: violations.length,
+    migrationContinuity: migrationCheck.ok ? 'OK' : 'BROKEN',
+    migrationLatest: migrationCheck.latest ?? null,
   },
   findings,
   legacyExceptionsUsed,
   violations,
+  migrationCheck,
 };
 
 writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');

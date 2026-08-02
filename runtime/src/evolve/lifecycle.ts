@@ -214,11 +214,11 @@ export class EvolutionLifecycle {
 
   private publishEngineeringMemory(candidate: EvolutionCandidate, action: 'activate' | 'rollback'): void {
     try {
-      getMemoryService().put({
+      void getMemoryService().put({
         type: 'engineering_experience', scopeId: projectId(), key: candidate.experience_id,
         content: readFileSync(candidate.content_path, 'utf-8'), importance: 0.95, confidence: 0.95,
         metadata: { candidateId: candidate.id, candidateVersion: candidate.version, sourceFingerprint: candidate.source_fingerprint, action },
-      });
+      }).catch(() => { /* optional projection */ });
     } catch { /* optional projection */ }
   }
 

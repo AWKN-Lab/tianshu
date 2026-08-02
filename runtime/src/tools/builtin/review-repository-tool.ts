@@ -1,11 +1,12 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { z } from 'zod';
-import { runStructuredWorktreeReview } from '../../adapter/review-kernel-runner.js';
-import { getLlmRouter } from '../../llm/router.js';
+import { runStructuredWorktreeReview, type WorktreeReviewResult } from '../../adapter/review-kernel-runner.js';
+import { getLlmRouter, type LlmRouter } from '../../llm/router.js';
 import type { LlmProvider } from '../../llm/types.js';
 import { getDb } from '../../store/db.js';
-import type { ToolHandler } from '../types.js';
+import type Database from 'better-sqlite3';
+import type { ExecutionContext, ToolHandler } from '../types.js';
 import { ObjectRefSchema } from '../../contracts/public.js';
 
 const PROVIDERS = new Set<LlmProvider>(['trae', 'codex', 'minimax']);
@@ -17,6 +18,64 @@ const ContractArtifactsSchema = z.array(z.object({
   ref: ObjectRefSchema,
   content: z.string().min(1),
 }).strict());
+
+export interface ReviewRepositoryDependencies {
+  readonly router?: LlmRouter;
+  readonly db?: Database.Database;
+}
+
+/**
+ * Trusted composition boundary shared by the internal ToolRegistry and the
+ * dedicated MCP adapter. Implementer identity is accepted only from the
+ * runtime ExecutionContext, never from public tool arguments.
+ */
+export async function runReviewRepository(
+  args: Record<string, unknown>,
+  context: ExecutionContext | undefined,
+  dependencies: ReviewRepositoryDependencies = {},
+): Promise<WorktreeReviewResult> {
+  const repositoryRoot = resolve(String(args.repositoryRoot ?? context?.workspaceRoot ?? process.cwd()));
+  const mode = args.mode === undefined ? 'enforce' : String(args.mode);
+  if (mode !== 'enforce') throw new Error('direct review_repository only supports enforce');
+  const provider = String(args.reviewerProvider ?? 'codex') as LlmProvider;
+  if (!PROVIDERS.has(provider)) throw new Error(`unsupported reviewerProvider: ${provider}`);
+  if (context?.implementerActorId === undefined) {
+    throw new Error('trusted implementer Actor is missing from execution context');
+  }
+  const contractArtifacts = ContractArtifactsSchema.parse(args.contractArtifacts ?? []);
+  const baseRef = args.baseRef === undefined ? undefined : String(args.baseRef);
+  const headRef = args.headRef === undefined ? undefined : String(args.headRef);
+  if ((baseRef === undefined) !== (headRef === undefined)) throw new Error('baseRef and headRef must be provided together');
+  const ocrBinary = process.env.AWKN_REVIEW_OCR_BINARY ?? DEFAULT_OCR_BINARY;
+  const ocrVersion = process.env.AWKN_REVIEW_OCR_VERSION;
+  const ocrSha256 = process.env.AWKN_REVIEW_OCR_SHA256;
+  if (baseRef !== undefined && (ocrVersion === undefined || ocrSha256 === undefined)) {
+    throw new Error('commit range review requires AWKN_REVIEW_OCR_VERSION and _SHA256 pins for the engine-local OCR binary');
+  }
+  return runStructuredWorktreeReview({
+    repositoryRoot,
+    mode,
+    router: dependencies.router ?? getLlmRouter(),
+    reviewerProvider: provider,
+    implementer: {
+      schema: 'awkn-actor-ref/v1',
+      actorId: context.implementerActorId,
+      actorType: 'assistant',
+    },
+    db: dependencies.db ?? getDb(),
+    contractArtifacts,
+    ...(baseRef === undefined ? {} : {
+      baseRef,
+      headRef: headRef!,
+      ocr: {
+        binaryPath: ocrBinary,
+        allowedBinaryRoot: ENGINE_OCR_ROOT,
+        expectedVersion: ocrVersion!,
+        expectedBinarySha256: ocrSha256!,
+      },
+    }),
+  });
+}
 
 export const reviewRepositoryTool: ToolHandler = {
   name: 'review_repository',
@@ -43,48 +102,7 @@ export const reviewRepositoryTool: ToolHandler = {
     required: [],
   },
   async execute(args, context) {
-    const repositoryRoot = resolve(String(args.repositoryRoot ?? context?.workspaceRoot ?? process.cwd()));
-    const mode = args.mode === undefined ? 'enforce' : String(args.mode);
-    if (mode !== 'enforce') throw new Error('direct review_repository only supports enforce');
-    const provider = String(args.reviewerProvider ?? 'codex') as LlmProvider;
-    if (!PROVIDERS.has(provider)) throw new Error(`unsupported reviewerProvider: ${provider}`);
-    if (context?.implementerActorId === undefined) {
-      throw new Error('trusted implementer Actor is missing from execution context');
-    }
-    const implementerActorId = context.implementerActorId;
-    const contractArtifacts = ContractArtifactsSchema.parse(args.contractArtifacts ?? []);
-    const baseRef = args.baseRef === undefined ? undefined : String(args.baseRef);
-    const headRef = args.headRef === undefined ? undefined : String(args.headRef);
-    if ((baseRef === undefined) !== (headRef === undefined)) throw new Error('baseRef and headRef must be provided together');
-    const ocrBinary = process.env.AWKN_REVIEW_OCR_BINARY ?? DEFAULT_OCR_BINARY;
-    const ocrVersion = process.env.AWKN_REVIEW_OCR_VERSION;
-    const ocrSha256 = process.env.AWKN_REVIEW_OCR_SHA256;
-    if (baseRef !== undefined && (ocrVersion === undefined || ocrSha256 === undefined)) {
-      throw new Error('commit range review requires AWKN_REVIEW_OCR_VERSION and _SHA256 pins for the engine-local OCR binary');
-    }
-    const result = await runStructuredWorktreeReview({
-      repositoryRoot,
-      mode,
-      router: getLlmRouter(),
-      reviewerProvider: provider,
-      implementer: {
-        schema: 'awkn-actor-ref/v1',
-        actorId: implementerActorId,
-        actorType: 'assistant',
-      },
-      db: getDb(),
-      contractArtifacts,
-      ...(baseRef === undefined ? {} : {
-        baseRef,
-        headRef: headRef!,
-        ocr: {
-          binaryPath: ocrBinary!,
-          allowedBinaryRoot: ENGINE_OCR_ROOT,
-          expectedVersion: ocrVersion!,
-          expectedBinarySha256: ocrSha256!,
-        },
-      }),
-    });
+    const result = await runReviewRepository(args, context);
     const payload = result.receipt.payload;
     const blockers = payload.findings.filter((finding) =>
       (finding.severity === 'CRITICAL' || finding.severity === 'HIGH')

@@ -34,7 +34,7 @@ describe('CronWorkStore', () => {
     const { store } = setup();
     const item = store.enqueue({ jobId: 'job', idempotencyKey: 'job:retry', payload: {}, maxAttempts: 2 });
     const first = store.claimById(item.id, 'worker', 30_000)!;
-    const retry = store.fail(first.id, 'worker', 'first', 0);
+    const retry = store.fail(first.id, 'worker', 'socket hang up', 0);
     assert.equal(retry.status, 'retry');
     const second = store.claimById(item.id, 'worker', 30_000, new Date(Date.now() + 1))!;
     const dead = store.fail(second.id, 'worker', 'second', 0);

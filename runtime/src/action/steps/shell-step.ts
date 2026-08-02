@@ -1,15 +1,28 @@
 /**
- * awkn-local-action-runner — Shell Step
+ * awkn-local-action-runner — Shell Step（技能吸收 P0-5 加固）
  *
- * 对标 qoder-action bash-tools.ts。
- * 参考 sandbox/process-executor.ts 的 Windows 兼容模式。
+ * 超时后清理完整进程树：
+ * - Windows: taskkill /PID <pid> /T /F（cmd.exe 子进程会留下孙进程）；
+ * - POSIX: detached + kill(-pid) 终止进程组。
+ * execFile 的 timeout 只杀直接子进程，无法清理 cmd /c 派生的孙进程。
  */
 
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn, spawnSync } from 'node:child_process';
 import type { ShellStepDef, StepResult } from '../types.js';
+import { redactText } from '../../core/redaction.js';
 
-const execFileAsync = promisify(execFile);
+const MAX_OUTPUT_BYTES = 20 * 1024 * 1024;
+
+/**
+ * 失败输出保留尾部：真实错误（栈/断言/退出码原因）通常出现在输出末尾。
+ * 头部截断（slice(0, N)）会把错误尾部切掉，导致报告不可诊断（运维盲区）。
+ */
+function keepTail(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const head = Math.floor(maxChars * 0.2);
+  const tail = maxChars - head;
+  return `${text.slice(0, head)}\n...[truncated ${text.length - maxChars} chars]...\n${text.slice(-tail)}`;
+}
 
 /**
  * Windows 路径盘符大写规范化。
@@ -27,36 +40,94 @@ function normalizeWindowsCwd(cwd: string): string {
   return cwd;
 }
 
+/** 终止进程树：POSIX 用进程组，Windows 用 taskkill /T */
+export function killProcessTree(pid: number): void {
+  if (pid <= 0) return;
+  try {
+    if (process.platform === 'win32') {
+      spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true });
+    } else {
+      try {
+        process.kill(-pid, 'SIGKILL');
+      } catch {
+        process.kill(pid, 'SIGKILL');
+      }
+    }
+  } catch {
+    // 进程已退出，忽略
+  }
+}
+
+function appendChunk(state: { text: string }, chunk: Buffer): void {
+  if (state.text.length >= MAX_OUTPUT_BYTES) return;
+  state.text += chunk.toString('utf-8');
+}
+
+
 export async function runShellStep(step: ShellStepDef, cwd: string): Promise<StepResult> {
   const started = Date.now();
   const windows = process.platform === 'win32';
   const executable = windows ? (process.env.ComSpec ?? 'cmd.exe') : '/bin/sh';
   const args = windows ? ['/d', '/s', '/c', step.command] : ['-lc', step.command];
 
-  try {
-    const { stdout, stderr } = await execFileAsync(executable, args, {
+  return await new Promise<StepResult>((resolve) => {
+    const child = spawn(executable, args, {
       cwd: normalizeWindowsCwd(step.cwd ?? cwd),
-      maxBuffer: 20 * 1024 * 1024,
-      timeout: step.timeout * 1000,
       windowsHide: true,
+      // POSIX 下脱离会话，便于超时后用负 PID 清理进程组
+      detached: !windows,
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
-    return {
-      name: step.name,
-      type: 'shell',
-      status: 'passed',
-      output: (stdout + stderr).slice(0, 5000),
-      durationMs: Date.now() - started,
-      exitCode: 0,
+    const stdout: { text: string } = { text: '' };
+    const stderr: { text: string } = { text: '' };
+    let settled = false;
+
+    const settle = (result: StepResult): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
     };
-  } catch (err) {
-    const e = err as Error & { stdout?: string; stderr?: string; code?: number };
-    return {
-      name: step.name,
-      type: 'shell',
-      status: 'failed',
-      output: ((e.stdout ?? '') + (e.stderr ?? '')).slice(0, 5000) || e.message,
-      durationMs: Date.now() - started,
-      exitCode: typeof e.code === 'number' ? e.code : 1,
-    };
-  }
+
+    const timer = setTimeout(() => {
+      killProcessTree(child.pid ?? -1);
+      settle({
+        name: step.name,
+        type: 'shell',
+        status: 'failed',
+        output: keepTail(redactText(`${stdout.text}${stderr.text}`), 5000)
+          || `command timed out after ${step.timeout ?? 300}s`,
+        durationMs: Date.now() - started,
+        exitCode: null,
+      });
+    }, (step.timeout ?? 300) * 1000);
+
+    child.stdout?.on('data', (chunk: Buffer) => appendChunk(stdout, chunk));
+    child.stderr?.on('data', (chunk: Buffer) => appendChunk(stderr, chunk));
+
+    child.on('error', (err) => {
+      killProcessTree(child.pid ?? -1);
+      settle({
+        name: step.name,
+        type: 'shell',
+        status: 'failed',
+        output: redactText(err.message).slice(0, 5000),
+        durationMs: Date.now() - started,
+        exitCode: 1,
+      });
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      const combined = redactText(stdout.text + stderr.text);
+      settle({
+        name: step.name,
+        type: 'shell',
+        status: code === 0 ? 'passed' : 'failed',
+        output: code === 0 ? combined.slice(0, 5000) : keepTail(combined, 5000),
+        durationMs: Date.now() - started,
+        exitCode: code,
+      });
+    });
+  });
 }

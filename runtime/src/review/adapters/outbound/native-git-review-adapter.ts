@@ -143,8 +143,13 @@ function globRegex(pattern: string): RegExp {
     const character = pattern[index]!;
     if (character === '*') {
       if (pattern[index + 1] === '*') {
-        source += '.*';
-        index += 1;
+        if (pattern[index + 2] === '/') {
+          source += '(?:.*/)?';
+          index += 2;
+        } else {
+          source += '.*';
+          index += 1;
+        }
       } else source += '[^/]*';
     } else if (character === '?') source += '[^/]';
     else source += character.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
