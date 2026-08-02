@@ -147,17 +147,17 @@ if (logs.length >= 1) {
   assert(log.error_text === null, `log error_text = null`);
 }
 
-// ─── 6. 验证 corrections_ledger 记录被关闭 ────────────────────────
-console.log('\n=== 6. 验证 corrections_ledger 记录被关闭（writeExperience 副作用）===');
+// ─── 6. 验证 corrections_ledger 在候选激活前保持开放 ──────────────
+console.log('\n=== 6. 验证 corrections_ledger 在 DRAFT 阶段保持 open ===');
 
 const openCorrections = queryAll<{ status: string }>(
   'SELECT status FROM corrections_ledger WHERE fingerprint = ?',
   [records[0]!.fingerprint],
 );
-const resolvedCount = openCorrections.filter((c) => c.status === 'resolved').length;
+const openCount = openCorrections.filter((c) => c.status === 'open').length;
 assert(
-  resolvedCount === 3,
-  `3 条 correction 全部 resolved（writeExperience 调 resolveByFingerprint 关闭）`,
+  openCount === 3,
+  `3 条 correction 在候选激活前保持 open`,
 );
 
 // ─── 清理 ─────────────────────────────────────────────────────────

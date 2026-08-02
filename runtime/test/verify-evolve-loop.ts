@@ -10,9 +10,9 @@
  * 4. 静态：3 个批量评估器（runAllGates/evaluateL2StopConditions/evaluateTianhuoCicdStop）调用 recordGateFailures
  * 5. 单元：recordGateFailures 只记录 FAIL 结果（PASS 跳过）
  * 6. 单元：recordGateFailures 记录正确的 source/severity/errorText
- * 7. 端到端：record 3 次同指纹 → detect 返回 repeated_fingerprint → writeExperience 写文件 → corrections resolved
- * 8. 端到端：resolve 后再 detect → 返回 []（已 resolved 的不参与）
- * 9. 端到端：stopExperienceExtractHook 完整跑通（detect + write + resolve）
+ * 7. 端到端：record 3 次同指纹 → detect 返回 repeated_fingerprint → writeExperience 写 DRAFT
+ * 8. 端到端：DRAFT 后再 detect → 复用候选，corrections 保持 open
+ * 9. 端到端：stopExperienceExtractHook 完整跑通（detect + draft）
  * 10. 端到端：goal_repeat 模式（同 goal 内 2 次同指纹）
  */
 
@@ -138,7 +138,7 @@ describe('M3 进阶-17: 自进化闭环连通性', () => {
 
   // ========== 端到端：完整自进化闭环 ==========
 
-  it('端到端：record 3 次同指纹 → detect → writeExperience → corrections resolved', () => {
+  it('端到端：record 3 次同指纹 → detect → writeExperience → corrections remain open', () => {
     const db = getDb();
     db.exec('DELETE FROM evolution_activation_history');
     db.exec('DELETE FROM evolution_evaluations');
@@ -185,23 +185,22 @@ describe('M3 进阶-17: 自进化闭环连通性', () => {
     const write = writes[0]!;
     assert.ok(write.experienceId.startsWith('EXP-DRV-'), `experienceId 格式正确: ${write.experienceId}`);
     assert.ok(existsSync(write.filePath), `经验文件应存在: ${write.filePath}`);
-    assert.ok(write.resolvedCorrections > 0, '应 resolve 了 corrections');
+    assert.equal(write.resolvedCorrections, 0, 'DRAFT 候选不得提前 resolve corrections');
 
-    // Step 4: 验证 corrections 已被 resolve
+    // Step 4: 验证 corrections 在候选激活前保持 open
     const stillOpen = ledger.list({ status: 'open' });
-    assert.equal(stillOpen.length, 0, '所有 corrections 应已 resolved');
+    assert.equal(stillOpen.length, 3, '所有 corrections 应保持 open');
 
     const resolved = ledger.list({ status: 'resolved' });
-    assert.equal(resolved.length, 3, '应有 3 条 resolved corrections');
-    assert.ok(resolved.every((r) => r.experience_id === write.experienceId), '所有 resolved 的 experience_id 应匹配');
+    assert.equal(resolved.length, 0, 'DRAFT 阶段不应有 resolved corrections');
   });
 
-  it('端到端：resolve 后再 detect → 返回 []（已 resolved 的不参与）', () => {
-    // 上一轮已 resolve 所有 corrections
+  it('端到端：DRAFT 后再 detect → 复用候选而非重复创建', () => {
     const patterns = getPatternDetector().detect();
-    // 应该没有 open 的 corrections → 无 pattern
     const openPatterns = patterns.filter((p) => p.kind === 'repeated_fingerprint');
-    assert.equal(openPatterns.length, 0, 'resolve 后不应再检测到 repeated_fingerprint');
+    assert.ok(openPatterns.length > 0, 'open corrections 应继续参与检测');
+    const writes = writeAllExperiences(openPatterns);
+    assert.ok(writes.every((write) => write.reusedCandidate), '同 fingerprint 应复用进行中的候选');
   });
 
   it('端到端：stopExperienceExtractHook 完整跑通', async () => {
@@ -233,9 +232,9 @@ describe('M3 进阶-17: 自进化闭环连通性', () => {
     assert.ok(result.output.includes('检测到'), 'output 应含"检测到"');
     assert.ok(result.output.includes('EXP-DRV-'), 'output 应含经验文件 ID');
 
-    // 验证 corrections 已 resolved
+    // 验证 stop hook 只起草候选，不提前关闭 corrections
     const open = getCorrectionsLedger().list({ status: 'open' });
-    assert.equal(open.length, 0, '所有 corrections 应已 resolved');
+    assert.equal(open.length, 3, '所有 corrections 应保持 open');
 
     // 验证经验文件存在
     const files = readdirSync(tmpDerivedDir).filter((f) => f.startsWith('EXP-DRV-'));

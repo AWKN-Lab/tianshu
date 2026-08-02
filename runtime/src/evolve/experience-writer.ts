@@ -2,7 +2,6 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EvolutionLifecycle } from './lifecycle.js';
-import { getCorrectionsLedger } from './corrections-ledger.js';
 import type { DetectedPattern } from './pattern-detector.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -89,7 +88,7 @@ ${pattern.sampleIds.map((id) => `- ${id}`).join('\n')}
 
 ---
 
-_自动生成的候选经验（DRAFT）。相关 correction 已在起草时标记 resolved，经验本身待 awkn-复盘总结 补全根因与工程规则后回放验证晋级。_
+_自动生成的候选经验（DRAFT）。相关 correction 在候选 ACTIVE 前保持 open；待 awkn-复盘总结补全根因与工程规则，并经回放、人工批准后晋级。_
 `;
 }
 
@@ -114,11 +113,6 @@ export function writeExperience(pattern: DetectedPattern): WriteResult {
     const filePath = resolve(dir, `${existing.experience_id}.md`);
     if (!existsSync(filePath)) writeFileSync(filePath, patternToMarkdown(pattern, existing.experience_id), 'utf-8');
     const linked = lifecycle.linkCorrections(existing.id, pattern.sampleIds);
-    const resolved = getCorrectionsLedger().resolveByFingerprint(
-      pattern.fingerprint,
-      `experience ${existing.experience_id} reused (kind=${pattern.kind})`,
-      existing.experience_id,
-    );
     return {
       experienceId: existing.experience_id,
       filePath,
@@ -127,7 +121,7 @@ export function writeExperience(pattern: DetectedPattern): WriteResult {
       candidateStatus: existing.status,
       linkedCorrections: linked,
       reusedCandidate: true,
-      resolvedCorrections: resolved,
+      resolvedCorrections: 0,
     };
   }
 
@@ -143,11 +137,6 @@ export function writeExperience(pattern: DetectedPattern): WriteResult {
     sourceFingerprint: pattern.fingerprint,
     correctionIds: pattern.sampleIds,
   });
-  const resolvedCorrections = getCorrectionsLedger().resolveByFingerprint(
-    pattern.fingerprint,
-    `experience ${experienceId} drafted (kind=${pattern.kind})`,
-    experienceId,
-  );
   return {
     experienceId,
     filePath,
@@ -156,7 +145,7 @@ export function writeExperience(pattern: DetectedPattern): WriteResult {
     candidateStatus: candidate.status,
     linkedCorrections: pattern.sampleIds.length,
     reusedCandidate: false,
-    resolvedCorrections,
+    resolvedCorrections: 0,
   };
 }
 
