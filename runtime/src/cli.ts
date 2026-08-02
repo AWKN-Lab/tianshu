@@ -21,6 +21,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { LlmProvider } from './llm/types.js';
 import { loadRuntimeEnv } from './config/runtime-env.js';
+import { resolveEngineRoot } from './engine-root.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -94,6 +95,14 @@ function usage(): void {
                               从最近一次 backup 恢复 DB（破坏性操作，需 --confirm）
           restore --backup <path> [--confirm]
                               从指定 backup 恢复 DB（破坏性操作，需 --confirm）
+
+  review  Review Kernel 独立审核（stream-json 补完）
+          run --repo <path> [--base <ref> --head <ref>]
+              [--output-format json|stream-json]
+              [--provider trae|codex|minimax] [--implementer <actorId>]
+              [--include <glob>]... [--exclude <glob>]... [--authors <name>]...
+              [--max-files N] [--max-lines N]
+              提交范围模式需 AWKN_REVIEW_OCR_VERSION/_SHA256 pins（引擎本地 OCR 二进制）
 
 环境变量：
   AWKN_LLM_PROVIDER       默认 LLM provider（trae|codex|minimax）
@@ -191,6 +200,9 @@ async function main(): Promise<void> {
         break;
       case 'migrate':
         await handleMigrate(subcommand);
+        break;
+      case 'review':
+        await handleReview(subcommand);
         break;
       default:
         usage();
@@ -524,13 +536,14 @@ async function handleOrchestrate(sub: string): Promise<void> {
         process.exit(1);
       }
       const { runTianhuoCicdLoop } = await import('./orchestrator/tianhuo-cicd-loop.js');
+      const engineRoot = resolveEngineRoot(__dirname);
       const result = await runTianhuoCicdLoop({
         cwd: process.cwd(),
         goalId,
         taskPrompt: task,
         maxCycles: Number(args.maxCycles ?? 10),
-        tianhuoPromptPath: args.tianhuoPrompt ?? 'agents/tianhuo/agent.prompt',
-        cicdTesterPromptPath: args.cicdPrompt ?? 'agents/cicd-tester/agent.prompt',
+        tianhuoPromptPath: args.tianhuoPrompt ?? resolve(engineRoot, 'agents', 'tianhuo', 'agent.prompt'),
+        cicdTesterPromptPath: args.cicdPrompt ?? resolve(engineRoot, 'agents', 'cicd-tester', 'agent.prompt'),
         tianhuoProvider: (args.tianhuoProvider as LlmProvider) ?? 'trae',
         cicdTesterProvider: (args.cicdProvider as LlmProvider) ?? 'codex',
         maxTurnsPerCycle: Number(args.maxTurns ?? 8),
@@ -756,6 +769,110 @@ async function handleMigrate(sub: string): Promise<void> {
       console.error('Unknown migrate subcommand:', sub);
       console.error('可用：status | list-backups | restore-latest | restore --backup <path>');
       process.exit(1);
+  }
+}
+
+const ENGINE_OCR_ROOT = resolve(__dirname, '..', '..', 'integrations', 'open-code-review');
+const DEFAULT_OCR_BINARY = resolve(
+  ENGINE_OCR_ROOT,
+  'bin',
+  process.platform === 'win32' ? 'ocr.exe' : 'ocr',
+);
+
+function splitList(value: string | undefined): string[] | undefined {
+  if (value === undefined || value === '') return undefined;
+  return value.split(',').map((item) => item.trim()).filter((item) => item.length > 0);
+}
+
+/**
+ * review run（stream-json 补完）：
+ * 直接驱动 Review Kernel（WORKTREE / COMMIT_RANGE 两种模式），
+ * 支持 --output-format json | stream-json（NDJSON 事件流，stdout 逐行输出）。
+ */
+async function handleReview(sub: string): Promise<void> {
+  const args = parseArgs(process.argv.slice(4));
+  if (sub !== 'run') {
+    console.error('用法：awkn-engine review run --repo <path> [--base <ref> --head <ref>] [--output-format json|stream-json] ...');
+    process.exit(1);
+  }
+  const repositoryRoot = resolve(args.repo ?? process.cwd());
+  const baseRef = args.base === undefined ? undefined : args.base;
+  const headRef = args.head === undefined ? undefined : args.head;
+  if ((baseRef === undefined) !== (headRef === undefined)) {
+    console.error('--base 与 --head 必须成对提供');
+    process.exit(1);
+  }
+  const format = args['output-format'] ?? 'json';
+  if (format !== 'json' && format !== 'stream-json') {
+    console.error(`不支持的 --output-format：${format}（json | stream-json）`);
+    process.exit(1);
+  }
+  const provider = (args.provider ?? process.env.AWKN_LLM_PROVIDER ?? 'trae') as LlmProvider;
+  const stream = format === 'stream-json';
+  const emit = (event: Record<string, unknown>): void => {
+    if (stream) {
+      console.log(JSON.stringify({ ts: new Date().toISOString(), ...event }));
+    }
+  };
+
+  const ocrBinary = process.env.AWKN_REVIEW_OCR_BINARY ?? DEFAULT_OCR_BINARY;
+  const ocrVersion = process.env.AWKN_REVIEW_OCR_VERSION;
+  const ocrSha256 = process.env.AWKN_REVIEW_OCR_SHA256;
+  if (baseRef !== undefined && (ocrVersion === undefined || ocrSha256 === undefined)) {
+    console.error('提交范围审核需要 AWKN_REVIEW_OCR_VERSION 与 AWKN_REVIEW_OCR_SHA256（引擎本地 OCR 二进制固定）');
+    process.exit(1);
+  }
+
+  const { runStructuredWorktreeReview } = await import('./adapter/review-kernel-runner.js');
+  const { getLlmRouter } = await import('./llm/router.js');
+  const { runAgentOsMigrations } = await import('./store/agent-os-migration-registry.js');
+  await runAgentOsMigrations(getDb());
+
+  emit({ type: 'review.started', repo: repositoryRoot, base: baseRef ?? null, head: headRef ?? null, provider });
+  try {
+    const result = await runStructuredWorktreeReview({
+      repositoryRoot,
+      mode: 'enforce',
+      router: getLlmRouter(),
+      reviewerProvider: provider,
+      implementer: {
+        schema: 'awkn-actor-ref/v1',
+        actorId: args.implementer ?? 'cli:user',
+        actorType: 'assistant',
+      },
+      db: getDb(),
+      includePatterns: splitList(args.include),
+      excludePatterns: splitList(args.exclude),
+      authors: splitList(args.authors),
+      maxFiles: args['max-files'] === undefined ? undefined : Number(args['max-files']),
+      maxLines: args['max-lines'] === undefined ? undefined : Number(args['max-lines']),
+      ...(baseRef === undefined ? {} : {
+        baseRef,
+        headRef: headRef!,
+        ocr: {
+          binaryPath: ocrBinary,
+          allowedBinaryRoot: ENGINE_OCR_ROOT,
+          expectedVersion: ocrVersion!,
+          expectedBinarySha256: ocrSha256!,
+        },
+      }),
+    });
+    emit({ type: 'review.receipt', verdict: result.receipt.payload.verdict.status, totalTokens: result.totalTokens });
+    if (!stream) {
+      console.log(JSON.stringify({
+        verdict: result.receipt.payload.verdict.status,
+        receiptId: result.receipt.receiptId,
+        executionId: result.executionId,
+        traceId: result.traceId,
+        totalTokens: result.totalTokens,
+        findings: result.receipt.payload.findings ?? [],
+      }, null, 2));
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emit({ type: 'review.failed', error: message });
+    if (!stream) console.error(JSON.stringify({ error: message }, null, 2));
+    process.exitCode = 1;
   }
 }
 

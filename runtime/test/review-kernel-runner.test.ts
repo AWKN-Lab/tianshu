@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
 import Database from 'better-sqlite3';
-import { parseReviewRolloutMode, runStructuredWorktreeReview } from '../src/adapter/review-kernel-runner.js';
+import { parseReviewRolloutMode, runStructuredWorktreeReview, globToRegExp } from '../src/adapter/review-kernel-runner.js';
 import type { LlmRouter } from '../src/llm/router.js';
 import { runAgentOsMigrations } from '../src/store/agent-os-migration-registry.js';
 import { NativeGitReviewAdapter, type OcrCommandRunner } from '../src/review/public.js';
@@ -292,6 +292,51 @@ describe('review kernel runtime composition', () => {
       assert.equal(result.receipt.payload.verdict.status, 'PARTIAL');
       assert.ok(result.receipt.payload.verdict.reasonCodes.includes('PROVIDER_INVALID'));
       assert.equal(result.receipt.payload.providerError, undefined);
+    } finally {
+      db.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('compiles glob patterns (**/*, *, ?) and escapes literals', () => {
+    assert.match('src/memory/service.ts', globToRegExp('src/**/*.ts'));
+    assert.doesNotMatch('src/memory/service.js', globToRegExp('src/**/*.ts'));
+    assert.match('a/b/c.ts', globToRegExp('**/*.ts'));
+    assert.match('src/x.ts', globToRegExp('src/?.ts'));
+    assert.doesNotMatch('src/xy.ts', globToRegExp('src/?.ts'));
+    assert.match('a[1].ts', globToRegExp('a[1].ts'));
+    assert.doesNotMatch('sub/a.ts', globToRegExp('a.ts'));
+  });
+
+  it('include/exclude patterns narrow the frozen review scope', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'awkn-kernel-scope-'));
+    const db = new Database(':memory:');
+    try {
+      const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+      git('init');
+      git('config', 'user.email', 'review-test@example.invalid');
+      git('config', 'user.name', 'Review Test');
+      await writeFile(join(root, 'a.ts'), 'export const value = 1;\n');
+      await writeFile(join(root, 'b.md'), '# docs\n');
+      git('add', '.');
+      git('commit', '-m', 'base');
+      await writeFile(join(root, 'a.ts'), 'export const value = 2;\n');
+      await writeFile(join(root, 'b.md'), '# docs v2\n');
+      db.pragma('foreign_keys = ON');
+      runAgentOsMigrations(db);
+      const result = await runStructuredWorktreeReview({
+        repositoryRoot: root,
+        mode: 'enforce',
+        router: fakeRouter(),
+        reviewerProvider: 'codex',
+        implementer: TEST_IMPLEMENTER,
+        db,
+        includePatterns: ['**/*.ts'],
+        excludePatterns: ['**/*.md'],
+      });
+      assert.equal(result.receipt.payload.verdict.status, 'PASS');
+      const planned = result.receipt.payload.coverage.plannedFiles;
+      assert.deepEqual(planned, ['a.ts']);
     } finally {
       db.close();
       await rm(root, { recursive: true, force: true });

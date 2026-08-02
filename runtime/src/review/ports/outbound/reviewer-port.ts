@@ -48,5 +48,12 @@ export interface ReviewUnitRequest {
 export interface ReviewerPort {
   readonly actor: ActorRef;
   readonly supportedRisk: readonly ReviewRisk[];
+  /**
+   * 分析通道（P0-3 补完 · 双通道）：'code' 或 'test'。
+   * 未标注（undefined）等价 'code'，保持单分析器场景向后兼容。
+   * 执行时按 unit 特征路由：TEST_ABUSE / 实现-测试一致性 unit 只能由 'test' 通道执行，
+   * 其余 unit 只能由 'code' 通道执行；两通道互斥分流。
+   */
+  readonly channel?: 'code' | 'test';
   reviewUnit(request: ReviewUnitRequest): Promise<ReviewUnitResponse>;
 }

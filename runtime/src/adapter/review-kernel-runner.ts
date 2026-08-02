@@ -1,5 +1,7 @@
 import type Database from 'better-sqlite3';
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import type { ReviewFileArtifact } from '../review/ports/outbound/review-workspace-port.js';
 import {
   EvidenceRecordSchema,
   REVIEW_PLAN_SCHEMA,
@@ -69,6 +71,15 @@ export interface WorktreeReviewInput {
   readonly budgetTokens?: number;
   /** P1-5 执行预检开关（默认开启；测试可关闭） */
   readonly preflight?: boolean;
+  /** P1-5 补完：仅纳入匹配 includePatterns 的路径（glob，空 = 全部） */
+  readonly includePatterns?: readonly string[];
+  /** P1-5 补完：排除匹配 excludePatterns 的路径（glob，空 = 不排除） */
+  readonly excludePatterns?: readonly string[];
+  /** P1-5 补完：预检规模阈值覆盖（默认 300 文件 / 20000 行） */
+  readonly maxFiles?: number;
+  readonly maxLines?: number;
+  /** 作者过滤（补完）：仅审核这些 git 提交作者在 diff 中引入的文件；空 = 全部作者 */
+  readonly authors?: readonly string[];
 }
 
 export interface WorktreeReviewResult {
@@ -110,6 +121,98 @@ function buildFailureContext(
 }
 
 /**
+ * glob → 正则（P1-5 补完 · 路径过滤）：
+ * `**` 跨目录任意、`*` 单段任意、`?` 单字符；其余按字面转义。
+ */
+export function globToRegExp(glob: string): RegExp {
+  let source = '';
+  for (let index = 0; index < glob.length; index += 1) {
+    const character = glob[index]!;
+    if (character === '*') {
+      if (glob[index + 1] === '*') {
+        source += '.*';
+        index += 1;
+      } else {
+        source += '[^/]*';
+      }
+    } else if (character === '?') {
+      source += '[^/]';
+    } else if ('\\^$+{}()|[]'.includes(character)) {
+      source += `\\${character}`;
+    } else {
+      source += character;
+    }
+  }
+  return new RegExp(`^(?:${source})$`);
+}
+
+interface ScopeFilters {
+  readonly include: readonly RegExp[];
+  readonly exclude: readonly RegExp[];
+  readonly authors: readonly string[];
+}
+
+function buildScopeFilters(input: WorktreeReviewInput): ScopeFilters {
+  return {
+    include: (input.includePatterns ?? []).map(globToRegExp),
+    exclude: (input.excludePatterns ?? []).map(globToRegExp),
+    authors: input.authors ?? [],
+  };
+}
+
+function matchesAny(path: string, patterns: readonly RegExp[]): boolean {
+  return patterns.some((pattern) => pattern.test(path));
+}
+
+async function fileLastAuthor(
+  repositoryRoot: string,
+  mergeBase: string,
+  headRef: string,
+  path: string,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile('git', ['log', '--format=%aN', '-1', `${mergeBase}..${headRef}`, '--', path], {
+      cwd: repositoryRoot,
+      timeout: 15_000,
+      maxBuffer: 64 * 1024,
+    }, (error, stdout) => {
+      if (error) {
+        resolve(null); // 查询失败 → 作者未知，保守保留该文件
+        return;
+      }
+      resolve(String(stdout ?? '').trim() || null);
+    });
+  });
+}
+
+/**
+ * P1-5 补完 · 范围过滤：include/exclude 路径 + 提交作者过滤。
+ * 过滤在 freeze 收集后、plan 之前执行，保证 plan.files / target / preflight 口径一致。
+ */
+async function applyScopeFilters(
+  files: readonly ReviewFileArtifact[],
+  filters: ScopeFilters,
+  target: ReviewTarget,
+  input: WorktreeReviewInput,
+): Promise<ReviewFileArtifact[]> {
+  const included = files.filter((file) => {
+    if (filters.include.length > 0 && !matchesAny(file.path, filters.include)) return false;
+    if (matchesAny(file.path, filters.exclude)) return false;
+    return true;
+  });
+  if (filters.authors.length === 0) return included;
+  if (target.mode !== 'COMMIT_RANGE') return included; // 作者过滤仅对提交范围生效
+  const mergeBase = target.mergeBase ?? input.baseRef ?? 'HEAD';
+  const headRef = input.headRef ?? 'HEAD';
+  const filtered: ReviewFileArtifact[] = [];
+  for (const file of included) {
+    const author = await fileLastAuthor(input.repositoryRoot, mergeBase, headRef, file.path);
+    if (author !== null && filters.authors.includes(author)) filtered.push(file);
+  }
+  return filtered;
+}
+
+/**
  * 通道失败隔离（P0-3）：任一通道（spec/plan 准备、reviewer 执行、审计持久化）
  * 失败都必须形成结构化覆盖缺口并产出 PARTIAL/FAIL receipt，
  * 禁止裸异常绕过审核结论。
@@ -132,8 +235,8 @@ export async function failingReviewResult(
     specRefs: (failure.input.contractArtifacts ?? []).filter((artifact) => artifact.kind === 'SPEC').map((artifact) => artifact.ref),
     acceptanceCriteriaRefs: (failure.input.contractArtifacts ?? [])
       .filter((artifact) => artifact.kind === 'ACCEPTANCE_CRITERION').map((artifact) => artifact.ref),
-    includePatterns: [],
-    excludePatterns: [],
+    includePatterns: failure.input.includePatterns ?? [],
+    excludePatterns: failure.input.excludePatterns ?? [],
     initiator: failure.serviceActor,
     implementer: failure.input.implementer,
     createdAt: failure.now,
@@ -213,10 +316,12 @@ export async function runStructuredWorktreeReview(input: WorktreeReviewInput): P
     const actual = createHash('sha256').update(artifact.content).digest('hex');
     if (actual !== artifact.ref.contentHash) throw new Error(`contract content hash mismatch: ${artifact.ref.objectId}`);
   }
+  const scopeFilters = buildScopeFilters(input);
   const workspace = {
     async freeze(target: Parameters<NativeGitReviewAdapter['freeze']>[0]) {
       const frozen = await baseWorkspace.freeze(target);
-      return { ...frozen, contracts: contractArtifacts.map(({ ref, content }) => ({ ref, content })) };
+      const filtered = await applyScopeFilters(frozen.files, scopeFilters, target, input);
+      return { ...frozen, files: filtered, contracts: contractArtifacts.map(({ ref, content }) => ({ ref, content })) };
     },
     currentFingerprint: (plan: Parameters<NativeGitReviewAdapter['currentFingerprint']>[0]) =>
       baseWorkspace.currentFingerprint(plan),
@@ -230,15 +335,23 @@ export async function runStructuredWorktreeReview(input: WorktreeReviewInput): P
     rolloutMode: input.mode,
     createdAt: now,
   });
-  const reviewer = new LlmReviewerAdapter({
+  // P0-3 补完 · 双通道：独立代码分析器 + 测试分析器（channel 互斥分流，同一 plan 两个执行通道）
+  const codeAnalyzer = new LlmReviewerAdapter({
     provider: input.reviewerProvider,
     traceId: traceId.slice('tr_'.length),
+    channel: 'code',
+    chat: (request) => input.router.chat(request),
+  });
+  const testAnalyzer = new LlmReviewerAdapter({
+    provider: input.reviewerProvider,
+    traceId: traceId.slice('tr_'.length),
+    channel: 'test',
     chat: (request) => input.router.chat(request),
   });
   const service = new ReviewService({
     specProvider,
     workspace,
-    reviewers: [reviewer],
+    reviewers: [codeAnalyzer, testAnalyzer],
     audit,
   });
   let target: ReviewTarget;
@@ -254,6 +367,8 @@ export async function runStructuredWorktreeReview(input: WorktreeReviewInput): P
       specRefs: contractArtifacts.filter((artifact) => artifact.kind === 'SPEC').map((artifact) => artifact.ref),
       acceptanceCriteriaRefs: contractArtifacts
         .filter((artifact) => artifact.kind === 'ACCEPTANCE_CRITERION').map((artifact) => artifact.ref),
+      includePatterns: input.includePatterns ?? [],
+      excludePatterns: input.excludePatterns ?? [],
       createdAt: now,
     });
   } catch (error) {
@@ -268,7 +383,10 @@ export async function runStructuredWorktreeReview(input: WorktreeReviewInput): P
 
   // P1-5 执行预检：规模/敏感/生成物/二进制；BLOCK → 拒绝进入 LLM review
   if (input.preflight !== false) {
-    const preflightReport = runPreflight(plan.files);
+    const preflightReport = runPreflight(plan.files, {
+      maxFiles: input.maxFiles,
+      maxLines: input.maxLines,
+    });
     if (preflightReport.verdict === 'BLOCK') {
       return failingReviewResult(service, {
         input,

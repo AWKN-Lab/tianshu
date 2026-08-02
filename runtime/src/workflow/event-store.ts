@@ -298,6 +298,22 @@ export class EventStore {
     return queryAll<WorkflowEvent>('SELECT * FROM events WHERE run_id = ? ORDER BY id ASC', [runId]);
   }
 
+  /**
+   * 事件订阅接口（P1-2 补完 · stream-json）：轮询 fromId 之后的新事件。
+   * 返回自增 id > fromId 的事件（按 id 升序，上限 limit），供 NDJSON emitter / 订阅方增量消费。
+   */
+  pollEventsAfter(fromId: number, limit = 200): WorkflowEvent[] {
+    return queryAll<WorkflowEvent>(
+      'SELECT * FROM events WHERE id > ? ORDER BY id ASC LIMIT ?',
+      [fromId, limit],
+    );
+  }
+
+  /** 当前最大事件自增 id（订阅游标初始化用）；无事件时返回 0 */
+  lastEventId(): number {
+    return queryOne<{ id: number }>('SELECT MAX(id) AS id FROM events')?.id ?? 0;
+  }
+
   replayRun(runId: string): ReplayedRun {
     const events = this.listEvents(runId);
     if (events.length === 0) throw new Error(`run ${runId} has no events`);

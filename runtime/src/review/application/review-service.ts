@@ -22,6 +22,7 @@ import { validateFindingDrafts } from './finding-validator.js';
 import { buildReviewPlan, createReviewTarget } from './review-planner.js';
 import { buildReviewReceipt } from './review-receipt.js';
 import { calculateReviewVerdict } from './verdict-calculator.js';
+import type { ReviewUnit } from '../../contracts/public.js';
 
 export interface ReviewServiceDependencies {
   readonly specProvider: ReviewSpecProviderPort;
@@ -30,6 +31,22 @@ export interface ReviewServiceDependencies {
   readonly audit?: ReviewAuditPort;
   readonly clock?: () => string;
   readonly maxReviewerAttempts?: number;
+}
+
+/** 测试路径判定：与 review-planner 的 TEST_ABUSE 识别保持同口径 */
+export function isTestPath(path: string): boolean {
+  return /(^|\/)(__tests__|tests?)(\/|\.)|\.(test|spec)\./i.test(path);
+}
+
+/**
+ * unit 归属通道（P0-3 补完 · 双通道）：
+ * TEST_ABUSE 与"实现-测试一致性"（CROSS_FILE 且含测试路径）→ test 通道；
+ * 其余（FILE / CROSS_FILE / SPEC）→ code 通道。
+ */
+export function unitChannel(unit: ReviewUnit): 'code' | 'test' {
+  if (unit.type === 'TEST_ABUSE') return 'test';
+  if (unit.type === 'CROSS_FILE' && unit.paths.some((path) => isTestPath(path))) return 'test';
+  return 'code';
 }
 
 export class ReviewService implements ReviewServicePort {
@@ -126,9 +143,11 @@ export class ReviewService implements ReviewServicePort {
       let completed = false;
       let lastError = 'no independent reviewer available';
       const attemptedActors = new Set<string>();
+      const channel = unitChannel(unit);
       for (const reviewer of this.dependencies.reviewers) {
         if (attemptedActors.size >= this.maxReviewerAttempts) break;
         if (attemptedActors.has(reviewer.actor.actorId)) continue;
+        if ((reviewer.channel ?? 'code') !== channel) continue;
         if (!reviewer.supportedRisk.includes(unit.risk)) continue;
         if (plan.target.implementer?.actorId === reviewer.actor.actorId) continue;
         attemptedActors.add(reviewer.actor.actorId);
