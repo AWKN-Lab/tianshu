@@ -1,4 +1,5 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { dirname, sep } from 'node:path';
@@ -78,6 +79,17 @@ if (selected.length === 0) {
   process.exit(1);
 }
 
+// 隔离 EventStore：契约/单元测试绝不允许写生产 data/awkn-engine.db。
+// 除非调用方已显式设置 AWKN_DB_PATH，否则注入临时 db，避免：
+// - 测试 run 污染生产 EventStore（stale 'running' 记录阻塞真实 pipeline）
+// - 与并发 pipeline（win-cicd 等）争抢同一 SQLite 写锁导致偶发失败
+let isolatedDbDir = null;
+if (!process.env.AWKN_DB_PATH && mode !== 'verify') {
+  isolatedDbDir = mkdtempSync(join(tmpdir(), 'awkn-tests-'));
+  process.env.AWKN_DB_PATH = join(isolatedDbDir, 'test.db');
+  console.log(`Isolated AWKN_DB_PATH=${process.env.AWKN_DB_PATH}`);
+}
+
 const relativeFiles = selected.map((file) => toPosix(relative(runtimeRoot, file)));
 console.log(`Running ${relativeFiles.length} ${mode} test file(s)`);
 for (const file of relativeFiles) console.log(`- ${file}`);
@@ -133,6 +145,14 @@ for (const file of standaloneFiles) {
     overallStatus = 1;
   } else {
     overallStatus = overallStatus || (result.status ?? 1);
+  }
+}
+
+if (isolatedDbDir) {
+  try {
+    rmSync(isolatedDbDir, { recursive: true, force: true });
+  } catch {
+    // 临时目录清理失败不阻塞退出码
   }
 }
 
