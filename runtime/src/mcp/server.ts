@@ -25,6 +25,7 @@ import { builtinTools } from '../tools/builtin/index.js';
 import { AgentLoop } from '../core/agent-loop.js';
 import { hookManager } from '../core/hook-manager.js';
 import type { HookPoint } from '../core/hook-types.js';
+import { startWorkflow, getWorkflowStatus, resumeWorkflow, cancelWorkflow } from '../workflow/workflow-runtime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -995,6 +996,91 @@ server.registerTool(
         return { name, soulPreview: soul, promptPreview };
       });
       return { content: [toText({ count: result.length, agents: result })] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+// ============================================================
+// Workflow v2 — awkn_workflow_* (FR-037~FR-041, 单内核适配)
+// MCP 仅封装同一 WorkflowRuntime，禁止创建第二份状态或第二套调度逻辑
+// ============================================================
+
+server.registerTool(
+  'awkn_workflow_start',
+  {
+    description: '启动工作流智能体系统（初始化 Mission 阶段 + best-effort 分配）',
+    inputSchema: {
+      missionId: z.string().describe('Mission ID (goal_ 开头)'),
+      authorizationEnvelopeId: z.string().describe('Authorization Envelope ID (env_ 开头)'),
+      frozenInputHash: z.string().describe('冻结输入 SHA256 (64 hex)'),
+      frozenSourceSha: z.string().optional().describe('冻结源码 SHA (可选)'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const result = startWorkflow({
+        missionId: args.missionId,
+        authorizationEnvelopeId: args.authorizationEnvelopeId,
+        frozenInputHash: args.frozenInputHash,
+        frozenSourceSha: args.frozenSourceSha,
+      });
+      return { content: [toText(result)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_workflow_status',
+  {
+    description: '查询工作流状态汇总（各状态阶段数 + isComplete）',
+    inputSchema: {
+      missionId: z.string().describe('Mission ID'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const status = getWorkflowStatus(args.missionId);
+      return { content: [toText(status)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_workflow_resume',
+  {
+    description: '恢复已暂停/阻塞的工作流',
+    inputSchema: {
+      missionId: z.string().describe('Mission ID'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const result = resumeWorkflow(args.missionId);
+      return { content: [toText(result)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_workflow_cancel',
+  {
+    description: '取消工作流（所有未完成阶段 → CANCELLED）',
+    inputSchema: {
+      missionId: z.string().describe('Mission ID'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const result = cancelWorkflow(args.missionId);
+      return { content: [toText(result)] };
     } catch (e) {
       return toError(e);
     }

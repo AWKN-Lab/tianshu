@@ -22,6 +22,9 @@ import { fileURLToPath } from 'node:url';
 import type { LlmProvider } from './llm/types.js';
 import { loadRuntimeEnv } from './config/runtime-env.js';
 import { resolveEngineRoot } from './engine-root.js';
+import { startWorkflow, getWorkflowStatus, resumeWorkflow, cancelWorkflow } from './workflow/workflow-runtime.js';
+import { getRegisteredProviders } from './worker/provider-registry.js';
+import { getStageRunsByMission } from './workflow/stage-store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -103,6 +106,19 @@ function usage(): void {
               [--include <glob>]... [--exclude <glob>]... [--authors <name>]...
               [--max-files N] [--max-lines N]
               提交范围模式需 AWKN_REVIEW_OCR_VERSION/_SHA256 pins（引擎本地 OCR 二进制）
+
+  workflow  工作流智能体系统管理（FR-037~FR-041）
+          start --goal <missionId> --authorization <file>
+                         启动工作流（authorization 为 JSON：{ envelopeId, frozenInputHash, frozenSourceSha? }）
+          status --mission <missionId>
+                         查询工作流状态汇总
+          resume --mission <missionId>
+                         恢复已暂停/阻塞的工作流
+          cancel --mission <missionId>
+                         取消工作流（所有未完成阶段 → CANCELLED）
+          replay --mission <missionId>
+                         输出 Mission 的 StageRun 执行历史（Receipt 回放）
+          providers      列出已注册的 WorkerProvider
 
 环境变量：
   AWKN_LLM_PROVIDER       默认 LLM provider（trae|codex|minimax）
@@ -203,6 +219,9 @@ async function main(): Promise<void> {
         break;
       case 'review':
         await handleReview(subcommand);
+        break;
+      case 'workflow':
+        await handleWorkflow(subcommand);
         break;
       default:
         usage();
@@ -873,6 +892,94 @@ async function handleReview(sub: string): Promise<void> {
     emit({ type: 'review.failed', error: message });
     if (!stream) console.error(JSON.stringify({ error: message }, null, 2));
     process.exitCode = 1;
+  }
+}
+
+async function handleWorkflow(sub: string): Promise<void> {
+  const args = parseArgs(process.argv.slice(4));
+
+  switch (sub) {
+    case 'start': {
+      if (!args.goal || !args.authorization) {
+        console.error('用法: awkn-engine workflow start --goal <missionId> --authorization <file>');
+        process.exitCode = 1;
+        return;
+      }
+      const authPath = resolve(args.authorization);
+      const auth = JSON.parse(await import('node:fs').then((fs) => fs.readFileSync(authPath, 'utf-8')));
+      const result = startWorkflow({
+        missionId: args.goal,
+        authorizationEnvelopeId: auth.envelopeId,
+        frozenInputHash: auth.frozenInputHash,
+        frozenSourceSha: auth.frozenSourceSha,
+      });
+      console.log(JSON.stringify(result, null, 2));
+      break;
+    }
+    case 'status': {
+      if (!args.mission) {
+        console.error('用法: awkn-engine workflow status --mission <missionId>');
+        process.exitCode = 1;
+        return;
+      }
+      const status = getWorkflowStatus(args.mission);
+      console.log(JSON.stringify(status, null, 2));
+      break;
+    }
+    case 'resume': {
+      if (!args.mission) {
+        console.error('用法: awkn-engine workflow resume --mission <missionId>');
+        process.exitCode = 1;
+        return;
+      }
+      const result = resumeWorkflow(args.mission);
+      console.log(JSON.stringify(result, null, 2));
+      break;
+    }
+    case 'cancel': {
+      if (!args.mission) {
+        console.error('用法: awkn-engine workflow cancel --mission <missionId>');
+        process.exitCode = 1;
+        return;
+      }
+      const result = cancelWorkflow(args.mission);
+      console.log(JSON.stringify(result, null, 2));
+      break;
+    }
+    case 'replay': {
+      if (!args.mission) {
+        console.error('用法: awkn-engine workflow replay --mission <missionId>');
+        process.exitCode = 1;
+        return;
+      }
+      const runs = getStageRunsByMission(args.mission);
+      console.log(JSON.stringify({
+        missionId: args.mission,
+        totalStages: runs.length,
+        stageRuns: runs.map((r) => ({
+          stageRunId: r.stageRunId,
+          stageType: r.stageType,
+          state: r.state,
+          actorId: r.actorId ?? null,
+          attempt: r.attempt,
+          outputReceiptId: r.outputReceiptId ?? null,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+        })),
+      }, null, 2));
+      break;
+    }
+    case 'providers': {
+      const providers = getRegisteredProviders();
+      console.log(JSON.stringify({
+        count: providers.length,
+        providers: providers.map((p) => ({ providerId: p.providerId })),
+      }, null, 2));
+      break;
+    }
+    default:
+      console.error('未知子命令。可用: start, status, resume, cancel, replay, providers');
+      process.exitCode = 1;
   }
 }
 
