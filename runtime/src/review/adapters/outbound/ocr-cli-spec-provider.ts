@@ -182,6 +182,8 @@ export class OcrCliSpecProvider implements ReviewSpecProviderPort {
     });
     if (result.exitCode !== 0) {
       const stderr = new TextDecoder('utf-8', { fatal: false }).decode(result.stderr).slice(0, 2_000);
+      const stdout = new TextDecoder('utf-8', { fatal: false }).decode(result.stdout).slice(0, 2_000);
+      console.error(`[DEBUG-OCR] exit=${result.exitCode} stderr=${JSON.stringify(stderr)} stdout=${JSON.stringify(stdout)} binary=${this.options.binaryPath} cwd=${request.repositoryRoot}`);
       throw new Error(`OCR delegate spec failed with exit ${result.exitCode}: ${stderr}`);
     }
     const parsedJson = parseTrustedJson(result.stdout, {

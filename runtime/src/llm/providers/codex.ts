@@ -19,7 +19,11 @@ export class CodexProvider implements LlmProviderInterface {
       messages: encodeOpenAiMessages(req.messages),
       temperature: req.temperature ?? 0.7,
     };
-    if (req.maxTokens) body.max_tokens = req.maxTokens;
+    // max_tokens: 优先用请求显式值；否则读取 AWKN_CODEX_MAX_TOKENS 环境变量默认值。
+    // 用于 reasoning 模型（如 deepseek-v4-flash）场景，避免 reasoning tokens 耗尽 content 预算。
+    const maxTokens = req.maxTokens
+      ?? (process.env.AWKN_CODEX_MAX_TOKENS ? Number(process.env.AWKN_CODEX_MAX_TOKENS) : undefined);
+    if (maxTokens) body.max_tokens = maxTokens;
     if (req.tools && req.tools.length > 0) {
       body.tools = req.tools;
       body.tool_choice = 'auto';

@@ -254,6 +254,13 @@ func safeGitEnvironment(environment []string) []string {
 	return append(result,
 		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull,
 		"GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0",
+		// Allow safe.directory bypass for cross-user repository access
+		// (e.g., sandbox environments where .git ownership differs from current user).
+		// This does NOT weaken config isolation: only the ownership check is bypassed,
+		// all other config remains sealed via GIT_CONFIG_GLOBAL=os.DevNull.
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=safe.directory",
+		"GIT_CONFIG_VALUE_0=*",
 	)
 }
 

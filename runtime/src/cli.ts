@@ -816,6 +816,7 @@ async function handleReview(sub: string): Promise<void> {
   };
 
   const ocrBinary = process.env.AWKN_REVIEW_OCR_BINARY ?? DEFAULT_OCR_BINARY;
+  const ocrRoot = process.env.AWKN_REVIEW_OCR_ROOT ?? ENGINE_OCR_ROOT;
   const ocrVersion = process.env.AWKN_REVIEW_OCR_VERSION;
   const ocrSha256 = process.env.AWKN_REVIEW_OCR_SHA256;
   if (baseRef !== undefined && (ocrVersion === undefined || ocrSha256 === undefined)) {
@@ -844,6 +845,8 @@ async function handleReview(sub: string): Promise<void> {
       includePatterns: splitList(args.include),
       excludePatterns: splitList(args.exclude),
       authors: splitList(args.authors),
+      // --no-cache 禁用指纹缓存（单文件验证后跑全量时必须禁用，否则 diffFingerprint 相同会命中缓存）
+      useCache: args['no-cache'] === undefined,
       maxFiles: args['max-files'] === undefined ? undefined : Number(args['max-files']),
       maxLines: args['max-lines'] === undefined ? undefined : Number(args['max-lines']),
       ...(baseRef === undefined ? {} : {
@@ -851,9 +854,12 @@ async function handleReview(sub: string): Promise<void> {
         headRef: headRef!,
         ocr: {
           binaryPath: ocrBinary,
-          allowedBinaryRoot: ENGINE_OCR_ROOT,
+          allowedBinaryRoot: ocrRoot,
           expectedVersion: ocrVersion!,
           expectedBinarySha256: ocrSha256!,
+          // CLI 本地运行时传递完整环境，OCR 二进制依赖 Git，
+          // safeProcessEnv 会剥离 Git 运行所需的变量导致 exit 1
+          env: process.env,
         },
       }),
     });

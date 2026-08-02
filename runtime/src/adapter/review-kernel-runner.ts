@@ -377,12 +377,14 @@ export async function runStructuredWorktreeReview(input: WorktreeReviewInput): P
       createdAt: now,
     });
   } catch (error) {
+    console.error('[DEBUG] prepare failed:', error instanceof Error ? error.message : String(error), error instanceof Error ? error.stack : '');
     return failingReviewResult(service, { input, executionId, traceId, serviceActor, now, error });
   }
   let plan: ReviewPlan;
   try {
     plan = await service.plan(target);
   } catch (error) {
+    console.error('[DEBUG] plan failed:', error instanceof Error ? error.message : String(error), error instanceof Error ? error.stack : '');
     return failingReviewResult(service, { input, executionId, traceId, serviceActor, now, error, target });
   }
 
@@ -393,6 +395,7 @@ export async function runStructuredWorktreeReview(input: WorktreeReviewInput): P
       maxLines: input.maxLines,
     });
     if (preflightReport.verdict === 'BLOCK') {
+      console.error('[DEBUG] preflight BLOCKED:', preflightReport.issues.map((i) => i.message).join('; '));
       return failingReviewResult(service, {
         input,
         executionId,
@@ -415,9 +418,16 @@ export async function runStructuredWorktreeReview(input: WorktreeReviewInput): P
   if (input.useCache !== false) {
     const cached = reviewCache.lookup(target.diffFingerprint, plan.ruleBundleHash);
     if (cached !== null && cached.receipt.payload.verdict.status === 'PASS') {
+      console.error('[DEBUG] cache hit: returning cached PASS receipt');
       return { receipt: cached.receipt, totalTokens: 0, executionId, traceId, serviceActor };
     }
+    if (cached !== null) {
+      console.error(`[DEBUG] cache hit but verdict=${cached.receipt.payload.verdict.status}, ignoring`);
+    }
+  } else {
+    console.error('[DEBUG] cache disabled (--no-cache or useCache=false)');
   }
+  console.error(`[DEBUG] prepare+plan OK: ${plan.files.length} files, ${plan.units.length} units, fingerprint=${target.diffFingerprint.slice(0, 16)}...`);
   const evidence = EvidenceRecordSchema.parse({
     schema: 'awkn-evidence/v2',
     evidenceId: createAwknId('evidence'),
@@ -476,7 +486,9 @@ export async function runStructuredWorktreeReview(input: WorktreeReviewInput): P
   let run: ReviewRun;
   try {
     run = await service.execute(plan, context);
+    console.error(`[DEBUG] execute OK: ${run.unitResults.length} unit results, ${run.totalTokens} tokens, ${run.findings.length} findings`);
   } catch (error) {
+    console.error('[DEBUG] execute failed:', error instanceof Error ? error.message : String(error), error instanceof Error ? error.stack : '');
     return failingReviewResult(service, { input, executionId, traceId, serviceActor, now, error, target });
   }
   let receipt: ReviewReceipt;

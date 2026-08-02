@@ -12,7 +12,16 @@ const cliPath = resolve(__dirname, '..', 'src', 'cli.ts');
 const tsxBin = resolve(__dirname, '..', 'node_modules', '.bin', 'tsx');
 const tsxCmd = existsSync(tsxBin) ? tsxBin : 'tsx';
 
-const child = spawn(tsxCmd, [cliPath, ...process.argv.slice(2)], {
+// shell: true 时，含空格的参数必须用双引号包裹，否则被 cmd.exe 拆分
+// 例如 --repo "d:\awkn-lab\AWKN Memory OS" 不加引号会变成 --repo d:\awkn-lab\AWKN
+const quotedArgs = [cliPath, ...process.argv.slice(2)].map((arg) => {
+  if (arg.includes(' ') || arg.includes('\t')) {
+    return `"${arg}"`;
+  }
+  return arg;
+});
+
+const child = spawn(tsxCmd, quotedArgs, {
   stdio: 'inherit',
   shell: true,
 });

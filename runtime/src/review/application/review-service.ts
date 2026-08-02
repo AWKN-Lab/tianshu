@@ -178,6 +178,10 @@ export class ReviewService implements ReviewServicePort {
           );
           findings.push(...validated.findings);
           validationErrors.push(...validated.errors.map((error) => `${unit.unitId}: ${error}`));
+          // 临时调试：输出 validation errors 到 stderr
+          if (validated.errors.length > 0) {
+            console.error(`[REVIEW-DEBUG] unit ${unit.unitId} (channel=${channel}) returned ${response.findings?.length ?? 0} drafts, ${validated.findings.length} accepted, ${validated.errors.length} rejected: ${validated.errors.slice(0, 3).join(' | ')}`);
+          }
           unitResults.push({
             unitId: unit.unitId,
             status: 'COMPLETED',
@@ -191,6 +195,8 @@ export class ReviewService implements ReviewServicePort {
           break;
         } catch (error) {
           lastError = error instanceof Error ? error.message : String(error);
+          // 临时调试：输出 unit 失败的具体错误到 stderr
+          console.error(`[REVIEW-DEBUG] unit ${unit.unitId} (channel=${channel}) failed: ${lastError}`);
         }
       }
       if (!completed) {
