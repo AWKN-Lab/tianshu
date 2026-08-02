@@ -96,9 +96,19 @@ describe('persistent queue & worker', { concurrency: false }, () => {
       retryDelayMs: 5,
     });
     enqueue(queue, { n: 1 });
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await until(() => queueStats(queue).done === 1);
     handle.stop();
     assert.ok(attempts >= 2, `expected retries, got ${attempts}`);
     assert.equal(queueStats(queue).done, 1);
   });
 });
+
+async function until(fn: () => boolean, timeoutMs = 2000, stepMs = 10): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!fn()) {
+    if (Date.now() >= deadline) {
+      throw new Error(`timeout waiting for condition (${timeoutMs}ms)`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, stepMs));
+  }
+}
