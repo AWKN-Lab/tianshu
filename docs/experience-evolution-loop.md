@@ -43,7 +43,14 @@
 
 ## AGENTS 历史经验迁徙
 
-现有 E1–E18 暂按 legacy ACTIVE 保留，不继续追加 E19。后续逐条执行：提取证据 → 建候选 → 分类 → 回放 → 人工批准 → 投影到 AGENTS、TOOLS、Skill 或 Wiki → 删除旧重复正文。
+E1–E26 已于 2026-08-02 从 `D:\awkn-lab\AGENTS.md` 迁出：
+
+- 原文归档：`agents/tianhuo/04-记忆与知识/EXPERIENCE/raw/2026-08-02-file-AGENTS-legacy-E1-E26.md`
+- 迁徙清单：`agents/tianhuo/04-记忆与知识/EXPERIENCE/legacy-agents-e1-e26-migration.md`
+- 候选文件：`EXP-LEGACY-20260802-E01` 至 `EXP-LEGACY-20260802-E26`
+- Runtime 状态：26 条均为 `DRAFT`，版本 1；没有候选被自动激活。
+
+`AGENTS.md` 不再保存经验正文，只保留稳定规则和生命周期入口。后续逐条执行：补齐证据 → 回放 → 验证 → 激活 → 单一目标投影；未 ACTIVE 前不得重新写回行为层。
 
 ## 验收
 
