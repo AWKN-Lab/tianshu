@@ -90,6 +90,23 @@ if (!process.env.AWKN_DB_PATH && mode !== 'verify') {
   console.log(`Isolated AWKN_DB_PATH=${process.env.AWKN_DB_PATH}`);
 }
 
+/**
+ * 测试进程净化 env：剔除宿主运行配置（runtime/.env 经 loadRuntimeEnv 注入），
+ * 避免策略/路由/密钥类变量泄漏进断言（例如 AWKN_APPROVED_TOOLS=exec,write
+ * 使 tool-policy 判定 write 已批准；AWKN_LLM_PROVIDER=codex 劫持 router
+ * provider 选择，导致 CICD（经 action-cli 启动）与本地直跑行为不一致）。
+ * 仅保留隔离 DB 路径，其余 AWKN_* 一律移除（verify 脚本依赖宿主配置，不净化）。
+ */
+function buildTestEnv() {
+  if (mode === 'verify') return process.env;
+  const sanitized = { ...process.env };
+  for (const key of Object.keys(sanitized)) {
+    if (key.startsWith('AWKN_') && key !== 'AWKN_DB_PATH') delete sanitized[key];
+  }
+  return sanitized;
+}
+const testEnv = buildTestEnv();
+
 const relativeFiles = selected.map((file) => toPosix(relative(runtimeRoot, file)));
 console.log(`Running ${relativeFiles.length} ${mode} test file(s)`);
 for (const file of relativeFiles) console.log(`- ${file}`);
@@ -117,7 +134,7 @@ if (nodeTestFiles.length > 0) {
     {
       cwd: runtimeRoot,
       stdio: 'inherit',
-      env: process.env,
+      env: testEnv,
     },
   );
   if (result.error) {
@@ -137,7 +154,7 @@ for (const file of standaloneFiles) {
     {
       cwd: runtimeRoot,
       stdio: 'inherit',
-      env: process.env,
+      env: testEnv,
     },
   );
   if (result.error) {
