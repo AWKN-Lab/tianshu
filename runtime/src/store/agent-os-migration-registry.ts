@@ -316,6 +316,113 @@ const AGENT_OS_MIGRATIONS: readonly AgentOsMigration[] = [
       `);
     },
   },
+  {
+    version: 18,
+    name: 'workflow-agent-system-hierarchy',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS workflow_component (
+          id TEXT PRIMARY KEY,
+          mission_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'DRAFT',
+          acceptance_criteria TEXT NOT NULL DEFAULT '[]',
+          frozen_target_hash TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE(mission_id, name),
+          FOREIGN KEY (mission_id) REFERENCES goals(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_module (
+          id TEXT PRIMARY KEY,
+          component_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'DRAFT',
+          boundary TEXT NOT NULL,
+          acceptance_criteria TEXT NOT NULL DEFAULT '[]',
+          frozen_target_hash TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE(component_id, name),
+          FOREIGN KEY (component_id) REFERENCES workflow_component(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_work_package (
+          id TEXT PRIMARY KEY,
+          module_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'DRAFT',
+          scope TEXT NOT NULL,
+          acceptance_criteria TEXT NOT NULL DEFAULT '[]',
+          dependencies TEXT NOT NULL DEFAULT '[]',
+          assigned_actor_id TEXT,
+          engineer_receipt_id TEXT,
+          test_receipt_id TEXT,
+          review_receipt_id TEXT,
+          git_receipt_id TEXT,
+          retro_receipt_id TEXT,
+          frozen_target_hash TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE(module_id, name),
+          FOREIGN KEY (module_id) REFERENCES workflow_module(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS authorization_envelope (
+          id TEXT PRIMARY KEY,
+          mission_id TEXT NOT NULL,
+          user_signature TEXT NOT NULL,
+          scope_directories TEXT NOT NULL,
+          scope_tools TEXT NOT NULL DEFAULT '[]',
+          cost_budget_tokens INTEGER,
+          cost_budget_calls INTEGER,
+          time_limit_hours INTEGER,
+          allow_git_commit INTEGER NOT NULL DEFAULT 0,
+          allow_git_push INTEGER NOT NULL DEFAULT 0,
+          allow_deploy INTEGER NOT NULL DEFAULT 0,
+          allow_external_messages INTEGER NOT NULL DEFAULT 0,
+          allow_paid_actions INTEGER NOT NULL DEFAULT 0,
+          deploy_environments TEXT,
+          created_at TEXT NOT NULL,
+          expires_at TEXT,
+          status TEXT NOT NULL DEFAULT 'ACTIVE',
+          FOREIGN KEY (mission_id) REFERENCES goals(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS authorization_consumption (
+          id TEXT PRIMARY KEY,
+          envelope_id TEXT NOT NULL,
+          actor_id TEXT NOT NULL,
+          action_type TEXT NOT NULL,
+          action_target TEXT NOT NULL,
+          receipt_id TEXT NOT NULL,
+          consumed_at TEXT NOT NULL,
+          FOREIGN KEY (envelope_id) REFERENCES authorization_envelope(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS state_transition_log (
+          id TEXT PRIMARY KEY,
+          work_item_id TEXT NOT NULL,
+          item_type TEXT NOT NULL,
+          from_state TEXT NOT NULL,
+          to_state TEXT NOT NULL,
+          actor_id TEXT NOT NULL,
+          trigger_receipt_id TEXT NOT NULL,
+          input_hash TEXT NOT NULL,
+          idempotency_key TEXT NOT NULL UNIQUE,
+          transitioned_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_wf_component_mission ON workflow_component(mission_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_module_component ON workflow_module(component_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_wp_module ON workflow_work_package(module_id);
+        CREATE INDEX IF NOT EXISTS idx_auth_env_mission ON authorization_envelope(mission_id);
+        CREATE INDEX IF NOT EXISTS idx_auth_consumption_env ON authorization_consumption(envelope_id);
+        CREATE INDEX IF NOT EXISTS idx_state_trans_item ON state_transition_log(work_item_id);
+      `);
+    },
+  },
 ] as const;
 
 /**
