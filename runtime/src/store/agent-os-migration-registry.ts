@@ -536,6 +536,103 @@ const AGENT_OS_MIGRATIONS: readonly AgentOsMigration[] = [
       `);
     },
   },
+  {
+    version: 20,
+    name: 'workflow-release-deploy-recovery-plane',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS workflow_release_bundle (
+          release_bundle_id TEXT PRIMARY KEY,
+          mission_id TEXT NOT NULL,
+          work_item_id TEXT NOT NULL,
+          frozen_source_sha TEXT NOT NULL,
+          artifact_digest TEXT NOT NULL,
+          sbom_digest TEXT NOT NULL,
+          build_receipt_id TEXT,
+          test_receipt_id TEXT,
+          review_receipt_id TEXT,
+          security_receipt_id TEXT,
+          issued_actor_id TEXT NOT NULL,
+          authorization_envelope_id TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'DRAFT',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_release_artifact (
+          artifact_id TEXT PRIMARY KEY,
+          release_bundle_id TEXT NOT NULL,
+          artifact_type TEXT NOT NULL,
+          artifact_path TEXT NOT NULL,
+          artifact_digest TEXT NOT NULL,
+          artifact_size_bytes INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (release_bundle_id) REFERENCES workflow_release_bundle(release_bundle_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_deployment_run (
+          deployment_run_id TEXT PRIMARY KEY,
+          release_bundle_id TEXT NOT NULL,
+          target_environment TEXT NOT NULL,
+          authorization_envelope_id TEXT NOT NULL,
+          gray_stage TEXT NOT NULL DEFAULT 'PENDING',
+          health_status TEXT NOT NULL DEFAULT 'UNKNOWN',
+          final_verdict TEXT,
+          rollback_target_id TEXT,
+          started_at TEXT NOT NULL,
+          completed_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (release_bundle_id) REFERENCES workflow_release_bundle(release_bundle_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_deployment_observation (
+          observation_id TEXT PRIMARY KEY,
+          deployment_run_id TEXT NOT NULL,
+          check_name TEXT NOT NULL,
+          check_result TEXT NOT NULL,
+          detail_json TEXT NOT NULL DEFAULT '{}',
+          observed_at TEXT NOT NULL,
+          FOREIGN KEY (deployment_run_id) REFERENCES workflow_deployment_run(deployment_run_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_rollback_target (
+          rollback_target_id TEXT PRIMARY KEY,
+          deployment_run_id TEXT NOT NULL,
+          previous_release_bundle_id TEXT,
+          previous_source_sha TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (deployment_run_id) REFERENCES workflow_deployment_run(deployment_run_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS workflow_recovery_attempt (
+          recovery_attempt_id TEXT PRIMARY KEY,
+          stage_run_id TEXT,
+          deployment_run_id TEXT,
+          failure_class TEXT NOT NULL,
+          recovery_action TEXT NOT NULL,
+          attempt INTEGER NOT NULL DEFAULT 0,
+          max_attempts INTEGER NOT NULL DEFAULT 3,
+          status TEXT NOT NULL DEFAULT 'PENDING',
+          result_detail_json TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_wf_release_mission ON workflow_release_bundle(mission_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_release_status ON workflow_release_bundle(status);
+        CREATE INDEX IF NOT EXISTS idx_wf_release_art_bundle ON workflow_release_artifact(release_bundle_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_deploy_bundle ON workflow_deployment_run(release_bundle_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_deploy_status ON workflow_deployment_run(health_status);
+        CREATE INDEX IF NOT EXISTS idx_wf_obs_deploy ON workflow_deployment_observation(deployment_run_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_rollback_deploy ON workflow_rollback_target(deployment_run_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_recovery_stage ON workflow_recovery_attempt(stage_run_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_recovery_deploy ON workflow_recovery_attempt(deployment_run_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_recovery_status ON workflow_recovery_attempt(status);
+      `);
+    },
+  },
 ] as const;
 
 /**
