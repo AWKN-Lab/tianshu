@@ -40,6 +40,15 @@ function baseRequest(): ChatRequest {
 describe('LlmRouter metrics instrumentation', () => {
   beforeEach(() => {
     process.env.AWKN_DISABLE_MEMORY = '1';
+    // 隔离宿主环境变量：runner 经 .env 设置 AWKN_LLM_PROVIDER=codex 时，
+    // selectProvider 会绕过本测试注入的 FakeProvider（E17：测试须隔离宿主环境）
+    delete process.env.AWKN_LLM_PROVIDER;
+    delete process.env.AWKN_CODEX_API_KEY;
+    delete process.env.AWKN_CODEX_BASE_URL;
+    delete process.env.AWKN_CODEX_MODEL;
+    delete process.env.AWKN_MINIMAX_API_KEY;
+    delete process.env.AWKN_MINIMAX_BASE_URL;
+    delete process.env.AWKN_MINIMAX_MODEL;
   });
 
   it('records duration and tokens on successful chat', async () => {

@@ -95,7 +95,15 @@ if (!process.env.AWKN_DB_PATH && mode !== 'verify') {
  * 避免策略/路由/密钥类变量泄漏进断言（例如 AWKN_APPROVED_TOOLS=exec,write
  * 使 tool-policy 判定 write 已批准；AWKN_LLM_PROVIDER=codex 劫持 router
  * provider 选择，导致 CICD（经 action-cli 启动）与本地直跑行为不一致）。
- * 仅保留隔离 DB 路径，其余 AWKN_* 一律移除（verify 脚本依赖宿主配置，不净化）。
+ * 仅保留隔离 DB 路径，其余 AWKN_* 一律移除。
+ * verify 模式不净化：verify 脚本自给自足（自设 DB/端口/mock），保留宿主 env 无漂移风险。
+ *
+ * 已知边界（净化无效的场景）：
+ * - 测试 spawn 的子进程若自身调用 loadRuntimeEnv（如 src/cli.ts:29、
+ *   src/mcp/server.ts:34 模块顶层加载），会从磁盘重载 runtime/.env，
+ *   携带完整宿主配置（含真实 API key）——净化只作用于本进程 spawn 时传入的 env。
+ * - 不经 run-tests.mjs 的入口（如 `npm run test:coverage` 直跑 node --test）
+ *   不受净化保护，须在干净 env 下运行。
  */
 function buildTestEnv() {
   if (mode === 'verify') return process.env;

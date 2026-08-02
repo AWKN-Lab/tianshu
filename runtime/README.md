@@ -92,6 +92,18 @@ runtime/
 | verificationGate | 纯逻辑 | 不得无证据宣称完成 |
 | budgetGate | 纯逻辑 | 超预算停循环 |
 
+## 测试
+
+```bash
+npm run test              # 单元测试（node:test，经 run-tests.mjs 净化 env + 隔离 DB）
+npm run test:contracts    # 契约测试（同上）
+npm run test:verify       # 独立验证脚本（自给自足）
+npm run check             # 全量门禁（架构 + tsc + lint + 全测试）
+```
+
+- `npm run test` / `test:contracts` 经 `scripts/run-tests.mjs` 运行：会剔除宿主 `AWKN_*` 环境变量（如 `.env` 中的 `AWKN_APPROVED_TOOLS`、`AWKN_LLM_PROVIDER`），并注入临时 `AWKN_DB_PATH` 隔离 EventStore，保证断言不受宿主配置污染。
+- `npm run test:coverage` **不经净化、无 DB 隔离**：须在干净 env 下运行（避免 `.env` 泄漏进断言），且会写生产 `data/awkn-engine.db`。
+
 ## 独立性
 
 本 runtime **不依赖 awkn-agent**。即使 `D:\awkn-lab\awkn-agent` 目录被删，runtime 仍能独立工作。

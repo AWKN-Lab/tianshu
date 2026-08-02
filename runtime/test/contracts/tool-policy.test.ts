@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -23,6 +23,16 @@ const execTool: ToolHandler = {
   permissionLevel: 'confirm',
   execute: async () => 'ok',
 };
+
+// beforeEach 清理保证第一个用例前 env 即干净，不依赖外部净化兜底
+// （宿主 .env 可能经 loadRuntimeEnv 注入 AWKN_APPROVED_TOOLS 等）。
+beforeEach(() => {
+  delete process.env.AWKN_APPROVED_TOOLS;
+  delete process.env.AWKN_ALLOW_OUTSIDE_WORKSPACE;
+  delete process.env.AWKN_ALLOW_SENSITIVE_PATHS;
+  delete process.env.AWKN_TOOL_POLICY_MODE;
+  delete process.env.AWKN_ALLOW_GITHUB_ACTIONS;
+});
 
 afterEach(() => {
   delete process.env.AWKN_APPROVED_TOOLS;
