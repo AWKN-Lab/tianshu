@@ -106,6 +106,15 @@ export interface ReplayedRun {
   eventCount: number;
 }
 
+export interface GlobalLockResult {
+  acquired: boolean;
+  renewed: boolean;
+  leaseExpiresAt: string;
+}
+
+/** 全局互斥锁默认租期（ms）：owner 崩溃后自动过期接管 */
+export const GLOBAL_LOCK_DEFAULT_LEASE_MS = 30_000;
+
 function assertTransition<T extends string>(kind: string, current: T, next: T, table: Record<T, T[]>): void {
   if (current === next) return;
   if (!table[current].includes(next)) throw new Error(`invalid ${kind} transition ${current} -> ${next}`);
@@ -367,6 +376,51 @@ export class EventStore {
   static eventSchemaVersion(payload: Record<string, unknown>): string | null {
     const version = payload[EVENT_STREAM_SCHEMA_KEY];
     return typeof version === 'string' && version.length > 0 ? version : null;
+  }
+
+  /**
+   * 获取全局互斥锁（跨进程/跨项目，共享 db 锚点）。
+   * 表 `global_locks` 惰性建表；事务内「检查存在性 + 写入」保证原子性（WAL + busy_timeout）。
+   * 规则：不存在 → 抢占；存在且未过期 → 同 owner 续租成功，异 owner 失败；
+   * 存在且已过期 → 过期接管（renewed=true）。返回 leaseExpiresAt 供调用方续租。
+   */
+  acquireGlobalLock(lockName: string, owner: string, leaseMs = GLOBAL_LOCK_DEFAULT_LEASE_MS): GlobalLockResult {
+    const now = Date.now();
+    const expiresAt = new Date(now + leaseMs).toISOString();
+    let result: GlobalLockResult = { acquired: false, renewed: false, leaseExpiresAt: expiresAt };
+    transaction(() => {
+      queryRun(
+        `CREATE TABLE IF NOT EXISTS global_locks (
+          lock_name TEXT PRIMARY KEY, owner TEXT NOT NULL,
+          acquired_at TEXT NOT NULL, lease_expires_at TEXT NOT NULL
+        )`,
+      );
+      const existing = queryOne<{ owner: string; lease_expires_at: string }>(
+        'SELECT owner, lease_expires_at FROM global_locks WHERE lock_name = ?',
+        [lockName],
+      );
+      const expired = !existing || new Date(existing.lease_expires_at).getTime() <= now;
+      const sameOwner = existing?.owner === owner;
+      if (!existing || expired || sameOwner) {
+        queryRun(
+          `INSERT INTO global_locks (lock_name, owner, acquired_at, lease_expires_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(lock_name) DO UPDATE SET owner = excluded.owner,
+             acquired_at = excluded.acquired_at, lease_expires_at = excluded.lease_expires_at`,
+          [lockName, owner, new Date(now).toISOString(), expiresAt],
+        );
+        result = { acquired: true, renewed: sameOwner && !expired, leaseExpiresAt: expiresAt };
+      } else {
+        result = { acquired: false, renewed: false, leaseExpiresAt: existing.lease_expires_at };
+      }
+    });
+    return result;
+  }
+
+  /** 释放全局锁：仅当锁的 owner 匹配时才删除（避免误放他人锁） */
+  releaseGlobalLock(lockName: string, owner: string): boolean {
+    const changes = queryRun('DELETE FROM global_locks WHERE lock_name = ? AND owner = ?', [lockName, owner]);
+    return changes > 0;
   }
 
   private projectDomainEvent(runId: string, eventType: string, payload: Record<string, unknown>): void {

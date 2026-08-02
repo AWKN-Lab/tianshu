@@ -8,7 +8,7 @@
 import { getEventStore } from '../workflow/event-store.js';
 import { createLogger } from '../core/logger.js';
 import { redactText } from '../core/redaction.js';
-import { acquirePipelineSlot, withPipelineMutex } from './run-guard.js';
+import { acquireGlobalPipelineLock, acquirePipelineSlot, releaseGlobalPipelineLock, withPipelineMutex } from './run-guard.js';
 import type {
   PipelineDef,
   JobDef,
@@ -53,13 +53,19 @@ async function runPipelineUnlocked(
 
   logger.info(`Pipeline "${pipeline.name}" started (trigger=${opts.trigger}, sha=${git.shortSha})`);
 
-  // 1. 运行守卫：同 SHA 旧 run 取消 + 并发锁
+  // 1. 运行守卫：同 SHA 旧 run 取消 + 并发锁 + 全局 pipeline 互斥
   const slot = acquirePipelineSlot(store, `action:${pipeline.name}`, git.sha);
-  if (slot.decision === 'busy') {
-    logger.warn(`Pipeline "${pipeline.name}" rejected: another active run (${slot.activeRunId}) is in progress`);
+  const globalLockOwner = `pipeline:${pipeline.name}:${git.shortSha}`;
+  const globalLocked = slot.decision === 'proceed' && acquireGlobalPipelineLock(store, globalLockOwner);
+  if (slot.decision === 'busy' || !globalLocked) {
+    logger.warn(
+      slot.decision === 'busy'
+        ? `Pipeline "${pipeline.name}" rejected: another active run (${slot.activeRunId}) is in progress`
+        : `Pipeline "${pipeline.name}" rejected: global pipeline lock held by another run`,
+    );
     const result: PipelineResult = {
       pipelineName: pipeline.name,
-      runId: slot.activeRunId,
+      runId: slot.decision === 'busy' ? slot.activeRunId : '',
       status: 'failed',
       jobs: [],
       trigger: opts.trigger,
@@ -89,10 +95,23 @@ async function runPipelineUnlocked(
   });
   store.transitionRun(run.id, 'running');
 
+  try {
+    return await runJobs(store, pipeline, opts, run.id, git, { startedAt, pipelineStarted });
+  } finally {
+    releaseGlobalPipelineLock(store, globalLockOwner);
+  }
+}
+
+async function runJobs(
+  store: ReturnType<typeof getEventStore>,
+  pipeline: PipelineDef,
+  opts: RunPipelineOptions,
+  runId: string,
+  git: { sha: string; shortSha: string; branch: string },
+  timing: { startedAt: string; pipelineStarted: number },
+): Promise<PipelineResult> {
   const jobResults: JobResult[] = [];
   const jobStatuses = new Map<string, 'passed' | 'failed' | 'skipped'>();
-
-  // 2. 拓扑排序
   const sortedJobs = topologicalSort(pipeline.jobs);
 
   // 3. 逐 job 执行
@@ -115,7 +134,7 @@ async function runPipelineUnlocked(
     }
 
     logger.info(`Job "${jobId}" running...`);
-    const jobResult = await runJob(store, run.id, jobId, job, opts.cwd);
+    const jobResult = await runJob(store, runId, jobId, job, opts.cwd);
     jobResults.push(jobResult);
     jobStatuses.set(jobId, jobResult.status === 'passed' ? 'passed' : 'failed');
     logger.info(`Job "${jobId}" ${jobResult.status} (${(jobResult.durationMs / 1000).toFixed(1)}s)`);
@@ -123,22 +142,21 @@ async function runPipelineUnlocked(
 
   // 4. 判定 Pipeline 状态
   const allPassed = jobResults.every((j) => j.status === 'passed' || j.status === 'skipped');
-  const finalStatus = allPassed ? 'succeeded' : 'failed';
-  store.transitionRun(run.id, finalStatus, {
+  store.transitionRun(runId, allPassed ? 'succeeded' : 'failed', {
     jobs: jobResults.map((j) => ({ id: j.jobId, status: j.status })),
   });
 
   const result: PipelineResult = {
     pipelineName: pipeline.name,
-    runId: run.id,
+    runId,
     status: allPassed ? 'passed' : 'failed',
     jobs: jobResults,
     trigger: opts.trigger,
     commitSha: git.sha,
     branch: git.branch,
-    startedAt,
+    startedAt: timing.startedAt,
     finishedAt: new Date().toISOString(),
-    durationMs: Date.now() - pipelineStarted,
+    durationMs: Date.now() - timing.pipelineStarted,
   };
 
   // 5. 生成报告

@@ -23,6 +23,24 @@ export function isActiveRunStatus(status: string): boolean {
 }
 
 /**
+ * 全局 pipeline 互斥（跨项目/跨进程，共享 db 锚点）。
+ * 同一 db 同一时刻只允许一个 pipeline 真正执行；竞争失败方返回 false（busy）。
+ * 锁名默认单锁 `pipeline-global`：互斥目标就是整库串行 pipeline。
+ */
+export function acquireGlobalPipelineLock(
+  store: EventStore,
+  owner: string,
+  leaseMs?: number,
+  lockName = 'pipeline-global',
+): boolean {
+  return store.acquireGlobalLock(lockName, owner, leaseMs).acquired;
+}
+
+export function releaseGlobalPipelineLock(store: EventStore, owner: string, lockName = 'pipeline-global'): void {
+  store.releaseGlobalLock(lockName, owner);
+}
+
+/**
  * 请求一个 pipeline 运行槽位。
  * 1. 取消同 workflow + 同 SHA 的旧活跃 run（新运行取代旧运行）；
  * 2. 若同 workflow 仍有其他活跃 run → busy，拒绝新运行。
