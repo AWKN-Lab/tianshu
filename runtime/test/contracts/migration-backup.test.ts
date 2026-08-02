@@ -187,7 +187,7 @@ describe('Migration Backup/Restore', () => {
       const backup = getLastMigrationBackup();
       assert.ok(backup, 'backup should have been created');
       assert.equal(existsSync(backup.backupPath), true);
-      assert.deepEqual(backup.pendingMigrations, [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+      assert.deepEqual(backup.pendingMigrations, [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
       assert.equal(backup.contentHash.length, 64);
 
       // Verify migrations were applied

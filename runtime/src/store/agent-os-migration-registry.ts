@@ -633,6 +633,36 @@ const AGENT_OS_MIGRATIONS: readonly AgentOsMigration[] = [
       `);
     },
   },
+  {
+    version: 21,
+    name: 'workflow-retrospective-candidate-store',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS workflow_retrospective_candidate (
+          candidate_id TEXT PRIMARY KEY,
+          mission_id TEXT NOT NULL,
+          layer TEXT NOT NULL,
+          work_item_id TEXT NOT NULL,
+          work_item_type TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          lessons_json TEXT NOT NULL DEFAULT '[]',
+          evidence_receipt_ids_json TEXT NOT NULL DEFAULT '[]',
+          proposed_action TEXT NOT NULL,
+          severity TEXT NOT NULL DEFAULT 'INFO',
+          generated_by_actor_id TEXT NOT NULL,
+          generated_at TEXT NOT NULL,
+          evolution_status TEXT NOT NULL DEFAULT 'DRAFT',
+          previous_active_candidate_id TEXT,
+          linked_evolution_candidate_id TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_wf_retro_mission ON workflow_retrospective_candidate(mission_id);
+        CREATE INDEX IF NOT EXISTS idx_wf_retro_layer ON workflow_retrospective_candidate(layer);
+        CREATE INDEX IF NOT EXISTS idx_wf_retro_status ON workflow_retrospective_candidate(evolution_status);
+      `);
+    },
+  },
 ] as const;
 
 /**
