@@ -10,3 +10,7 @@ export * from './assignment-service.js';
 export * from './lease-manager.js';
 export * from './receipt-normalizer.js';
 export { LocalAgentLoopProvider } from './local-agent-loop-provider.js';
+export { HermesWorkerProvider, registerHermesProvider } from './hermes/hermes-worker-provider.js';
+export { StubHermesCliPort } from './hermes/hermes-cli-port.js';
+export type { HermesCliPort, HermesTaskSpec, HermesTaskState, HermesRunRecord, HermesDeadLetterEntry } from './hermes/hermes-cli-port.js';
+export { HermesEventAdapter } from './hermes/hermes-event-adapter.js';
