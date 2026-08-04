@@ -1,7 +1,10 @@
+import { loadRuntimeEnv } from './config/runtime-env.js';
 import { getMemoryBackendRouter } from './memory/router.js';
 import { getMemoryService } from './memory/service.js';
 import type { MemoryType } from './memory/types.js';
 import { closeDb, getDb } from './store/db.js';
+
+loadRuntimeEnv();
 
 function args(): Record<string, string> {
   const output: Record<string, string> = {};
@@ -33,7 +36,7 @@ async function main(): Promise<void> {
   const options = args();
   try {
     if (command === 'put') {
-      console.log(JSON.stringify(service.put({
+      console.log(JSON.stringify(await service.put({
         type: type(options.type),
         scopeId: options.scope ?? '',
         key: options.key ?? '',
@@ -45,7 +48,7 @@ async function main(): Promise<void> {
       return;
     }
     if (command === 'search') {
-      console.log(JSON.stringify(service.search({
+      console.log(JSON.stringify(await service.search({
         query: options.query ?? '',
         types: options.type ? [type(options.type)] : undefined,
         scopeIds: options.scope ? options.scope.split(',') : undefined,

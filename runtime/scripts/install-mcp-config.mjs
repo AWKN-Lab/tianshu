@@ -8,7 +8,7 @@
  *   node scripts/install-mcp-config.mjs --ide all --force  # 强制覆盖现有配置
  *   node scripts/install-mcp-config.mjs --dry-run          # 仅打印不写入
  *
- * 支持 IDE: trae / claude-code / cursor / windsurf / codex
+ * 支持 IDE: trae / claude-code / cursor / windsurf / codex / qoder
  *
  * 设计：
  * - 跨平台路径（Windows/macOS/Linux）
@@ -95,6 +95,13 @@ const IDE_TARGETS = {
     label: 'Codex CLI',
     configPath: join(homedir(), '.codex', 'config.toml'),
     format: 'toml',
+  },
+  qoder: {
+    label: 'Qoder',
+    configPath: platform() === 'win32'
+      ? join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'QoderCN', 'SharedClientCache', 'mcp.json')
+      : join(homedir(), '.qoder', 'mcp.json'),
+    format: 'json',
   },
 };
 

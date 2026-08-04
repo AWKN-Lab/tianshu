@@ -1,7 +1,10 @@
 import type { LlmProvider } from './llm/types.js';
+import { loadRuntimeEnv } from './config/runtime-env.js';
 import { closeDb, getDb } from './store/db.js';
 import { EvolutionLifecycle, type EvolutionStatus } from './evolve/lifecycle.js';
 import { EvolutionOrchestrator } from './evolve/operational-evolution.js';
+
+loadRuntimeEnv();
 
 function arg(name: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);
