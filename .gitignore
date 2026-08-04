@@ -6,6 +6,8 @@
 *.key
 *.secret
 credentials.json
+# 运行时会话凭据（不入仓）
+/data/session.token
 
 # ===== 损坏的旧 .git 备份（重命名后保留本地，不入仓）=====
 .git.corrupted-backup/
