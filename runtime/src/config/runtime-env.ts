@@ -6,6 +6,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** Load runtime/.env without overwriting values injected by the MCP host. */
 export function loadRuntimeEnv(): void {
+  // Tests may opt out of disk .env loading to stay hermetic.
+  if (process.env.AWKN_SKIP_ENV_FILE) return;
   const envPath = resolve(__dirname, '..', '..', '.env');
   try {
     const content = readFileSync(envPath, 'utf8');

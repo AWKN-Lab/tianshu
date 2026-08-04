@@ -116,6 +116,7 @@ describe('cli review command', () => {
       env: {
         ...process.env,
         AWKN_DISABLE_EVOLVE: '1',
+        AWKN_SKIP_ENV_FILE: '1',
         AWKN_DB_PATH: join(mkdtempSync(join(tmpdir(), 'cli-review-')), 'test.db'),
         AWKN_SKILLS_ROOT: join(process.cwd(), '..', 'skills'),
       },
