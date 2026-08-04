@@ -45,6 +45,7 @@ capabilities:
       - build
     visibility: public
     card: project/cards/engineer.md
+    full_reference: project/engineer/reference.md
     loop_profile: default
     allowed_tools: []
     content_hash: 4f31574e8deea845e40019277c980d07b507e75dad8ef870c67dc8ae29523744
@@ -57,6 +58,7 @@ capabilities:
       - 发布
     visibility: public
     card: project/cards/cicd.md
+    full_reference: project/cicd/reference.md
     loop_profile: default
     allowed_tools: []
     content_hash: 2d885fee7d54e74ba2a0556640437f17642ed413e344e321ab890a20c29d452f
@@ -69,6 +71,7 @@ capabilities:
       - fix
     visibility: public
     card: project/cards/bugfix.md
+    full_reference: project/bugfix/reference.md
     loop_profile: default
     allowed_tools: []
     content_hash: 3125612df23824883b517f2fdff15acbf3a24afc9a30d4da64bace6201129ec1
@@ -82,6 +85,7 @@ capabilities:
       - review
     visibility: public
     card: project/cards/audit.md
+    full_reference: project/audit/reference.md
     loop_profile: default
     allowed_tools: []
     content_hash: abf4a34085cafa6941d7a090ae949b22d524a957c4b3ab0e1f88203e457bc128
@@ -94,6 +98,7 @@ capabilities:
       - 上线
     visibility: public
     card: project/cards/deploy.md
+    full_reference: project/deploy/reference.md
     loop_profile: default
     allowed_tools: []
     content_hash: fda6e4801d50040cb972741fd933904cd8d547d5052694fe29377df1566d1cd8
