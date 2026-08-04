@@ -1,0 +1,36 @@
+name: agents-ci
+
+on:
+  pull_request:
+    paths:
+      - 'agents/**'
+      - '.github/workflows/agents-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'agents/**'
+      - '.github/workflows/agents-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agents-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agents-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate tianhuo agent contract
+        run: node agents/tianhuo/scripts/check-runtime-contract.js
+      - name: Install gates dependencies (js-yaml only)
+        working-directory: agents/tianhuo/gates
+        run: npm ci
+      - name: Validate structured assets under agents
+        run: node agents/tianhuo/scripts/check-structured-assets.js
