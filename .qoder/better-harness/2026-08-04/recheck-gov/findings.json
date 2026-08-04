@@ -1,0 +1,137 @@
+{
+  "summary": {
+    "projectName": "awkn引擎",
+    "locale": "zh-CN",
+    "modelId": "agent-work-loop-v4",
+    "reportContractVersion": 25,
+    "overview": "本轮为完整复评窗口：上轮三项 Medium 发现已实质推进（runL1 行为测试补齐、runtime/AGENTS.md 覆盖 owner 路由、pre-push+三档本地检查+push-realign 固化且在本窗口真实拦截过一次缺陷推送并完成修复重推）。Runtime 治理通道在本窗口首次完整演练：3 份 DRAFT 经验候选经登记、回放评测（6 次 AgentLoop 运行）、治理裁决并留痕 QUARANTINED。但演练暴露回放评测 token 阈值的结构性缺陷（候选规则注入必然导致 token 回归，知识型候选无法通过）与已知失败白名单无执行点两项机制缺口；门禁链仍单点依赖本机 hooksPath 手工配置且服务端无兜底。",
+    "aiAgentPractice": {
+      "inspectedSurfaces": [
+        "Workflows"
+      ],
+      "coverageRows": [
+        {
+          "surface": "Workflows",
+          "scopes": [
+            "Project"
+          ],
+          "count": 2,
+          "paths": [
+            ".github/workflows/agents-ci.yml",
+            ".github/workflows/runtime-ci.yml"
+          ]
+        },
+        {
+          "surface": "Custom Agents",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0
+        }
+      ]
+    },
+    "assignmentSummaries": [],
+    "dimensions": [
+      {
+        "id": "task-understanding",
+        "label": "任务理解",
+        "score": 70,
+        "summary": "runtime/AGENTS.md 提供 owner 路由与 ARCH 边界，嵌套指令覆盖约 98%，上轮核心模块无上下文入口的缺口已改善；仓根与 agents/ 覆盖缺口仍为线索级。",
+        "findingRefs": []
+      },
+      {
+        "id": "controlled-execution",
+        "label": "可控执行",
+        "score": 66,
+        "summary": "npm 命令面完整，三档分级检查唯一真源在 local-ci.ps1，回放执行器 approvedTools=[] 保持无副作用；doctor 与运行态数据重置入口缺失仅为线索。",
+        "findingRefs": []
+      },
+      {
+        "id": "change-validation",
+        "label": "改动验证",
+        "score": 62,
+        "summary": "runL1 已有直接行为测试（verify-runl1-behavior.ts），三档路由清晰；但 evolve 闭环 3 个 verify 测试登记为已知失败且白名单无任何执行点，门禁基线可信度存疑。",
+        "findingRefs": [
+          "evolve-known-failures-whitelist-not-wired"
+        ]
+      },
+      {
+        "id": "reliable-delivery",
+        "label": "可靠交付",
+        "score": 60,
+        "summary": "本窗口 pre-push 真实触发并拦截一次缺陷推送，完成修复后重推成功，构成完整 Exercised 链；但门禁启用依赖每台机器手工 hooksPath 配置，服务端无兜底。",
+        "findingRefs": [
+          "push-gate-chain-single-point"
+        ]
+      },
+      {
+        "id": "learning-capture",
+        "label": "经验沉淀",
+        "score": 55,
+        "summary": "治理闭环在本窗口真实演练且留痕：3 份 DRAFT 候选经回放评测裁决为 QUARANTINED（token cost regressed），replay_runs 与 quarantine_reason 可追溯；但回放 token 阈值对知识型候选存在结构性偏差，激活环节被机制性阻断，且无可比后验改善证据。",
+        "findingRefs": [
+          "replay-token-threshold-blocks-knowledge-candidates",
+          "learning-closure-state-not-surfaced"
+        ]
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "replay-token-threshold-blocks-knowledge-candidates",
+      "title": "回放评测 token 阈值未排除规则注入开销，知识型候选必然失败",
+      "severity": "High",
+      "reason": "事实：ReplayEvaluator 默认阈值 maxTokenRatio=1.1 以候选/基线总 token 比值裁决，而 AgentReplayRunner 将候选规则全文注入候选运行的 systemPrompt；本轮 3 份候选（EXP-DRV-20260804-003/004/005）回放 successRate=1、errorRate=0、无安全或接管差异，仅 token 比值 1.30/1.65/1.53 超阈，全部以 token cost regressed 裁决 QUARANTINED。推断：只要候选规则有内容，注入即必然抬高 token 消耗，该阈值对知识型候选构成结构性偏差，经验→激活闭环被机制性阻断。Owner：runtime/src/evolve/replay-evaluator.ts 与 operational-evolution.ts。不确定性：token 增量中来自规则内容引导的输出增长部分未被单独度量。",
+      "expectedOutput": [
+        "回放评测阈值排除候选规则注入的固有开销，知识型候选的裁决反映规则对成功率的净贡献。"
+      ],
+      "expectedArtifact": "Evaluation threshold config",
+      "aiFixPrompt": "/better-harness fix this issue\n\n修正回放评测的 token 阈值口径：在比较前扣除候选规则文本自身的注入开销，或改为以成功率/错误率为主门、token 仅作超限告警，保持现有评测留痕边界。\n\n## Validation\n\n- 在 runtime 目录运行 npm run check 确认不受影响\n- 重跑一份 QUARANTINED 候选的 promote 评测，确认裁决不再由规则注入开销单独决定",
+      "dimensionRefs": [
+        "learning-capture"
+      ]
+    },
+    {
+      "id": "evolve-known-failures-whitelist-not-wired",
+      "title": "已知失败白名单无执行点，门禁策略与实现脱节",
+      "severity": "Medium",
+      "reason": "事实：runtime/verify-known-failures.json 登记 evolve 闭环 3 个已知失败（verify-evolve-loop/full-loop/cron-evolve，跟踪 tianshu#43），文档声明白名单不阻断、新失败阻断；但对 runtime/scripts/run-verify-tests.mjs 全文检索确认其不读取该白名单，策略无任何执行点。后果：要么 test:verify 实际为红而检查基线不可信，要么白名单为死配置而门禁文档失真；evolve 闭环目前没有一份通过状态的端到端行为验证证据。Owner：runtime/scripts/run-verify-tests.mjs。不确定性：本评审未运行 test:verify，三个测试当前真实红绿未验证。",
+      "expectedOutput": [
+        "白名单被 runner 真正读取并执行，或三个 evolve verify 测试修复为通过，门禁基线与文档声明一致。"
+      ],
+      "expectedArtifact": "Test runner config",
+      "aiFixPrompt": "/better-harness fix this issue\n\n先运行 npm run test:verify 获取真实结果；随后将 verify-known-failures.json 真正接入 run-verify-tests.mjs（白名单内豁免、名单外新失败阻断），或修复三个 evolve verify 测试并清空白名单，保持现有验收边界。\n\n## Validation\n\n- 在 runtime 目录运行 npm run test:verify 并留存输出\n- 确认门禁策略文档声明与实际 runner 行为一致",
+      "dimensionRefs": [
+        "change-validation"
+      ]
+    },
+    {
+      "id": "push-gate-chain-single-point",
+      "title": "强制门禁链依赖每台机器手工 hooksPath 配置，服务端无兜底",
+      "severity": "Medium",
+      "reason": "事实：.githooks/pre-push 头部注释声明启用需每台机器执行 git config core.hooksPath .githooks，仓内无机制校验该配置生效；两个远程 CI（agents-ci.yml、runtime-ci.yml）均仅 workflow_dispatch 手动触发，注释声明日常 push/PR 不自动运行；项目与资产两个独立证据通道观察到同一后果。后果：未配置 hook 的机器上未经验证的变更可直接推送，机械强制链存在单点失效路径。Owner：仓库存门禁治理（scripts 与 workflows）。不确定性：本窗口本机 hooksPath 实际生效并真实拦截过一次推送，但无法证明其他机器同样配置。",
+      "expectedOutput": [
+        "门禁启用状态可被机械校验，或服务端存在最低限度的 push/PR 兜底检查，未配置 hook 的机器不再构成单点绕过路径。"
+      ],
+      "expectedArtifact": "Gate config",
+      "aiFixPrompt": "/better-harness fix this issue\n\n为门禁链补最小兜底：在初始化/安装脚本中自动设置并校验 core.hooksPath，或为两个远程 CI 增加 push/PR 触发的轻量档检查，保持现有三档检查唯一真源不变。\n\n## Validation\n\n- 确认 hooksPath 校验或远程兜底至少一层落地\n- 运行 scripts/local-ci.ps1 none 档冒烟确认不受影响",
+      "dimensionRefs": [
+        "reliable-delivery"
+      ]
+    },
+    {
+      "id": "learning-closure-state-not-surfaced",
+      "title": "复盘经验闭环状态未对用户面可见，DRAFT 与激活去向不可判断",
+      "severity": "Low",
+      "reason": "事实：会话证据显示用户在复盘 Episode 中直接追问经验候选 DRAFT 未激活的含义与经验迁徙去向；复盘工作流在至少 4 个独立 Episode 中经 AWKN 复盘总结机制重复，但各 Episode 均无可观测变更与验收证据。治理决策实际留痕于 evolution_candidates、quarantine_reason 与 evolution_replay_runs，但无可达用户的 surfaced 视图。后果：闭环在运行而状态不可见，用户重复承担追问成本。Owner：复盘技能与治理留痕面。不确定性：会话采集存在源根缺失，后果覆盖可能被低估。",
+      "expectedOutput": [
+        "复盘产出的经验候选治理状态（DRAFT/评测/激活/隔离）对用户可达，无需追问即可判断闭环去向。"
+      ],
+      "expectedArtifact": "Governance status report",
+      "aiFixPrompt": "/better-harness fix this issue\n\n为经验候选治理状态提供最小可见面：在复盘报告模板中输出候选 ID、当前状态与留痕位置（evolution_candidates/activation_history），保持分析只读边界。\n\n## Validation\n\n- 下一次复盘输出包含候选状态与留痕位置引用\n- 确认引用路径与 runtime 治理数据一致",
+      "dimensionRefs": [
+        "learning-capture"
+      ]
+    }
+  ]
+}
