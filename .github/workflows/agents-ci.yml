@@ -28,3 +28,7 @@ jobs:
         run: npm ci
       - name: Validate structured assets under agents
         run: node agents/tianhuo/scripts/check-structured-assets.js
+      - name: Validate derived markdown assets
+        run: node agents/tianhuo/scripts/check-markdown-assets.js
+      - name: Validate harness core-code boundary
+        run: node agents/tianhuo/scripts/check-core-code.js

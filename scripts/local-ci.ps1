@@ -65,7 +65,7 @@ function Select-CheckMode {
       $_ -match '^agents/.*agent\.prompt$' -or
       $_ -match 'check-runtime-contract'
     })
-  $agentsHit = @($Files | Where-Object { $_ -match '^agents/' })
+  $agentsHit = @($Files | Where-Object { $_ -match '^agents/' -or $_ -match '^\.better-harness/' })
 
   if ($runtimeHit.Count -gt 0) { return 'full' }
   if ($contractHit.Count -gt 0) { return 'contract' }
@@ -79,6 +79,9 @@ function Run-AgentsCheck {
   }
   Invoke-Step 'Agents 派生 Markdown 机械校验' {
     node agents/tianhuo/scripts/check-markdown-assets.js
+  }
+  Invoke-Step 'Harness core-code 边界校验' {
+    node agents/tianhuo/scripts/check-core-code.js
   }
 }
 
