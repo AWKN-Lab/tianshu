@@ -139,11 +139,12 @@ if ($Mode -eq 'auto') {
   Write-Host '变更文件:' -ForegroundColor DarkGray
   foreach ($f in $changed) { Write-Host "  $f" -ForegroundColor DarkGray }
 
-  $Mode = Select-CheckMode $changed
-  if ($Mode -eq 'none') {
+  $resolved = Select-CheckMode $changed
+  if ($resolved -eq 'none') {
     Write-Host '无相关变更，跳过本地检查。' -ForegroundColor Green
     exit 0
   }
+  $Mode = $resolved
   Write-Host "已选档位: $Mode" -ForegroundColor Yellow
 }
 
