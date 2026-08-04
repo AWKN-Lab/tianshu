@@ -1,0 +1,38 @@
+# Core code rules — 核心边界配置（harness 扫描使用）
+# 与 runtime/AGENTS.md 模块 owner 路由表及风险分层保持一致
+# 规则格式：每行一个路径 pattern；`!` 前缀表示排除；`#` 为注释
+# 语义：`runtime/src/<模块>/**` 匹配模块目录本身及其下所有文件
+
+# === 主链核心模块（AGENTS.md 表 1 owner 路由）===
+runtime/src/contracts/**
+runtime/src/input/**
+runtime/src/intent/**
+runtime/src/context/**
+runtime/src/policy/**
+runtime/src/goal/**
+runtime/src/loop/**
+runtime/src/gates/**
+runtime/src/core/**
+runtime/src/broker/**
+runtime/src/tools/**
+runtime/src/llm/**
+runtime/src/delivery/**
+runtime/src/outcome/**
+runtime/src/memory/**
+runtime/src/evolve/**
+runtime/src/store/**
+runtime/src/workflow/**
+runtime/src/workgraph/**
+runtime/src/orchestrator/**
+runtime/src/cron/**
+runtime/src/review/**
+runtime/src/observability/**
+runtime/src/recovery/**
+runtime/src/governor/**
+runtime/src/sandbox/**
+runtime/src/shadow/**
+runtime/src/mcp/**
+runtime/src/worker/**
+
+# === 非核心排除（独立边界，不参与核心命中判定）===
+!runtime/src/skills/**
