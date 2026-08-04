@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 AWKN 本地分级检查入口（GitHub 仅存代码，检查全部在本机完成）
 
