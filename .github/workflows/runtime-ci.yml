@@ -1,17 +1,9 @@
 name: runtime-ci
 
+# 日常门禁由本地三档检查承担（scripts/local-ci.ps1 + .githooks/pre-push）。
+# 远程 CI 改为仅手动触发，作为发布前的最终验收兜底，日常 push/PR 不再自动运行。
 on:
-  pull_request:
-    paths:
-      - 'runtime/**'
-      - 'integrations/open-code-review/**'
-      - '.github/workflows/runtime-ci.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'runtime/**'
-      - 'integrations/open-code-review/**'
-      - '.github/workflows/runtime-ci.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
