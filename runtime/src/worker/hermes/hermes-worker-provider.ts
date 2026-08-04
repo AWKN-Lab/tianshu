@@ -52,7 +52,7 @@ export class HermesWorkerProvider implements WorkerProviderPort {
   }
 
   async probe(): Promise<WorkerProviderCapabilityReceipt> {
-    const probeResult = await this.cli.probe();
+    await this.cli.probe();
     return {
       schema: 'awkn-worker-capability/v1',
       providerId: this.providerId,

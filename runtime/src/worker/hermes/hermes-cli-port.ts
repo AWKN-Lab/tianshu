@@ -134,7 +134,7 @@ export class StubHermesCliPort implements HermesCliPort {
     return { alive: record?.state === 'running', observedAt };
   }
 
-  async reclaim(hermesRunId: string, reason: string): Promise<{ reclaimed: boolean; reclaimedAt: string }> {
+  async reclaim(hermesRunId: string, _reason: string): Promise<{ reclaimed: boolean; reclaimedAt: string }> {
     const record = this.runs.get(hermesRunId);
     if (record) {
       this.runs.set(hermesRunId, { ...record, state: 'reclaimed' });
