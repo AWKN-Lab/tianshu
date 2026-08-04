@@ -18,7 +18,8 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
-import { existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import {
   CronJobsManager,
   validateCronExpr,
@@ -26,11 +27,11 @@ import {
 } from '../src/cron/jobs-manager.js';
 import { getDb, closeDb, queryRun } from '../src/store/db.js';
 
-// 用临时 db 文件，避免污染 runtime/data/awkn-engine.db
+// 测试 db 隔离到系统 tmp 目录：写共享的 runtime/data/ 会在 node --test 并行时
+// 因文件占用出现 EPERM 偶发失败（测试数据必须隔离到 tmp）。
 // 每个测试套件用独立路径，beforeEach 清空表保证 it 之间隔离
 const TEST_DB_PATH = resolve(
-  process.cwd(),
-  'data',
+  mkdtempSync(resolve(tmpdir(), 'cron-test-')),
   `test-cron-${process.pid}.db`,
 );
 

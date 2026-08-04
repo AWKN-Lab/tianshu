@@ -111,15 +111,21 @@ describe('cli review command', () => {
   const cli = join(process.cwd(), 'src', 'cli.ts');
 
   function runCli(args: string[]): { status: number | null; stdout: string; stderr: string } {
+    // 显式清除 OCR pins 相关变量：本机 .env 若含 AWKN_REVIEW_OCR_* 会经 process.env 泄漏给子进程，
+    // 导致“缺 OCR pins”类断言在本机失败而 CI 通过（环境依赖型测试必须先清变量再断言）。
+    const childEnv: Record<string, string | undefined> = {
+      ...process.env,
+      AWKN_DISABLE_EVOLVE: '1',
+      AWKN_SKIP_ENV_FILE: '1',
+      AWKN_DB_PATH: join(mkdtempSync(join(tmpdir(), 'cli-review-')), 'test.db'),
+      AWKN_SKILLS_ROOT: join(process.cwd(), '..', 'skills'),
+    };
+    for (const key of Object.keys(childEnv)) {
+      if (key.startsWith('AWKN_REVIEW_OCR_')) delete childEnv[key];
+    }
     const result = spawnSync(process.execPath, ['--import', 'tsx', cli, ...args], {
       encoding: 'utf8',
-      env: {
-        ...process.env,
-        AWKN_DISABLE_EVOLVE: '1',
-        AWKN_SKIP_ENV_FILE: '1',
-        AWKN_DB_PATH: join(mkdtempSync(join(tmpdir(), 'cli-review-')), 'test.db'),
-        AWKN_SKILLS_ROOT: join(process.cwd(), '..', 'skills'),
-      },
+      env: childEnv,
     });
     return { status: result.status, stdout: result.stdout, stderr: result.stderr };
   }
