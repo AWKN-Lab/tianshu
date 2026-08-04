@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# AWKN pre-push 门（窄检测）
+# ────────────────────────────────────────────────────────────────────────────
+# 只检查"将要推送的提交"涉及的文件，不被无关的工作区草稿/untracked 文件误伤。
+# Git 通过 stdin 逐行提供:  <local_ref> <local_sha> <remote_ref> <remote_sha>
+#   - local_sha 全 0      → 删除远端分支，无需检查
+#   - remote_sha 全 0     → 新分支/无法界定范围 → 保守跑 full
+#   - 其余                → git diff --name-only remote_sha local_sha 汇总
+# 汇总清单交给 scripts/local-ci.ps1 auto（档位选择逻辑唯一真源）。
+# 启用方式（每台机器一次）: git config core.hooksPath .githooks
+# ────────────────────────────────────────────────────────────────────────────
+set -uo pipefail
+
+gitdir="$(git rev-parse --git-dir)"
+list="$gitdir/local-ci-pushed.tmp"
+: > "$list"
+
+ZERO="0000000000000000000000000000000000000000"
+force_full=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # 删除远端分支：无本地内容可查
+  if [ -z "${local_sha:-}" ] || [ "$local_sha" = "$ZERO" ]; then
+    continue
+  fi
+  # 新分支推送：无法用 remote_sha 界定，保守全量
+  if [ -z "${remote_sha:-}" ] || [ "$remote_sha" = "$ZERO" ]; then
+    force_full=1
+    continue
+  fi
+  if ! git diff --name-only "$remote_sha" "$local_sha" >> "$list"; then
+    force_full=1
+  fi
+done
+
+if [ "$force_full" = "1" ]; then
+  echo "[AWKN pre-push] 新分支或无法界定推送范围 -> 运行 full 档检查"
+  exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "./scripts/local-ci.ps1" full
+fi
+
+if [ ! -s "$list" ]; then
+  echo "[AWKN pre-push] 推送提交无相关变更文件，跳过检查。"
+  exit 0
+fi
+
+exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "./scripts/local-ci.ps1" auto -ChangedFilesFile "$list"
