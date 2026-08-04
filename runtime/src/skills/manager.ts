@@ -44,6 +44,45 @@ export function resolveDefaultSkillsRoot(): string {
   return resolve(process.env.AWKN_SKILLS_ROOT ?? process.env.SKILLS_DIR ?? join(PROJECT_ROOT, 'skills'));
 }
 
+/**
+ * 技能扫描忽略目录（2026-08-04 治本）
+ *
+ * 背景：此前忽略列表只有 .git/node_modules/dist/build，导致：
+ *  - 退役技能移进 `_archived/` 后仍被 loadAll() 递归收录，"退役"不生效，
+ *    只能靠把 SKILL.md 改名成 SKILL.asset.md 来绕过，属于治标。
+ *  - `draft/` 下的草稿技能会混进正式索引，被 skill list / match 当成可用技能。
+ *  - Python 工具链产生的 `__pycache__/` 等噪音目录被无谓遍历。
+ *
+ * 规则：目录名命中黑名单，或以下划线 `_` 开头（`_archived`/`_backup`/`_tmp` 等
+ * 归档与临时目录的统一约定），一律不再向下递归。
+ *
+ * 注意：**不**忽略以 `.` 开头的目录 —— `skills/.system/` 下存放 skill-creator、
+ * skilldeck-bridge 等内置技能，且被 awkn-技能治理 引用，忽略会造成断链。
+ */
+export const SKILL_SCAN_IGNORED_DIRS: ReadonlySet<string> = new Set([
+  '.git',
+  'node_modules',
+  'dist',
+  'build',
+  'coverage',
+  'venv',
+  '.venv',
+  '.pytest_cache',
+  '__pycache__',
+  '_archived',
+  'draft',
+  // 父技能"吸收"的第三方子技能素材区：仅作为父技能的路由目标按文件路径读取，
+  // 不应作为独立一级技能进入索引。既有惯例是把子技能主文件改名 SKILL.sub.md
+  // （见 awkn-game/absorbed-skills/），此处从扫描层统一兜底，避免新导入的
+  // 市场技能包（内含 skills/*/SKILL.md）污染 skill list 与 skill match。
+  'absorbed-skills',
+]);
+
+/** 判断某个目录名是否应跳过技能扫描 */
+export function isSkillScanIgnoredDir(name: string): boolean {
+  return SKILL_SCAN_IGNORED_DIRS.has(name) || name.startsWith('_');
+}
+
 export class SkillsManager {
   private readonly records = new Map<string, SkillRecord>();
   /** capability id → CapabilityCard(独立命名空间,不与 SKILL.md 冲突) */
@@ -69,12 +108,13 @@ export class SkillsManager {
       let entries: string[];
       try { entries = readdirSync(dir); } catch { return; }
       for (const entry of entries) {
-        if (entry === '.git' || entry === 'node_modules' || entry === 'dist' || entry === 'build') continue;
         const fullPath = join(dir, entry);
         let stat: ReturnType<typeof statSync>;
         try { stat = statSync(fullPath); } catch { continue; }
-        if (stat.isDirectory()) walk(fullPath, depth + 1);
-        else if (stat.isFile() && entry.toLowerCase() === 'skill.md') {
+        if (stat.isDirectory()) {
+          if (isSkillScanIgnoredDir(entry)) continue;
+          walk(fullPath, depth + 1);
+        } else if (stat.isFile() && entry.toLowerCase() === 'skill.md') {
           try {
             const record = parseSkillFile(fullPath);
             this.records.set(record.meta.name, record);

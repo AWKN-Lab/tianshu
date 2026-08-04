@@ -26,6 +26,8 @@ import { AgentLoop } from '../core/agent-loop.js';
 import { hookManager } from '../core/hook-manager.js';
 import type { HookPoint } from '../core/hook-types.js';
 import { startWorkflow, getWorkflowStatus, resumeWorkflow, cancelWorkflow } from '../workflow/workflow-runtime.js';
+import { getTeamLoop } from '../agent-teams/team/team-loop.js';
+import { getPersonaRegistry } from '../agent-teams/persona/registry.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -69,8 +71,8 @@ const server = new McpServer(
     capabilities: { tools: {} },
     instructions:
       'awkn引擎 — Loop Engineering L1-L4 runtime. ' +
-      'Tools: goal(目标管理) / loop(循环执行) / skill(技能) / hook(事件) / cron(定时) / orchestrate(编排) / evolve(自进化). ' +
-      '注意：loop.l1 / loop.l2 / orchestrate.* 会调用 LLM，可能耗时较长。',
+      'Tools: goal(目标管理) / loop(循环执行) / skill(技能) / hook(事件) / cron(定时) / orchestrate(编排) / evolve(自进化) / team(多智囊团编排) / persona(人格库). ' +
+      '注意：loop.l1 / loop.l2 / orchestrate.* / team.start 会调用 LLM，可能耗时较长。',
   },
 );
 
@@ -460,6 +462,166 @@ server.registerTool(
     try {
       const router = await getTianhuoRouter();
       return { content: [toText(router.status(args.workflowId))] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+// ============================================================
+// AgentTeams 模块（team 4 tools + persona 3 tools）
+// ============================================================
+
+server.registerTool(
+  'awkn_team_start',
+  {
+    description:
+      '启动 AgentTeams 多智囊团协作（Manager 天火编排）：校验 team.json(awkn-team/v1) → DAG 派发 → 汇总。' +
+      '模式：sequential/parallel/review-chain/brainstorm；遇 gate 暂停返回 status=gating，用 awkn_team_intervene 批准恢复。',
+    inputSchema: {
+      team: z
+        .record(z.string(), z.unknown())
+        .describe('team.json 定义：{schema:"awkn-team/v1",teamId,mission,mode,workers[],edges?,gates?}'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const state = await getTeamLoop().start(args.team);
+      return { content: [toText(state)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_team_status',
+  {
+    description: '查询 AgentTeams run 状态（runId 精确查询；缺省列出全部 run）',
+    inputSchema: {
+      runId: z.string().optional().describe('awkn_team_start 返回的 runId；缺省列出全部 run'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const loop = getTeamLoop();
+      const result = args.runId ? loop.status(args.runId) : loop.list();
+      if (args.runId && result === null) return toError(new Error(`run 不存在：${args.runId}`));
+      return { content: [toText(result)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_team_intervene',
+  {
+    description:
+      '人工介入 AgentTeams run：gating 状态下 = 批准当前 gate 并恢复执行；directive 记录为人工介入指令',
+    inputSchema: {
+      runId: z.string().min(1).describe('awkn_team_start 返回的 runId'),
+      directive: z.string().optional().describe('人工介入指令（记入 run 状态与协作事件日志）'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const state = await getTeamLoop().intervene(args.runId, args.directive);
+      return { content: [toText(state)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_team_cancel',
+  {
+    description: '取消 AgentTeams run',
+    inputSchema: {
+      runId: z.string().min(1).describe('awkn_team_start 返回的 runId'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const state = getTeamLoop().cancel(args.runId);
+      return { content: [toText(state)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_persona_list',
+  {
+    description: '列出人格库全部已入库中文人格（仅一/二梯队，第三梯队内容类不入库）',
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      const registry = getPersonaRegistry();
+      return {
+        content: [
+          toText(
+            registry.list().map((p) => ({
+              id: p.id,
+              name: p.name,
+              displayName: p.displayName,
+              tier: p.tier,
+              category: p.category,
+              capabilities: p.capabilities,
+            })),
+          ),
+        ],
+      };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_persona_get',
+  {
+    description: '获取单个人格完整定义（PersonaRole：systemPrompt/thinkingModels/boundaries/collaboration）',
+    inputSchema: {
+      id: z.string().min(1).describe('人格 id，如 drucker/socrates/coder'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const p = getPersonaRegistry().get(args.id);
+      if (!p) return toError(new Error(`人格不存在：${args.id}`));
+      return { content: [toText(p)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_persona_pick',
+  {
+    description:
+      '按使命选编视角议会（组队前置）：定位开发环节 → 主责人格骨架 + 3-5 议会视角；只在一/二梯队内选',
+    inputSchema: {
+      mission: z.string().min(1).describe('团队使命描述'),
+      k: z.number().int().min(1).max(8).optional().describe('议会规模，默认 4'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const result = getPersonaRegistry().pick(args.mission, args.k ?? 4);
+      return {
+        content: [
+          toText({
+            stage: result.stage,
+            primary: result.primary ? { id: result.primary.id, name: result.primary.name } : null,
+            council: result.council.map((p) => ({ id: p.id, name: p.name, tier: p.tier })),
+          }),
+        ],
+      };
     } catch (e) {
       return toError(e);
     }

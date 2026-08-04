@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "summary": {},
+  "dimensions": [
+    {
+      "id": "task-understanding"
+    },
+    {
+      "id": "controlled-execution"
+    },
+    {
+      "id": "change-validation"
+    },
+    {
+      "id": "reliable-delivery"
+    },
+    {
+      "id": "learning-capture"
+    }
+  ],
+  "findings": [
+    {
+      "id": "agents-ci-gate-not-covering-harness-config"
+    },
+    {
+      "id": "derived-docs-sync-no-mechanical-gate"
+    },
+    {
+      "id": "session-source-root-unavailable"
+    }
+  ]
+}

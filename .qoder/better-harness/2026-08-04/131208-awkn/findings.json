@@ -1,0 +1,122 @@
+{
+  "summary": {
+    "projectName": "awkn引擎",
+    "locale": "zh-CN",
+    "modelId": "agent-work-loop-v4",
+    "reportContractVersion": 25,
+    "overview": "复查结论：上一轮 4 个 finding 的修复已全部落 HEAD 并形成闭环——修复产物（agents-ci.yml、check-structured-assets.js、runtime/AGENTS.md、verify-runl1-behavior.ts、manifest.yaml）与治理配置（.gitignore 的 /data/session.token、.better-harness/core-code 29 include/1 exclude）均已提交，机器信封确认 coreCodeRules=configured、agentInstructions=adequate（count=2、覆盖率 98%）、diffScore 100→35、reviewRecommended=false；分层验证执行通过（typecheck/lint/contracts 8/8/verify 24/24 含 runL1 15 例）。残余缺口：agents-ci 触发面不覆盖 .better-harness/** 核心边界配置、派生文档与 INDEX 一致性无机械校验、Qoder 会话采集层未接通使行为验证无可观测通道；CI 在 GitHub 上的真实运行仍属 UNVERIFIED，会话证据依旧为 0。",
+    "aiAgentPractice": {
+      "inspectedSurfaces": [
+        "Workflows"
+      ],
+      "coverageRows": [
+        {
+          "surface": "Workflows",
+          "scopes": [
+            "Project"
+          ],
+          "count": 2,
+          "paths": [
+            ".github/workflows/agents-ci.yml",
+            ".github/workflows/runtime-ci.yml"
+          ]
+        },
+        {
+          "surface": "Custom Agents",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0
+        }
+      ]
+    },
+    "assignmentSummaries": [],
+    "dimensions": [
+      {
+        "id": "task-understanding",
+        "label": "任务理解",
+        "score": 78,
+        "summary": "runtime/AGENTS.md 已入 HEAD（owner 路由、ARCH-001~007 边界、风险分层），harness 识别为 adequate（count=2、nestedSourceFileCoveragePercent=98）；.better-harness/core-code 提供 29 include/1 exclude 显式核心边界（configured-core-boundary），不再靠推断。",
+        "findingRefs": []
+      },
+      {
+        "id": "controlled-execution",
+        "label": "可控执行",
+        "score": 78,
+        "summary": "data/session.token 已被 /data/session.token 忽略规则覆盖（git check-ignore 命中、未跟踪）；npm 命令面与分层验证命令清晰；agents-ci 机械门零依赖设计已提交至 HEAD。残余：agents-ci 触发面（agents/**）不含 .better-harness/**，核心边界配置变更无机械门拦截。",
+        "findingRefs": [
+          "agents-ci-gate-not-covering-harness-config"
+        ]
+      },
+      {
+        "id": "change-validation",
+        "label": "改动验证",
+        "score": 84,
+        "summary": "verify-runl1-behavior.ts（15 例真实行为测试）已入 HEAD 并经 test:verify 执行通过（24/24，含 runL1 15/15）；contracts 8/8、typecheck/lint 通过；check:architecture blockingViolations=0。残余：dual-channel-filter 1 例环境性失败（本地 .env 提供 OCR pins 与测试前提冲突），GitHub CI 运行未观察。",
+        "findingRefs": []
+      },
+      {
+        "id": "reliable-delivery",
+        "label": "可靠交付",
+        "score": 82,
+        "summary": "上一轮修复产物与治理配置全部提交（48dd890/3684a7b/f0854e8/87f91c2/bbed29f 等），HEAD 上 agents-ci 门与行为回归测试真实存在；evidence-pack diffScore 100→35、severity critical→medium、reviewRecommended=false；派生文档与 INDEX 同批提交、删除分离。残余：派生文档/INDEX 一致性依赖人工纪律，无机械校验兜底。",
+        "findingRefs": [
+          "derived-docs-sync-no-mechanical-gate"
+        ]
+      },
+      {
+        "id": "learning-capture",
+        "label": "经验沉淀",
+        "score": 42,
+        "summary": "Qoder 会话采集层未接通（eligibleSessions=0，warningCodes=missing-optional-root/disabled-source-root），修复过程与复查窗口均无会话证据可观测；项目记忆标题层计数为 0；同窗口修复验证不构成有效性提升证据，维度保持受限。",
+        "findingRefs": [
+          "session-source-root-unavailable"
+        ]
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "agents-ci-gate-not-covering-harness-config",
+      "title": "agents-ci 机械门触发面不含 .better-harness/**，核心边界配置变更无门禁拦截",
+      "severity": "Low",
+      "reason": "事实：.github/workflows/agents-ci.yml 的 paths 过滤覆盖 agents/** 与工作流自身文件，不含 .better-harness/**；harness 资产信封 inventory 仅识别该工作流存在（coverageRows Workflows count=2），其内容由 Agent 3 实际打开核对。推断：.better-harness/core-code（上一轮修复 3 的产物，29 include/1 exclude）若被改动，不会触发任何机械门，核心边界漂移将无拦截地合入 HEAD。Owner：.github/workflows/agents-ci.yml 的 paths 过滤。不确定性：CI 在 GitHub 上的实际触发行为未运行验证；agents/** 与 .better-harness/** 的改动频率均低，漂移风险为渐进式。",
+      "expectedOutput": [
+        "harness 核心边界配置（.better-harness/**）变更可触发机械校验，核心边界漂移有门禁拦截。"
+      ],
+      "expectedArtifact": "CI workflow config",
+      "aiFixPrompt": "/better-harness fix this issue\n\n扩展 .github/workflows/agents-ci.yml 的触发面以覆盖 .better-harness/**（或在其中增加针对 core-code 的校验步骤），使核心边界配置变更进入机械门，保持现有验收边界。\n\n## Validation\n\n- 修改 .better-harness/core-code 后确认 agents-ci 工作流可被触发（或校验步骤可拦截格式错误）\n- 运行 npm run check 确认现有检查不受影响",
+      "dimensionRefs": [
+        "controlled-execution"
+      ]
+    },
+    {
+      "id": "derived-docs-sync-no-mechanical-gate",
+      "title": "经验派生文档与 INDEX 引用一致性无机械校验，提交粒度依赖人工纪律",
+      "severity": "Low",
+      "reason": "事实：agents/tianhuo/scripts/check-structured-assets.js 仅做 JSON/YAML 语法校验（错误 exit 1），无任何 EXP-DRV-*.md 与 INDEX.md 引用一致性检查；上一轮修复 4 的治理（15 个派生文档与 INDEX 同批提交 87f91c2、删除分离 bbed29f）由人工执行完成。推断：后续批量生成派生文档时若忘记同步 INDEX 或混提删除，机械门不会拦截，提交粒度将再次滑回不可审计状态。Owner：agents/tianhuo/scripts/check-structured-assets.js 与 EXPERIENCE 目录维护流程。不确定性：EXP-DRV 生成侧的自动更新机制（INDEX 标注'系统自动管理'）是否在未来自行同步未验证；当前 HEAD 上 INDEX 引用无悬空（复查时已核对）。",
+      "expectedOutput": [
+        "派生文档与 INDEX.md 引用一致性由机械校验覆盖，粒度漂移可被门禁拦截。"
+      ],
+      "expectedArtifact": "Script",
+      "aiFixPrompt": "/better-harness fix this issue\n\n为 agents/tianhuo/scripts/check-structured-assets.js 增加 EXP-DRV-*.md 与 INDEX.md 引用一致性校验（INDEX 引用的文件必须存在、存在的派生文档应被索引），保持现有验收边界。\n\n## Validation\n\n- 运行 check-structured-assets.js 确认当前 HEAD 上 INDEX 引用完备（无悬空引用）\n- 删除一个派生文档后确认脚本可报错 exit 1",
+      "dimensionRefs": [
+        "reliable-delivery"
+      ]
+    },
+    {
+      "id": "session-source-root-unavailable",
+      "title": "Qoder 会话采集层未接通，修复闭环与行为验证无可观测通道",
+      "severity": "Low",
+      "reason": "事实：session-analysis facts 信封显示 eligibleSessions=0、selectedSessions=0、warningCodes=[missing-optional-root, disabled-source-root]、omitted 全 0（非筛选丢弃，是采集源未产出）；analyzer 亦报 0/5 enabled source roots 存在。推断：任何依赖会话证据的闭环判定（行为验证、摩擦识别、经验沉淀评估）在采集层修复前都无法独立确认或否认，复查只能依赖提交层与机器信封证据。Owner：Qoder 会话源根配置（workspace 的 session source root 启用与路径配置）。不确定性：采集层缺失的具体配置项（缺失的 optional root 是哪个路径）未在信封中给出；这是可观测性缺口而非行为缺陷，不构成对已提交修复的否定。",
+      "expectedOutput": [
+        "Qoder 会话采集源根接通，facts 信封返回非零 eligibleSessions，行为验证有独立证据通道。"
+      ],
+      "expectedArtifact": "Config",
+      "aiFixPrompt": "/better-harness fix this issue\n\n接通 Qoder 会话采集源根（修复 missing-optional-root 与 disabled-source-root 对应配置），使后续复查可获得会话证据，保持现有验收边界。\n\n## Validation\n\n- 重新运行 session-analysis facts 命令，确认 eligibleSessions 大于 0 且 warningCodes 不再包含 disabled-source-root",
+      "dimensionRefs": [
+        "learning-capture"
+      ]
+    }
+  ]
+}

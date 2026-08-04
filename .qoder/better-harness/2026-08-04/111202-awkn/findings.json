@@ -1,0 +1,121 @@
+{
+  "summary": {
+    "projectName": "awkn引擎",
+    "locale": "zh-CN",
+    "modelId": "agent-work-loop-v4",
+    "reportContractVersion": 25,
+    "overview": "项目拥有分层的验证命令与测试隔离能力，但核心 Agent 循环缺少行为级回归保护，核心代码模块没有 Agent 上下文入口，且 agents/ 变更域不在任何机械门覆盖内；经验沉淀由独立组件 Memory OS 承载但尚未发布集成，学习循环证据留存在组件边界外。",
+    "aiAgentPractice": {
+      "inspectedSurfaces": [
+        "Workflows"
+      ],
+      "coverageRows": [
+        {
+          "surface": "Workflows",
+          "scopes": [
+            "Project"
+          ],
+          "count": 1,
+          "paths": [
+            ".github/workflows/runtime-ci.yml"
+          ]
+        },
+        {
+          "surface": "Custom Agents",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0
+        }
+      ]
+    },
+    "assignmentSummaries": [],
+    "dimensions": [
+      {
+        "id": "task-understanding",
+        "label": "任务理解",
+        "score": 52,
+        "summary": "唯一 AGENTS.md 只覆盖 agents/tianhuo，runtime/src 的 273 个源文件没有任何指令覆盖，coreCodeRules 缺失，Agent 进入核心模块只能靠推断。",
+        "findingRefs": [
+          "core-modules-no-agent-context"
+        ]
+      },
+      {
+        "id": "controlled-execution",
+        "label": "可控执行",
+        "score": 64,
+        "summary": "npm ci/dev/check 命令面清晰，run-tests.mjs 具备临时 DB 隔离与 AWKN_* 环境净化；但均为静态证据，无任何已运行/已演练的会话证据支撑。",
+        "findingRefs": []
+      },
+      {
+        "id": "change-validation",
+        "label": "改动验证",
+        "score": 50,
+        "summary": "unit/contracts/verify 分层与自定义架构门存在，但核心路径 agent-loop.ts runL1 只有源码字符串静态断言，没有直接行为测试覆盖其触发、失败恢复与结果路径。",
+        "findingRefs": [
+          "agent-loop-no-behavioral-tests"
+        ]
+      },
+      {
+        "id": "reliable-delivery",
+        "label": "可靠交付",
+        "score": 48,
+        "summary": "CI 门仅覆盖 runtime/** 与 integrations/**，agents/** 变更不触发任何门；当前 14 文件 untracked 文档 diff 标记 critical 却无门覆盖，验收信号与风险定位失真。",
+        "findingRefs": [
+          "agents-domain-outside-mechanical-gates"
+        ]
+      },
+      {
+        "id": "learning-capture",
+        "label": "经验沉淀",
+        "score": 45,
+        "summary": "经验沉淀由独立组件 Memory OS 承载（Capture→Normalize→Evidence→Confirmed Experience 管线，含 Memory Lifecycle T0-T4、Retrieval V4、Claim 系统），但该组件处于 DEVELOPMENT_VERIFIED / NOT_RELEASED 状态、未与运行时集成验证，且不在本次评审的工作区边界内；Qoder 会话源为 0 属组件外证据边界，重复工作与维护漂移无法在本窗口判定。",
+        "findingRefs": []
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "agent-loop-no-behavioral-tests",
+      "title": "核心 Agent 循环没有行为级回归测试，验证依赖源码字符串静态断言",
+      "severity": "Medium",
+      "reason": "事实：runtime/src/core/agent-loop.ts 的 runL1（约 952 行、10 天内 11 次提交、churn 1512）承载触发、maxTurns 边界、token 异常、LLM 连续失败终止、checkpoint 恢复与审计失败 fail-open 等核心决策，但无直接单元测试；现有验证 verify-loop-checkpoint.ts 只断言源码包含 saveCheckpoint/clearCheckpoint/resumeFrom 等字样。推断：无害重构会触发假阳性，行为回归会漏检，核心路径变更缺少可靠的评审与回归证据。Owner：runtime/src/core/agent-loop.ts 与 runtime/test/verify-loop-checkpoint.ts。不确定性：搜索覆盖 agent-loop|AgentLoop|runL1 关键词，可能存在未匹配的测试；本评审未运行测试。",
+      "expectedOutput": [
+        "runL1 核心路径拥有直接行为测试，验证回归时不再依赖源码字符串静态断言。"
+      ],
+      "expectedArtifact": "Tests",
+      "aiFixPrompt": "/better-harness fix this issue\n\n为 runL1 的触发、边界决策、失败恢复与结果路径补充直接行为测试，替代或补强仅检查源码字符串的静态断言，保持现有验收边界。\n\n## Validation\n\n- 在 runtime 目录运行 npm run check 确认完整检查通过\n- 新增测试覆盖至少一条失败恢复路径（如 LLM 连续失败终止或 checkpoint 恢复）并实际运行通过",
+      "dimensionRefs": [
+        "change-validation"
+      ]
+    },
+    {
+      "id": "core-modules-no-agent-context",
+      "title": "核心代码模块缺少 Agent 上下文入口，指令覆盖为零",
+      "severity": "Medium",
+      "reason": "事实：唯一 AGENTS.md 位于 agents/tianhuo/02-流程与规范/，覆盖 0 个源文件；runtime/src（273 文件）无嵌套指令；coreCodeRules include/exclude 均为 0（inferred-core-boundary）；docs/ 存在设计文档但无证据可导航到 owner。推断：Agent 进入 contracts/store/llm/review 等核心模块时没有任务入口、边界与风险指引，只能依赖推断，上下文与范围控制能力被削弱。Owner：agents/tianhuo/02-流程与规范/AGENTS.md 与 runtime/src。不确定性：docs/ 目录是否实际承担导航作用未逐一验证。",
+      "expectedOutput": [
+        "runtime/src 核心模块拥有可路由的上下文入口，Agent 进入核心代码时有明确的 owner 与边界指引。"
+      ],
+      "expectedArtifact": "AGENTS.md",
+      "aiFixPrompt": "/better-harness fix this issue\n\n为 runtime/src 核心模块补上最小的 Agent 上下文入口：模块 owner 路由、边界与风险指引，或配置 coreCodeRules 核心边界，保持现有验收边界。\n\n## Validation\n\n- 在 runtime 目录运行 npm run check 确认现有检查不受影响\n- 确认核心模块新增指引可被 Agent 检索到（AGENTS.md 或等价配置）",
+      "dimensionRefs": [
+        "task-understanding"
+      ]
+    },
+    {
+      "id": "agents-domain-outside-mechanical-gates",
+      "title": "agents/ 变更域不在任何机械门覆盖内，严重性信号失真",
+      "severity": "Medium",
+      "reason": "事实：CI（.github/workflows/runtime-ci.yml）paths 仅覆盖 runtime/** 与 integrations/**，仓库无 pre-commit/pre-push 钩子；当前 14 个变更文件全部是 agents/tianhuo 下的 untracked 派生文档（763 行），不触发 CI、coreHits=0，但 diffScore=87 被标记 critical。推断：agents/ 下派生产物变更在提交前无机械验证，且 critical 严重性会把风险定位引向非核心区域。Owner：.github/workflows/runtime-ci.yml。不确定性：本地可能存在人工 review 流程，本证据无法支持或否定。",
+      "expectedOutput": [
+        "agents/ 派生产物变更在提交或推送前经过机械验证，验收信号不再把风险定位引向非核心区域。"
+      ],
+      "expectedArtifact": "CI workflow config",
+      "aiFixPrompt": "/better-harness fix this issue\n\n为 agents/ 变更域补齐最小的机械门覆盖：扩展 CI paths 或增加本地 pre-commit 检查，使派生产物变更在到达验收边界前被验证，保持现有验收边界。\n\n## Validation\n\n- 确认 agents/** 路径变更可触发 CI 或本地门\n- 运行 npm run check 确认现有检查不受影响",
+      "dimensionRefs": [
+        "reliable-delivery"
+      ]
+    }
+  ]
+}

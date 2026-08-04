@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "summary": {},
+  "dimensions": [
+    {
+      "id": "task-understanding"
+    },
+    {
+      "id": "controlled-execution"
+    },
+    {
+      "id": "change-validation"
+    },
+    {
+      "id": "reliable-delivery"
+    },
+    {
+      "id": "learning-capture"
+    }
+  ],
+  "findings": [
+    {
+      "id": "agent-loop-no-behavioral-tests"
+    },
+    {
+      "id": "core-modules-no-agent-context"
+    },
+    {
+      "id": "agents-domain-outside-mechanical-gates"
+    }
+  ]
+}

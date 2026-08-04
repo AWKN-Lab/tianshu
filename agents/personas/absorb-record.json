@@ -1,0 +1,102 @@
+{
+  "schema": "awkn-persona-absorb-record/v1",
+  "recordedAt": "2026-08-04T22:59:30.137Z",
+  "pipeline": "absorb-eval（schema 校验门禁）→ absorb-auto（落库）",
+  "gate": "PersonaRole JSON Schema strict 校验；字段缺失/重名 → 拒绝入库",
+  "tiers": {
+    "tier1": {
+      "policy": "必吸·开发核心",
+      "count": 7
+    },
+    "tier2": {
+      "policy": "可选·决策增强",
+      "count": 3
+    },
+    "tier3": {
+      "policy": "暂缓·内容创作（未入库）",
+      "count": 0
+    }
+  },
+  "personas": [
+    {
+      "id": "drucker",
+      "name": "产品顾问",
+      "tier": 1,
+      "status": "skipped",
+      "sourceAgent": "mavis/drucker",
+      "schemaValidated": true
+    },
+    {
+      "id": "socrates",
+      "name": "思辨者",
+      "tier": 1,
+      "status": "skipped",
+      "sourceAgent": "mavis/socrates",
+      "schemaValidated": true
+    },
+    {
+      "id": "coder",
+      "name": "工程师",
+      "tier": 1,
+      "status": "skipped",
+      "sourceAgent": "mavis/coder",
+      "schemaValidated": true
+    },
+    {
+      "id": "docsmith",
+      "name": "文档匠",
+      "tier": 1,
+      "status": "skipped",
+      "sourceAgent": "awkn/docsmith",
+      "schemaValidated": true
+    },
+    {
+      "id": "verifier",
+      "name": "验证官",
+      "tier": 1,
+      "status": "skipped",
+      "sourceAgent": "mavis/verifier",
+      "schemaValidated": true
+    },
+    {
+      "id": "sherlock",
+      "name": "侦探",
+      "tier": 1,
+      "status": "skipped",
+      "sourceAgent": "mavis/sherlock",
+      "schemaValidated": true
+    },
+    {
+      "id": "researcher",
+      "name": "调研员",
+      "tier": 1,
+      "status": "skipped",
+      "sourceAgent": "awkn/researcher",
+      "schemaValidated": true
+    },
+    {
+      "id": "general",
+      "name": "决策将军",
+      "tier": 2,
+      "status": "skipped",
+      "sourceAgent": "mavis/general",
+      "schemaValidated": true
+    },
+    {
+      "id": "ansoff-porter",
+      "name": "战略家",
+      "tier": 2,
+      "status": "skipped",
+      "sourceAgent": "mavis/ansoff-porter",
+      "schemaValidated": true
+    },
+    {
+      "id": "analyst",
+      "name": "分析师",
+      "tier": 2,
+      "status": "skipped",
+      "sourceAgent": "awkn/analyst",
+      "schemaValidated": true
+    }
+  ]
+}

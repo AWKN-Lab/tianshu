@@ -1,0 +1,103 @@
+{
+  "schema": "awkn-persona-index/v1",
+  "updatedAt": "2026-08-04T22:59:30.131Z",
+  "personas": [
+    {
+      "id": "drucker",
+      "name": "产品顾问",
+      "tier": 1,
+      "category": "business",
+      "capabilities": [
+        "prd"
+      ]
+    },
+    {
+      "id": "socrates",
+      "name": "思辨者",
+      "tier": 1,
+      "category": "business",
+      "capabilities": [
+        "spec",
+        "retrospective"
+      ]
+    },
+    {
+      "id": "coder",
+      "name": "工程师",
+      "tier": 1,
+      "category": "technical",
+      "capabilities": [
+        "engineer",
+        "cicd",
+        "deploy",
+        "bugfix"
+      ]
+    },
+    {
+      "id": "docsmith",
+      "name": "文档匠",
+      "tier": 1,
+      "category": "technical",
+      "capabilities": [
+        "engineering-docs"
+      ]
+    },
+    {
+      "id": "verifier",
+      "name": "验证官",
+      "tier": 1,
+      "category": "technical",
+      "capabilities": [
+        "audit",
+        "execution-check"
+      ]
+    },
+    {
+      "id": "sherlock",
+      "name": "侦探",
+      "tier": 1,
+      "category": "business",
+      "capabilities": [
+        "bugfix",
+        "prd"
+      ]
+    },
+    {
+      "id": "researcher",
+      "name": "调研员",
+      "tier": 1,
+      "category": "functional",
+      "capabilities": [
+        "spec",
+        "engineering-docs"
+      ]
+    },
+    {
+      "id": "general",
+      "name": "决策将军",
+      "tier": 2,
+      "category": "general",
+      "capabilities": [
+        "tianhuo"
+      ]
+    },
+    {
+      "id": "ansoff-porter",
+      "name": "战略家",
+      "tier": 2,
+      "category": "business",
+      "capabilities": [
+        "prd"
+      ]
+    },
+    {
+      "id": "analyst",
+      "name": "分析师",
+      "tier": 2,
+      "category": "functional",
+      "capabilities": [
+        "engineer"
+      ]
+    }
+  ]
+}

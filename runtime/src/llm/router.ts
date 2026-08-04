@@ -10,6 +10,7 @@ import type { ChatMessage, ChatRequest, ChatResponse, LlmProvider, LlmProviderIn
 import { TraeProvider } from './providers/trae.js';
 import { CodexProvider } from './providers/codex.js';
 import { MiniMaxProvider } from './providers/minimax.js';
+import { OpenCodeProvider } from './providers/opencode.js';
 
 const logger = createLogger('LlmRouter');
 
@@ -30,6 +31,7 @@ export class LlmRouter {
     this.providers.set('trae', new TraeProvider());
     this.providers.set('codex', new CodexProvider());
     this.providers.set('minimax', new MiniMaxProvider());
+    this.providers.set('opencode', new OpenCodeProvider());
     if (injectedProviders) {
       for (const [name, provider] of injectedProviders) this.providers.set(name, provider);
     }
@@ -105,10 +107,12 @@ export class LlmRouter {
       }
 
       const fallbackChain: LlmProvider[] = provider.name === 'trae'
-        ? ['codex', 'minimax']
+        ? ['codex', 'minimax', 'opencode']
         : provider.name === 'codex'
           ? ['minimax', 'trae']
-          : ['trae', 'codex'];
+          : provider.name === 'opencode'
+            ? ['minimax', 'codex']
+            : ['trae', 'codex'];
 
       for (const name of fallbackChain) {
         const fallback = this.providers.get(name);

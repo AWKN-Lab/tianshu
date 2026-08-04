@@ -1,4 +1,4 @@
-export type LlmProvider = 'trae' | 'codex' | 'minimax';
+export type LlmProvider = 'trae' | 'codex' | 'minimax' | 'opencode';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';

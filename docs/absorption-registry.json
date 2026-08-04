@@ -686,6 +686,120 @@
       ],
       "verification": "npx tsx --test test/absorption-p1.test.ts — 19/19 pass",
       "notes": "CorrectionStatus 新增 verified；verifyByFingerprint(fingerprint, verificationRef)；fingerprintHealth 聚合 open/resolved/verified/ignored + latestError/lastActivity（COALESCE）；src/evolve/corrections-ledger.ts 哈希更新 (LF 口径) —— 治理验收 2026-08-01"
+    },
+    {
+      "id": "Q-1",
+      "capability": "QMind Knowledge 知识库技能（RAG Q&A / 检索 / notebook / 批量上传 / 编译 lint）",
+      "sourceRef": "Qoder 插件市场 qmind-knowledge@qoder-marketplace v0.1.0（作者 Qoder）",
+      "license": "upstream-unknown（插件未声明许可证；技能为使用指引型内容）",
+      "implementedFiles": [
+        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/qmind-knowledge/0.1.0"
+      ],
+      "sha256": {
+        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/qmind-knowledge/0.1.0/.qoder-plugin/plugin.json": "F032575B66018FA122829B0C541157A41E7C67F187A7DB5E3E173B59109E7462"
+      },
+      "integratedInto": [
+        "skills/awkn-技能治理/data/external-skills-index.json",
+        "skills/awkn-技能治理/references/absorbed-capability-matrix.md"
+      ],
+      "tests": [],
+      "verification": "python skill-cli.py sync-sources — 全部 36 个技能条目索引成功",
+      "notes": "qmind CLI 按需下载（PROD only），凭据存 ~/.qmind/credentials.json；吸收方式为存档式（absorbed-skills），不注册为默认技能；2026-08-04 吸收"
+    },
+    {
+      "id": "Q-2",
+      "capability": "Architecture Visualization 架构可视化技能族（13 技能：c4model / explore / system-modeler / flow-visualizer / graphviz / drawio / evolution-planner / architecture-health / risk-quality-reviewer / dependency-impact-analyzer / deployment-topology-analyzer / legacy-system-visualizer / architecture-communicator）",
+      "sourceRef": "Qoder 插件市场 architecture-visualization@qoder-marketplace v0.1.0（作者 Qoder）",
+      "license": "upstream-unknown；THIRD_PARTY_NOTICES 声明 Structurizr DSL 为 Apache-2.0 引用（不捆绑源码）",
+      "implementedFiles": [
+        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/architecture-visualization/0.1.0"
+      ],
+      "sha256": {
+        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/architecture-visualization/0.1.0/.qoder-plugin/plugin.json": "C329216555F6EE3CFF846E64DA369202CEAAE7EB5B20551ECDA189C7238D0495"
+      },
+      "integratedInto": [
+        "skills/awkn-技能治理/data/external-skills-index.json",
+        "skills/awkn-技能治理/references/absorbed-capability-matrix.md"
+      ],
+      "tests": [],
+      "verification": "python skill-cli.py sync-sources — 全部 36 个技能条目索引成功",
+      "notes": "含 canvases（dot/dsl/mermaid）与 references 图谱配方；吸收方式为存档式，不注册为默认技能；2026-08-04 吸收"
+    },
+    {
+      "id": "Q-3",
+      "capability": "Design Review 前端设计审查技能族（10 技能：design-qa / design-md-review / design-system-capture / ui-alignment-review / visual-regression-review / accessibility-review / design-debt-review / component-library-alignment / responsive-design / ui-designer）",
+      "sourceRef": "Qoder 插件市场 design-review@qoder-marketplace v0.1.0（作者 Qoder）",
+      "license": "upstream-unknown（插件未声明许可证）",
+      "implementedFiles": [
+        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/design-review/0.1.0"
+      ],
+      "sha256": {
+        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/design-review/0.1.0/.qoder-plugin/plugin.json": "A11FF003E9C61E2C257AE1567BDDCF7277B5B7E9E22BFA72F5634CDCBCBEFDCA"
+      },
+      "integratedInto": [
+        "skills/awkn-技能治理/data/external-skills-index.json",
+        "skills/awkn-技能治理/references/absorbed-capability-matrix.md"
+      ],
+      "tests": [],
+      "verification": "python skill-cli.py sync-sources — 全部 36 个技能条目索引成功",
+      "notes": "含 shared/lib 审计脚本（*.mjs）与 DESIGN.md / SCREEN_SPEC.md / design.qa.yaml 模板；吸收方式为存档式，不注册为默认技能；2026-08-04 吸收"
+    },
+    {
+      "id": "Q-4",
+      "capability": "Alibaba Cloud Core 阿里云 OpenAPI 技能族（10 技能：alibabacloud-cli-guidance / alibabacloud-sdk-usage / alibabacloud-suggest-cli / alibabacloud-cli-cost-estimation / alibabacloud-find-skills / alibabacloud-terraform-code-generation / alibabacloud-terraform-import / alibabacloud-mcp-core-script-generate / mcp-core-best-practices / multi-account-query）+ hooks 追踪脚本",
+      "sourceRef": "Qoder 插件市场 alibabacloud-core@qoder-marketplace v1.0.20（作者 Alibaba Cloud，上游 aliyun/alibabacloud-agent-toolkit）",
+      "license": "upstream-unknown（README 未声明；.claude-plugin 同时提供）",
+      "implementedFiles": [
+        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/alibabacloud-core/1.0.20"
+      ],
+      "sha256": {
+        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/alibabacloud-core/1.0.20/.qoder-plugin/plugin.json": "B53AD949DE49D725C04D222648FBABC336E6576505080577239D731AAA699EEC"
+      },
+      "integratedInto": [
+        "skills/awkn-技能治理/data/external-skills-index.json",
+        "skills/awkn-技能治理/references/absorbed-capability-matrix.md"
+      ],
+      "tests": [],
+      "verification": "python skill-cli.py sync-sources — 全部 36 个技能条目索引成功",
+      "notes": "依赖 alibabacloud-core MCP 服务器（.mcp.json），未接入 runtime MCP 白名单；hooks 为 Codex/Claude/QoderWork 追踪脚本，不激活；吸收方式为存档式；2026-08-04 吸收"
+    },
+    {
+      "id": "Q-5",
+      "capability": "Meoo 全栈构建技能（meoo-cli：SPA + Supabase + Deno 边缘函数 + 云服务）",
+      "sourceRef": "Qoder 插件市场 meoo@qoder-marketplace v0.1.0（作者 Meoo Team）",
+      "license": "upstream-unknown（插件未声明许可证）",
+      "implementedFiles": [
+        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/meoo/0.1.0"
+      ],
+      "sha256": {
+        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/meoo/0.1.0/.qoder-plugin/plugin.json": "F6C5A8889904CC92B51B0F18A4B626C04A267DE8BB4484DC1687DCAA7E19E508"
+      },
+      "integratedInto": [
+        "skills/awkn-技能治理/data/external-skills-index.json",
+        "skills/awkn-技能治理/references/absorbed-capability-matrix.md"
+      ],
+      "tests": [],
+      "verification": "python skill-cli.py sync-sources — 全部 36 个技能条目索引成功",
+      "notes": "依赖 meoo CLI（外部工具）；吸收方式为存档式，不注册为默认技能；2026-08-04 吸收"
+    },
+    {
+      "id": "Q-6",
+      "capability": "WXZ CLI 万小智建站技能（wxz-cli：自然语言建站 / 预览 / 发布）",
+      "sourceRef": "Qoder 插件市场 wxz-cli@qoder-marketplace v1.0.10（作者 Wanxiaozhi Team）",
+      "license": "MIT（MSEA AI Staff Team, Copyright 2025-2026，插件内 LICENSE 文件）",
+      "implementedFiles": [
+        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/wxz-cli/1.0.10"
+      ],
+      "sha256": {
+        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/wxz-cli/1.0.10/.qoder-plugin/plugin.json": "922E3161085DC22A2A3906330913485E7C9542AE64588402482375E664ADF83A"
+      },
+      "integratedInto": [
+        "skills/awkn-技能治理/data/external-skills-index.json",
+        "skills/awkn-技能治理/references/absorbed-capability-matrix.md"
+      ],
+      "tests": [],
+      "verification": "python skill-cli.py sync-sources — 全部 36 个技能条目索引成功",
+      "notes": "MIT 许可明确可再分发；依赖 wxz CLI（外部工具）；吸收方式为存档式，不注册为默认技能；2026-08-04 吸收"
     }
   ]
 }

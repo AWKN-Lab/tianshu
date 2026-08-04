@@ -9,7 +9,7 @@ import type Database from 'better-sqlite3';
 import type { ExecutionContext, ToolHandler } from '../types.js';
 import { ObjectRefSchema } from '../../contracts/public.js';
 
-const PROVIDERS = new Set<LlmProvider>(['trae', 'codex', 'minimax']);
+const PROVIDERS = new Set<LlmProvider>(['trae', 'codex', 'minimax', 'opencode']);
 const ENGINE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const ENGINE_OCR_ROOT = resolve(ENGINE_ROOT, 'integrations/open-code-review');
 const DEFAULT_OCR_BINARY = resolve(ENGINE_OCR_ROOT, 'bin', process.platform === 'win32' ? 'ocr.exe' : 'ocr');
