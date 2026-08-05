@@ -60,6 +60,8 @@ export interface PromoteCandidateResult {
   linkedEvolutionCandidateId?: string;
   replayVerdict?: 'PASS' | 'FAIL';
   replayReasons?: string[];
+  /** 非裁决性超限告警（如 token 注入开销），随回放结果留痕 */
+  replayWarnings?: string[];
 }
 
 // ─── 常量 ─────────────────────────────────────────────────
@@ -238,10 +240,12 @@ export async function promoteCandidateToEvolution(
   const runner = params.replayRunner ?? defaultRunner;
   let verdict: 'PASS' | 'FAIL';
   let reasons: string[];
+  let warnings: string[] = [];
   try {
     const result = await evaluator.evaluate(linkedCandidate.id, runner, params.thresholds);
     verdict = result.verdict;
     reasons = result.reasons;
+    warnings = result.warnings;
   } catch (err) {
     // 回放执行失败 → 保持 VALIDATING
     return {
@@ -262,6 +266,7 @@ export async function promoteCandidateToEvolution(
       linkedEvolutionCandidateId: linkedCandidate.id,
       replayVerdict: 'FAIL',
       replayReasons: reasons,
+      replayWarnings: warnings,
     };
   }
 
@@ -293,6 +298,7 @@ export async function promoteCandidateToEvolution(
         linkedEvolutionCandidateId: linkedCandidate.id,
         replayVerdict: 'PASS',
         replayReasons: reasons,
+        replayWarnings: warnings,
       };
     }
 
@@ -305,6 +311,7 @@ export async function promoteCandidateToEvolution(
       linkedEvolutionCandidateId: linkedCandidate.id,
       replayVerdict: 'PASS',
       replayReasons: reasons,
+      replayWarnings: warnings,
     };
   });
 }

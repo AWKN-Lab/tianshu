@@ -11,6 +11,8 @@ import { TraeProvider } from './providers/trae.js';
 import { CodexProvider } from './providers/codex.js';
 import { MiniMaxProvider } from './providers/minimax.js';
 import { OpenCodeProvider } from './providers/opencode.js';
+import { OpenRouterProvider } from './providers/openrouter.js';
+import { AipingProvider } from './providers/aiping.js';
 
 const logger = createLogger('LlmRouter');
 
@@ -32,6 +34,8 @@ export class LlmRouter {
     this.providers.set('codex', new CodexProvider());
     this.providers.set('minimax', new MiniMaxProvider());
     this.providers.set('opencode', new OpenCodeProvider());
+    this.providers.set('openrouter', new OpenRouterProvider());
+    this.providers.set('aiping', new AipingProvider());
     if (injectedProviders) {
       for (const [name, provider] of injectedProviders) this.providers.set(name, provider);
     }
@@ -107,12 +111,16 @@ export class LlmRouter {
       }
 
       const fallbackChain: LlmProvider[] = provider.name === 'trae'
-        ? ['codex', 'minimax', 'opencode']
+        ? ['codex', 'minimax', 'opencode', 'openrouter', 'aiping']
         : provider.name === 'codex'
-          ? ['minimax', 'trae']
+          ? ['minimax', 'openrouter', 'aiping', 'trae']
           : provider.name === 'opencode'
-            ? ['minimax', 'codex']
-            : ['trae', 'codex'];
+            ? ['minimax', 'aiping', 'openrouter', 'codex']
+            : provider.name === 'aiping'
+              ? ['openrouter', 'minimax', 'opencode', 'codex']
+              : provider.name === 'openrouter'
+                ? ['aiping', 'minimax', 'opencode', 'codex']
+                : ['trae', 'codex', 'minimax'];
 
       for (const name of fallbackChain) {
         const fallback = this.providers.get(name);

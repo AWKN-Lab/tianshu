@@ -312,6 +312,7 @@ export class EvolutionOrchestrator {
         evaluation: {
           verdict: evaluation.verdict,
           reasons: evaluation.reasons,
+          warnings: evaluation.warnings,
           baseline: evaluation.baseline,
           candidate: evaluation.candidate,
         },

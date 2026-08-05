@@ -106,6 +106,8 @@ export class ReplayEvaluator {
     baseline: ReplayMetrics;
     candidate: ReplayMetrics;
     reasons: string[];
+    /** 非裁决性超限告警（如 token 注入开销），不影响 verdict，随评测留痕 */
+    warnings: string[];
   }> {
     const candidate = this.lifecycle.read(candidateId);
     if (!candidate) throw new Error(`candidate ${candidateId} not found`);
@@ -126,14 +128,21 @@ export class ReplayEvaluator {
     const candidateMetrics = aggregate(candidateResults);
     const config = { ...DEFAULT_THRESHOLDS, ...thresholds };
     const reasons: string[] = [];
+    const warnings: string[] = [];
+    // 主门禁：成功率/错误率/轮次/接管/安全违规，直接裁决
     if (candidateMetrics.successRate < baseline.successRate + config.minSuccessDelta) reasons.push('success rate did not meet threshold');
-    if (baseline.tokenCount > 0 && candidateMetrics.tokenCount / baseline.tokenCount > config.maxTokenRatio) reasons.push('token cost regressed');
     if (baseline.avgCycles > 0 && candidateMetrics.avgCycles / baseline.avgCycles > config.maxCycleRatio) reasons.push('cycle count regressed');
     if (candidateMetrics.errorRate - baseline.errorRate > config.maxErrorDelta) reasons.push('error rate regressed');
     if (candidateMetrics.humanTakeoverRate - baseline.humanTakeoverRate > config.maxTakeoverDelta) reasons.push('human takeover rate regressed');
     if (candidateMetrics.securityViolationRate - baseline.securityViolationRate > config.maxSecurityViolationDelta) reasons.push('security violations regressed');
+    // token 仅作超限告警：候选侧 token 增量包含规则文本自身的注入开销（system prompt
+    // 注入 CANDIDATE_ENGINEERING_RULE 块），不能由该固定开销单独裁决 QUARANTINED。
+    // 超限仍随评测留痕（warnings + delta_json），供成本观测与人工复核。
+    if (baseline.tokenCount > 0 && candidateMetrics.tokenCount / baseline.tokenCount > config.maxTokenRatio) {
+      warnings.push(`token cost exceeded warning ratio (maxTokenRatio=${config.maxTokenRatio})`);
+    }
     const verdict = reasons.length === 0 ? 'PASS' : 'FAIL';
-    const evaluation = { verdict, reasons, thresholds: config, cases: cases.length };
+    const evaluation = { verdict, reasons, warnings, thresholds: config, cases: cases.length };
 
     this.db.prepare(
       `INSERT INTO evolution_evaluations
@@ -165,6 +174,6 @@ export class ReplayEvaluator {
     } else {
       this.lifecycle.transition(candidateId, verdict === 'PASS' ? 'APPROVED' : 'QUARANTINED', reasons.join('; '));
     }
-    return { verdict, baseline, candidate: candidateMetrics, reasons };
+    return { verdict, baseline, candidate: candidateMetrics, reasons, warnings };
   }
 }
