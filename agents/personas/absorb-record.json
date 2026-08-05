@@ -1,6 +1,6 @@
 {
   "schema": "awkn-persona-absorb-record/v1",
-  "recordedAt": "2026-08-04T22:59:30.137Z",
+  "recordedAt": "2026-08-05T16:41:34.756Z",
   "pipeline": "absorb-eval（schema 校验门禁）→ absorb-auto（落库）",
   "gate": "PersonaRole JSON Schema strict 校验；字段缺失/重名 → 拒绝入库",
   "tiers": {
