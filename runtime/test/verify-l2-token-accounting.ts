@@ -42,8 +42,12 @@ function assert(cond: boolean, msg: string): void {
 async function main(): Promise<void> {
   console.log('=== M3 进阶-6 验证：agent-loop runL2 token 双计 bug 修复 ===\n');
 
-  // 临时 DB
-  const tmpDir = resolve(process.cwd(), 'test-tmp-l2-token');
+  // 临时 DB：唯一路径（pid+时间戳），避免与历史 test:all 残留或并发 test 状态污染
+  // （历史上使用固定路径 test-tmp-l2-token/test-l2-token.db，pre-push full 档链式跑
+  //  test+contracts+verify 时，若上一次 test 异常退出残留 db，再次跑会触发
+  //  schema_migrations UNIQUE constraint + EBUSY 锁；2026-08-05 修复）
+  const tmpDir = resolve(process.cwd(), `test-tmp-l2-token-${process.pid}-${Date.now()}`);
+  try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
   try { mkdirSync(tmpDir, { recursive: true }); } catch { /* ignore */ }
   const dbPath = resolve(tmpDir, 'test-l2-token.db');
   process.env.AWKN_DB_PATH = dbPath;
