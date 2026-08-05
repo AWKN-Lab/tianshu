@@ -7,7 +7,7 @@
 #   - remote_sha 全 0     → 新分支/无法界定范围 → 保守跑 full
 #   - 其余                → git diff --name-only remote_sha local_sha 汇总
 # 汇总清单交给 scripts/local-ci.ps1 auto（档位选择逻辑唯一真源）。
-# 启用方式（每台机器一次）: git config core.hooksPath .githooks
+# 启用方式（每台机器一次，幂等）: powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup-hooks.ps1
 # ────────────────────────────────────────────────────────────────────────────
 set -uo pipefail
 

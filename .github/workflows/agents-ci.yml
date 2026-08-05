@@ -1,8 +1,25 @@
 name: agents-ci
 
-# 日常门禁由本地三档检查承担（scripts/local-ci.ps1 + .githooks/pre-push）。
-# 远程 CI 改为仅手动触发，作为发布前的最终验收兜底，日常 push/PR 不再自动运行。
+# 日常门禁由本地三档检查承担（scripts/local-ci.ps1 + .githooks/pre-push，hooksPath 由 scripts/setup-hooks.ps1 自动设置）。
+# push/PR 触发轻量档（agents 档，与三档唯一真源共用同一组 check-*.js 脚本）作为本地门禁被绕过时的远程兜底；
+# workflow_dispatch 保留为发布前手动全量验收。
 on:
+  push:
+    paths:
+      - 'agents/**'
+      - '.better-harness/**'
+      - 'capabilities/**'
+      - 'scripts/**'
+      - '.githooks/**'
+      - '.github/workflows/agents-ci.yml'
+  pull_request:
+    paths:
+      - 'agents/**'
+      - '.better-harness/**'
+      - 'capabilities/**'
+      - 'scripts/**'
+      - '.githooks/**'
+      - '.github/workflows/agents-ci.yml'
   workflow_dispatch:
 
 permissions:

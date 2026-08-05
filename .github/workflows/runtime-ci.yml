@@ -1,8 +1,19 @@
 name: runtime-ci
 
-# 日常门禁由本地三档检查承担（scripts/local-ci.ps1 + .githooks/pre-push）。
-# 远程 CI 改为仅手动触发，作为发布前的最终验收兜底，日常 push/PR 不再自动运行。
+# 日常门禁由本地三档检查承担（scripts/local-ci.ps1 + .githooks/pre-push，hooksPath 由 scripts/setup-hooks.ps1 自动设置）。
+# push/PR 触发 light-check 轻量档（typecheck，复用 runtime/package.json 的 typecheck 脚本，即三档中 contract 档的核心）
+# 作为本地门禁被绕过时的远程兜底；workflow_dispatch 保留为发布前手动全量验收。
 on:
+  push:
+    paths:
+      - 'runtime/**'
+      - 'integrations/open-code-review/**'
+      - '.github/workflows/runtime-ci.yml'
+  pull_request:
+    paths:
+      - 'runtime/**'
+      - 'integrations/open-code-review/**'
+      - '.github/workflows/runtime-ci.yml'
   workflow_dispatch:
 
 permissions:
@@ -13,6 +24,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  light-check:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+      - run: npm ci
+      - name: 'Light gate: TypeScript typecheck (contract 档核心)'
+        run: npm run typecheck
+
   ocr-producer:
     strategy:
       fail-fast: false
