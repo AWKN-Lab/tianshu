@@ -28,7 +28,7 @@ const UPSTREAM_PREVIEW_CHARS = 2000;
  * 缺省 opencode（OpenCode zen 云 API 直连），失败时经 LlmRouter fallback 链
  * 自动降级到 minimax → codex。
  */
-const KNOWN_PROVIDERS: readonly LlmProvider[] = ['opencode', 'minimax', 'codex', 'trae'];
+const KNOWN_PROVIDERS: readonly LlmProvider[] = ['opencode', 'aiping', 'openrouter', 'minimax', 'codex', 'trae'];
 
 export function resolveWorkerProvider(explicit?: LlmProvider): LlmProvider {
   if (explicit) return explicit;
