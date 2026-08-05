@@ -1,0 +1,121 @@
+{
+  "summary": {
+    "projectName": "awkn引擎",
+    "locale": "zh-CN",
+    "modelId": "agent-work-loop-v4",
+    "reportContractVersion": 25,
+    "overview": "项目拥有完整的门禁链、CI 工作流和测试体系（198 测试文件），但 GIT 交付闭环当前处于断裂状态：核心运行时变更未提交、已提交的修复未推送至远端、会话中未观测到任何验证-提交-推送的完整循环。这导致本地工作面临丢失风险且 CI 无法验证最新变更。",
+    "aiAgentPractice": {
+      "inspectedSurfaces": [
+        "Workflows"
+      ],
+      "coverageRows": [
+        {
+          "surface": "Workflows",
+          "scopes": [
+            "Project"
+          ],
+          "count": 2,
+          "paths": [
+            ".github/workflows/agents-ci.yml",
+            ".github/workflows/runtime-ci.yml"
+          ]
+        },
+        {
+          "surface": "Custom Agents",
+          "scopes": [
+            "Project"
+          ],
+          "count": 0
+        }
+      ]
+    },
+    "assignmentSummaries": [],
+    "dimensions": [
+      {
+        "id": "task-understanding",
+        "label": "任务理解",
+        "score": 68,
+        "summary": "项目拥有 AGENTS.md、架构文档和 spec 体系，任务边界可追溯；但当前工作树中混合了多个并行任务的变更，缺少明确的分批交付计划。",
+        "findingRefs": []
+      },
+      {
+        "id": "controlled-execution",
+        "label": "可控执行",
+        "score": 62,
+        "summary": "本地三档检查机制和 awkn-local 控制入口存在，Skills 被正常调用（awkn-git: 4次, awkn-部署: 3次）；但长会话（最长341分钟）中未观测到工具调用事件，执行路径不透明。",
+        "findingRefs": []
+      },
+      {
+        "id": "change-validation",
+        "label": "改动验证",
+        "score": 48,
+        "summary": "198 个测试文件和 test:verify 白名单门禁机制已就位，但 22 个会话中未观测到任何验证命令的实际执行；typecheck 被提及 6 次但无对应执行记录，验证循环在观测窗口内未闭合。",
+        "findingRefs": [
+          "validation-execution-gap-in-sessions"
+        ]
+      },
+      {
+        "id": "reliable-delivery",
+        "label": "可靠交付",
+        "score": 38,
+        "summary": "交付链处于断裂状态：11 个核心源文件修改和 36 个新文件未提交，2 个已完成 commit 未推送至远端（ahead 2），CI 工作流无法验证最新状态。pre-push hook 存在但未被触发。",
+        "findingRefs": [
+          "uncommitted-core-changes-block-delivery",
+          "push-closure-broken-ahead-2"
+        ]
+      },
+      {
+        "id": "learning-capture",
+        "label": "经验沉淀",
+        "score": 48,
+        "summary": "复盘总结 Skill 被频繁调用（6次），PDCA 报告和经验文档持续产出，但产出物停留在 untracked 状态未纳入版本控制，学习管线的产出未获得交付保护。",
+        "findingRefs": []
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "uncommitted-core-changes-block-delivery",
+      "title": "核心运行时变更未提交导致交付链断裂",
+      "severity": "High",
+      "reason": "evidence-pack 显示 diffSeverity=critical, diffScore=100。git status 确认 11 个已跟踪文件被修改（含 runtime/src/evolve/operational-evolution.ts、replay-evaluator.ts、retrospective-bridge.ts、llm/router.ts 等核心模块）及 2 个新 LLM provider 文件（aiping.ts, openrouter.ts）未提交。这些变更包含 token 阈值口径修复和 LLM 路由增强，处于无版本保护状态，无法进入 CI 验证、无法被回滚、且面临意外丢失风险。",
+      "expectedOutput": [
+        "核心运行时变更获得版本保护，可进入 CI 验证和交付流程"
+      ],
+      "expectedArtifact": "Git Commit",
+      "aiFixPrompt": "/better-harness fix this issue\n\n将当前工作树中的核心运行时变更（runtime/src/evolve/、runtime/src/llm/、runtime/test/evolution-token-gate.test.ts）提交至版本控制，保持现有验收边界。\n\n## Validation\n\n- 在 runtime 目录运行 npm run check 确认提交前状态健康\n- 确认 git status 中核心源文件不再处于 modified/untracked 状态\n- 确认提交消息遵循 conventional commit 格式",
+      "dimensionRefs": [
+        "reliable-delivery"
+      ]
+    },
+    {
+      "id": "push-closure-broken-ahead-2",
+      "title": "已提交修复滞留本地未推送至远端",
+      "severity": "High",
+      "reason": "git branch -vv 确认 main 分支处于 [tianshu/main: ahead 2] 状态。两个已完成提交（4944ef0 门禁链最小兜底修复、006e7f4 test:verify 白名单门禁接入）未推送至远端 tianshu/main。这导致：(1) CI 工作流（agents-ci.yml, runtime-ci.yml）无法验证这些修复；(2) 远端协作者无法获取最新门禁规则；(3) pre-push hook 的门禁链检查未被触发执行。",
+      "expectedOutput": [
+        "门禁链修复到达远端，CI 可验证最新状态，交付闭环恢复"
+      ],
+      "expectedArtifact": "Git Push",
+      "aiFixPrompt": "/better-harness fix this issue\n\n将 main 分支的 2 个本地提交推送至远端 tianshu/main，触发 pre-push hook 门禁链验证。\n\n## Validation\n\n- 运行 git push tianshu main 确认推送成功\n- 确认 git branch -vv 不再显示 ahead 状态\n- 确认 pre-push hook 门禁链正常执行并通过",
+      "dimensionRefs": [
+        "reliable-delivery"
+      ]
+    },
+    {
+      "id": "validation-execution-gap-in-sessions",
+      "title": "会话中验证命令执行未被观测到",
+      "severity": "Medium",
+      "reason": "harness analyze 在 22 个已分析会话中观测到 0 个变更事件和 0 个验证事件。typecheck 被用户提及 6 次但无匹配的命令行执行记录。尽管项目拥有 198 个测试文件和 npm run check/test:verify 等验证路由，但 edit→validate→commit 的完整循环在观测窗口内未被捕获。这可能是观测边界限制（source roots 仅 2/5 可用），也可能反映验证步骤确实未在 IDE 会话中执行。",
+      "expectedOutput": [
+        "变更验证循环在会话中被完整观测，证明验证步骤被执行而非跳过"
+      ],
+      "expectedArtifact": "Validation Record",
+      "aiFixPrompt": "/better-harness fix this issue\n\n确认变更验证闭环：在下一次代码修改后，于同一会话中执行对应的验证命令（npm run check 或 npm run test:verify），确保验证执行被会话记录捕获。\n\n## Validation\n\n- 确认修改后执行了至少一次 npm run check 或 npm run test:verify\n- 确认验证结果输出被保留\n- 确认会话记录中可见验证命令的执行痕迹",
+      "dimensionRefs": [
+        "change-validation"
+      ]
+    }
+  ]
+}
