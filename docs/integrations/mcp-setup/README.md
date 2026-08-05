@@ -25,6 +25,9 @@ AWKN 引擎通过 [Model Context Protocol (MCP)](https://modelcontextprotocol.io
 | Cursor | [cursor.md](./cursor.md) | JSON |
 | Windsurf | [windsurf.md](./windsurf.md) | JSON |
 | Codex CLI | [codex.md](./codex.md) | TOML |
+| OpenCode | [opencode.md](./opencode.md) | JSON |
+
+> OpenCode 暂不支持自动安装脚本，见 [opencode.md](./opencode.md) 手动配置。
 
 ## 快速开始（自动安装）
 
