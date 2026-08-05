@@ -139,3 +139,27 @@ jobs:
             runtime/baseline/npm-audit.json
           if-no-files-found: warn
           retention-days: 14
+
+  # 兜底：runtime 改动可能影响 agents 档资产（structured-assets / markdown-assets / core-code boundary），
+  # 本地 full 档会跑 agents 检查（contract ⊇ agents），但远程 runtime-ci 此前只跑 typecheck + ocr + check，
+  # agents 档被绕过。复用 agents-ci.yml 的同一组 check-*.js 步骤（除 check-runtime-contract.js：
+  # 依赖 skills/awkn-程序员天阶功法/hooks/handoff-schema.json，该文件为项目级缺失，等天阶功法作者补全后再扩展），
+  # 与三档唯一真源语义一致。
+  agents-check-on-runtime-change:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 'Agents gate: Install gates dependencies (js-yaml only)'
+        working-directory: agents/tianhuo/gates
+        run: npm ci
+      - name: 'Agents gate: Validate structured assets under agents'
+        run: node agents/tianhuo/scripts/check-structured-assets.js
+      - name: 'Agents gate: Validate derived markdown assets'
+        run: node agents/tianhuo/scripts/check-markdown-assets.js
+      - name: 'Agents gate: Validate harness core-code boundary'
+        run: node agents/tianhuo/scripts/check-core-code.js
