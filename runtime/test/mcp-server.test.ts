@@ -2,11 +2,21 @@
  * MCP server 冒烟测试：spawn server → initialize → tools/list → tools/call
  */
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const serverSource = resolve(__dirname, '..', 'src', 'mcp', 'server.ts');
+
+// packages/awkn-engine-mcp 为独立 Git 历史包（不入仓库）：本机检出时走完整工作流断言，
+// CI 无包时验证工具按设计返回明确降级错误（server.ts getTianhuoRouter 预检）。
+const packageRouterEntry = resolve(
+  __dirname, '..', '..',
+  'packages', 'awkn-engine-mcp', 'runtime', 'src', 'capabilities', 'router.ts',
+);
+const hasTianhuoPackage = existsSync(packageRouterEntry);
+console.log(`[mcp-server.test] packages/awkn-engine-mcp present: ${hasTianhuoPackage}`);
 
 let msgId = 0;
 function makeRequest(method: string, params?: unknown): string {
@@ -105,6 +115,7 @@ async function main(): Promise<void> {
     console.log(`awkn_skill_list result: ${text.slice(0, 200)}`);
 
     // 5. 天火工作流：start → advance × 2 → completed（转发 package TianhuoRouter）
+    //    包缺失环境（CI）验证降级错误；包存在环境（本机）验证完整工作流。
     console.log('\n--- calling awkn_tianhuo_start ---');
     const startResp = await sendAndWait('tools/call', {
       name: 'awkn_tianhuo_start',
@@ -115,6 +126,16 @@ async function main(): Promise<void> {
     });
     const startText = (startResp as { result?: { content?: { text: string }[] } })
       .result?.content?.[0]?.text ?? '';
+
+    if (!hasTianhuoPackage) {
+      if (!(startResp as { result?: { isError?: boolean } }).result?.isError) {
+        throw new Error(`expected isError when TianhuoRouter package missing, got ${startText}`);
+      }
+      if (!startText.includes('awkn-mcp-admin-server')) {
+        throw new Error(`expected awkn-mcp-admin-server hint in degraded error, got ${startText}`);
+      }
+      console.log(`✅ PASS: TianhuoRouter package missing → degraded error: ${startText.slice(0, 120)}`);
+    } else {
     const startResult = JSON.parse(startText) as {
       workflowId?: string;
       capabilityId?: string;
@@ -155,6 +176,7 @@ async function main(): Promise<void> {
     if (advance2Result.status !== 'completed') {
       throw new Error(`expected completed after second advance, got ${advance2Text}`);
     }
+    }
 
     // 验证
     const expectedToolCount = 34;
@@ -168,7 +190,7 @@ async function main(): Promise<void> {
         throw new Error(`missing required tianhuo tool: ${required}`);
       }
     }
-    console.log(`\n✅ PASS: ${tools.length} tools registered, tianhuo trio present, workflow completes via package TianhuoRouter`);
+    console.log(`\n✅ PASS: ${tools.length} tools registered, tianhuo trio present, ${hasTianhuoPackage ? 'workflow completes via package TianhuoRouter' : 'degraded error verified (package missing)'}`);
   } finally {
     child.kill('SIGTERM');
     setTimeout(() => process.exit(0), 500);

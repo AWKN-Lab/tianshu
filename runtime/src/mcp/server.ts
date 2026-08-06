@@ -13,6 +13,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadRuntimeEnv } from '../config/runtime-env.js';
@@ -384,6 +385,13 @@ let tianhuoRouter: unknown = null;
 /** 懒加载 package 的 TianhuoRouter（含 CapabilityManager / AgentLoopPolicyManager） */
 async function getTianhuoRouter(): Promise<{ start: any; advance: any; status: any }> {
   if (tianhuoRouter) return tianhuoRouter as { start: any; advance: any; status: any };
+  const routerEntry = resolve(PACKAGE_CAPABILITIES_DIR, 'router.ts');
+  if (!existsSync(routerEntry)) {
+    throw new Error(
+      `TianhuoRouter package 缺失（独立 Git 历史包，不入仓库）：${routerEntry} 不存在。` +
+        '请在本机检出 packages/awkn-engine-mcp，或改用 awkn-mcp-admin-server.js。',
+    );
+  }
   const { CapabilityManager } = await import(pathToFileURL(resolve(PACKAGE_CAPABILITIES_DIR, 'manager.ts')).href);
   const { AgentLoopPolicyManager } = await import(pathToFileURL(resolve(PACKAGE_CAPABILITIES_DIR, 'agent-loop-policy.ts')).href);
   const { TianhuoRouter } = await import(pathToFileURL(resolve(PACKAGE_CAPABILITIES_DIR, 'router.ts')).href);
