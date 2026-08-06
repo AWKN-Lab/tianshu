@@ -78,6 +78,12 @@ export function computeFileHash(filePath: string): string {
  * @param pendingMigrations List of migration versions about to be applied
  * @returns MigrationBackup metadata
  */
+// Monotonic counter so multiple backups created within the same millisecond
+// still get distinct filenames. Without it, rapid successive backups (e.g. a
+// test loop or a migration batch) would collide on the same ISO timestamp and
+// silently overwrite each other.
+let backupSequence = 0;
+
 export function backupBeforeMigration(
   db: Database.Database,
   dbPath: string,
@@ -91,9 +97,10 @@ export function backupBeforeMigration(
   db.pragma('wal_checkpoint(TRUNCATE)');
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const seq = String(backupSequence++).padStart(4, '0');
   const backupPath = join(
     dirname(dbPath),
-    `.migration-backup-${timestamp}.db`,
+    `.migration-backup-${timestamp}-${seq}.db`,
   );
 
   try {
