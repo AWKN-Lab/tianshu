@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const hookPath = resolve(__dirname, '..', '..', '..', '.trae', 'hooks', 'tianshu-hook.mjs');
+const hookPath = resolve(__dirname, '..', '..', '.trae', 'hooks', 'tianshu-hook.mjs');
 
 function invokePreTool(payload: Record<string, unknown>): Record<string, unknown> {
   const result = spawnSync(process.execPath, [hookPath, 'pre-tool'], {

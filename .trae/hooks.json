@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .trae/hooks/tianshu-hook.mjs session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .trae/hooks/tianshu-hook.mjs dispatch",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "RunCommand|Write|SearchReplace|DeleteFile|mcp.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .trae/hooks/tianshu-hook.mjs pre-tool",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "RunCommand|Write|SearchReplace|DeleteFile",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .trae/hooks/tianshu-hook.mjs post-tool",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "loop_limit": 3,
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .trae/hooks/tianshu-hook.mjs stop",
+            "timeout": 180
+          }
+        ]
+      }
+    ]
+  }
+}

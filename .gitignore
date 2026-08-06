@@ -44,7 +44,13 @@ out/
 /skills/**
 
 # ===== IDE / 编辑器私有 =====
-.trae/
+# .trae 目录整体私有，但 hooks/ 与 hooks.json 是 CI 门禁依赖的正式资产（github-actions-guard.test.ts 引用）
+# 例外规则顺序：先排除全部，再重新包含 hooks 资产；state/logs/specs/rules 保持忽略
+.trae/*
+!.trae/hooks.json
+!.trae/hooks/
+.trae/hooks/*
+!.trae/hooks/tianshu-hook.mjs
 .idea/
 .vscode/
 *.swp
