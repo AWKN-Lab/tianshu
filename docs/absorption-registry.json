@@ -693,10 +693,10 @@
       "sourceRef": "Qoder 插件市场 qmind-knowledge@qoder-marketplace v0.1.0（作者 Qoder）",
       "license": "upstream-unknown（插件未声明许可证；技能为使用指引型内容）",
       "implementedFiles": [
-        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/qmind-knowledge/0.1.0"
+        "skills/qoder-marketplace-2026-08/qmind-knowledge/0.1.0"
       ],
       "sha256": {
-        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/qmind-knowledge/0.1.0/.qoder-plugin/plugin.json": "564b80629ab486ac434493d02547067ba09ddbf7eae6d80c67e8cc4fdadfa464"
+        "skills/qoder-marketplace-2026-08/qmind-knowledge/0.1.0/.qoder-plugin/plugin.json": "564b80629ab486ac434493d02547067ba09ddbf7eae6d80c67e8cc4fdadfa464"
       },
       "integratedInto": [
         "skills/awkn-技能治理/data/external-skills-index.json",
@@ -704,7 +704,7 @@
       ],
       "tests": [],
       "verification": "python skill-cli.py sync-sources — 全部 36 个技能条目索引成功",
-      "notes": "qmind CLI 按需下载（PROD only），凭据存 ~/.qmind/credentials.json；吸收方式为存档式（absorbed-skills），不注册为默认技能；2026-08-04 吸收\n\n2026-08-04 重对齐（LF 口径）：引擎侧 plugin.json 已被规范化（追加字段，体积增加 20~50B），SHA256 已用实测值刷新；Qoder 缓存基线保留为 `qoderCacheSha256` 字段以便溯源。",
+      "notes": "qmind CLI 按需下载（PROD only），凭据存 ~/.qmind/credentials.json；吸收方式为存档式（absorbed-skills），不注册为默认技能；2026-08-04 吸收\n\n2026-08-04 重对齐（LF 口径）：引擎侧 plugin.json 已被规范化（追加字段，体积增加 20~50B），SHA256 已用实测值刷新；Qoder 缓存基线保留为 `qoderCacheSha256` 字段以便溯源。\n\n2026-08-06 安装（迁移到引擎 skills/ 命名空间）：从 `skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/` 物理搬到 `skills/qoder-marketplace-2026-08/`，保留 plugin 容器整体结构。SHA256 不变（内容字节级一致）；只更新 `implementedFiles` 和 `sha256` 的路径键。旧路径将在 Stage 3 删除。",
       "qoderCacheSha256": {
         "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/qmind-knowledge/0.1.0/.qoder-plugin/plugin.json": "f032575b66018fa122829b0c541157a41e7c67f187a7db5e3e173b59109e7462"
       },
@@ -723,10 +723,10 @@
       "sourceRef": "Qoder 插件市场 architecture-visualization@qoder-marketplace v0.1.0（作者 Qoder）",
       "license": "upstream-unknown；THIRD_PARTY_NOTICES 声明 Structurizr DSL 为 Apache-2.0 引用（不捆绑源码）",
       "implementedFiles": [
-        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/architecture-visualization/0.1.0"
+        "skills/qoder-marketplace-2026-08/architecture-visualization/0.1.0"
       ],
       "sha256": {
-        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/architecture-visualization/0.1.0/.qoder-plugin/plugin.json": "90181512a0c1b4db97eb25986cbbd7874c35f4c3ddbfb176e9f1a5667e7b1266"
+        "skills/qoder-marketplace-2026-08/architecture-visualization/0.1.0/.qoder-plugin/plugin.json": "90181512a0c1b4db97eb25986cbbd7874c35f4c3ddbfb176e9f1a5667e7b1266"
       },
       "integratedInto": [
         "skills/awkn-技能治理/data/external-skills-index.json",
@@ -734,7 +734,7 @@
       ],
       "tests": [],
       "verification": "python skill-cli.py sync-sources — 全部 36 个技能条目索引成功",
-      "notes": "含 canvases（dot/dsl/mermaid）与 references 图谱配方；吸收方式为存档式，不注册为默认技能；2026-08-04 吸收\n\n2026-08-04 重对齐（LF 口径）：引擎侧 plugin.json 已被规范化（追加字段，体积增加 20~50B），SHA256 已用实测值刷新；Qoder 缓存基线保留为 `qoderCacheSha256` 字段以便溯源。",
+      "notes": "含 canvases（dot/dsl/mermaid）与 references 图谱配方；吸收方式为存档式，不注册为默认技能；2026-08-04 吸收\n\n2026-08-04 重对齐（LF 口径）：引擎侧 plugin.json 已被规范化（追加字段，体积增加 20~50B），SHA256 已用实测值刷新；Qoder 缓存基线保留为 `qoderCacheSha256` 字段以便溯源。\n\n2026-08-06 安装（迁移到引擎 skills/ 命名空间）：从 `skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/` 物理搬到 `skills/qoder-marketplace-2026-08/`，保留 plugin 容器整体结构。SHA256 不变（内容字节级一致）；只更新 `implementedFiles` 和 `sha256` 的路径键。旧路径将在 Stage 3 删除。",
       "qoderCacheSha256": {
         "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/architecture-visualization/0.1.0/.qoder-plugin/plugin.json": "c329216555f6ee3cff846e64da369202ceaae7eb5b20551ecda189c7238d0495"
       },
@@ -753,10 +753,10 @@
       "sourceRef": "Qoder 插件市场 design-review@qoder-marketplace v0.1.0（作者 Qoder）",
       "license": "upstream-unknown（插件未声明许可证）",
       "implementedFiles": [
-        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/design-review/0.1.0"
+        "skills/qoder-marketplace-2026-08/design-review/0.1.0"
       ],
       "sha256": {
-        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/design-review/0.1.0/.qoder-plugin/plugin.json": "bd84a16bba52c6c7fe586f8ee8aef6131d31dc3c0cd4f74952fd43ab672e744b"
+        "skills/qoder-marketplace-2026-08/design-review/0.1.0/.qoder-plugin/plugin.json": "bd84a16bba52c6c7fe586f8ee8aef6131d31dc3c0cd4f74952fd43ab672e744b"
       },
       "integratedInto": [
         "skills/awkn-技能治理/data/external-skills-index.json",
@@ -764,7 +764,7 @@
       ],
       "tests": [],
       "verification": "python skill-cli.py sync-sources — 全部 36 个技能条目索引成功",
-      "notes": "含 shared/lib 审计脚本（*.mjs）与 DESIGN.md / SCREEN_SPEC.md / design.qa.yaml 模板；吸收方式为存档式，不注册为默认技能；2026-08-04 吸收\n\n2026-08-04 重对齐（LF 口径）：引擎侧 plugin.json 已被规范化（追加字段，体积增加 20~50B），SHA256 已用实测值刷新；Qoder 缓存基线保留为 `qoderCacheSha256` 字段以便溯源。",
+      "notes": "含 shared/lib 审计脚本（*.mjs）与 DESIGN.md / SCREEN_SPEC.md / design.qa.yaml 模板；吸收方式为存档式，不注册为默认技能；2026-08-04 吸收\n\n2026-08-04 重对齐（LF 口径）：引擎侧 plugin.json 已被规范化（追加字段，体积增加 20~50B），SHA256 已用实测值刷新；Qoder 缓存基线保留为 `qoderCacheSha256` 字段以便溯源。\n\n2026-08-06 安装（迁移到引擎 skills/ 命名空间）：从 `skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/` 物理搬到 `skills/qoder-marketplace-2026-08/`，保留 plugin 容器整体结构。SHA256 不变（内容字节级一致）；只更新 `implementedFiles` 和 `sha256` 的路径键。旧路径将在 Stage 3 删除。",
       "qoderCacheSha256": {
         "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/design-review/0.1.0/.qoder-plugin/plugin.json": "a11ff003e9c61e2c257ae1567bddcf7277b5b7e9e22bfa72f5634cdcbcbefdca"
       },
@@ -783,10 +783,10 @@
       "sourceRef": "Qoder 插件市场 alibabacloud-core@qoder-marketplace v1.0.20（作者 Alibaba Cloud，上游 aliyun/alibabacloud-agent-toolkit）",
       "license": "upstream-unknown（README 未声明；.claude-plugin 同时提供）",
       "implementedFiles": [
-        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/alibabacloud-core/1.0.20"
+        "skills/qoder-marketplace-2026-08/alibabacloud-core/1.0.20"
       ],
       "sha256": {
-        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/alibabacloud-core/1.0.20/.qoder-plugin/plugin.json": "8c543649fd620317d7485483a54a11e0ed0f4fe762dfd6f5838ed9882d37ec3e"
+        "skills/qoder-marketplace-2026-08/alibabacloud-core/1.0.20/.qoder-plugin/plugin.json": "8c543649fd620317d7485483a54a11e0ed0f4fe762dfd6f5838ed9882d37ec3e"
       },
       "integratedInto": [
         "skills/awkn-技能治理/data/external-skills-index.json",
@@ -794,7 +794,7 @@
       ],
       "tests": [],
       "verification": "python skill-cli.py sync-sources — 全部 36 个技能条目索引成功",
-      "notes": "依赖 alibabacloud-core MCP 服务器（.mcp.json），未接入 runtime MCP 白名单；hooks 为 Codex/Claude/QoderWork 追踪脚本，不激活；吸收方式为存档式；2026-08-04 吸收\n\n2026-08-04 重对齐（LF 口径）：引擎侧 plugin.json 已被规范化（追加字段，体积增加 20~50B），SHA256 已用实测值刷新；Qoder 缓存基线保留为 `qoderCacheSha256` 字段以便溯源。",
+      "notes": "依赖 alibabacloud-core MCP 服务器（.mcp.json），未接入 runtime MCP 白名单；hooks 为 Codex/Claude/QoderWork 追踪脚本，不激活；吸收方式为存档式；2026-08-04 吸收\n\n2026-08-04 重对齐（LF 口径）：引擎侧 plugin.json 已被规范化（追加字段，体积增加 20~50B），SHA256 已用实测值刷新；Qoder 缓存基线保留为 `qoderCacheSha256` 字段以便溯源。\n\n2026-08-06 安装（迁移到引擎 skills/ 命名空间）：从 `skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/` 物理搬到 `skills/qoder-marketplace-2026-08/`，保留 plugin 容器整体结构。SHA256 不变（内容字节级一致）；只更新 `implementedFiles` 和 `sha256` 的路径键。旧路径将在 Stage 3 删除。",
       "qoderCacheSha256": {
         "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/alibabacloud-core/1.0.20/.qoder-plugin/plugin.json": "b53ad949de49d725c04d222648fbabc336e6576505080577239d731aaa699eec"
       },
@@ -813,10 +813,10 @@
       "sourceRef": "Qoder 插件市场 meoo@qoder-marketplace v0.1.0（作者 Meoo Team）",
       "license": "upstream-unknown（插件未声明许可证）",
       "implementedFiles": [
-        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/meoo/0.1.0"
+        "skills/qoder-marketplace-2026-08/meoo/0.1.0"
       ],
       "sha256": {
-        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/meoo/0.1.0/.qoder-plugin/plugin.json": "ed25cda6ba75e0bc4c20aa8e39ab21e738faeceb35396b3e1df3806f7912de66"
+        "skills/qoder-marketplace-2026-08/meoo/0.1.0/.qoder-plugin/plugin.json": "ed25cda6ba75e0bc4c20aa8e39ab21e738faeceb35396b3e1df3806f7912de66"
       },
       "integratedInto": [
         "skills/awkn-技能治理/data/external-skills-index.json",
@@ -824,7 +824,7 @@
       ],
       "tests": [],
       "verification": "python skill-cli.py sync-sources — 全部 36 个技能条目索引成功",
-      "notes": "依赖 meoo CLI（外部工具）；吸收方式为存档式，不注册为默认技能；2026-08-04 吸收\n\n2026-08-04 重对齐（LF 口径）：引擎侧 plugin.json 已被规范化（追加字段，体积增加 20~50B），SHA256 已用实测值刷新；Qoder 缓存基线保留为 `qoderCacheSha256` 字段以便溯源。",
+      "notes": "依赖 meoo CLI（外部工具）；吸收方式为存档式，不注册为默认技能；2026-08-04 吸收\n\n2026-08-04 重对齐（LF 口径）：引擎侧 plugin.json 已被规范化（追加字段，体积增加 20~50B），SHA256 已用实测值刷新；Qoder 缓存基线保留为 `qoderCacheSha256` 字段以便溯源。\n\n2026-08-06 安装（迁移到引擎 skills/ 命名空间）：从 `skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/` 物理搬到 `skills/qoder-marketplace-2026-08/`，保留 plugin 容器整体结构。SHA256 不变（内容字节级一致）；只更新 `implementedFiles` 和 `sha256` 的路径键。旧路径将在 Stage 3 删除。",
       "qoderCacheSha256": {
         "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/meoo/0.1.0/.qoder-plugin/plugin.json": "f6c5a8889904cc92b51b0f18a4b626c04a267de8bb4484dc1687dcaa7e19e508"
       },
@@ -843,10 +843,10 @@
       "sourceRef": "Qoder 插件市场 wxz-cli@qoder-marketplace v1.0.10（作者 Wanxiaozhi Team）",
       "license": "MIT（MSEA AI Staff Team, Copyright 2025-2026，插件内 LICENSE 文件）",
       "implementedFiles": [
-        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/wxz-cli/1.0.10"
+        "skills/qoder-marketplace-2026-08/wxz-cli/1.0.10"
       ],
       "sha256": {
-        "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/wxz-cli/1.0.10/.qoder-plugin/plugin.json": "b2851fffc6b30efd880fd266c73dc829fb006cf3da5250217a5d2440f05f9476"
+        "skills/qoder-marketplace-2026-08/wxz-cli/1.0.10/.qoder-plugin/plugin.json": "b2851fffc6b30efd880fd266c73dc829fb006cf3da5250217a5d2440f05f9476"
       },
       "integratedInto": [
         "skills/awkn-技能治理/data/external-skills-index.json",
@@ -854,7 +854,7 @@
       ],
       "tests": [],
       "verification": "python skill-cli.py sync-sources — 全部 36 个技能条目索引成功",
-      "notes": "MIT 许可明确可再分发；依赖 wxz CLI（外部工具）；吸收方式为存档式，不注册为默认技能；2026-08-04 吸收\n\n2026-08-04 重对齐（LF 口径）：引擎侧 plugin.json 已被规范化（追加字段，体积增加 20~50B），SHA256 已用实测值刷新；Qoder 缓存基线保留为 `qoderCacheSha256` 字段以便溯源。",
+      "notes": "MIT 许可明确可再分发；依赖 wxz CLI（外部工具）；吸收方式为存档式，不注册为默认技能；2026-08-04 吸收\n\n2026-08-04 重对齐（LF 口径）：引擎侧 plugin.json 已被规范化（追加字段，体积增加 20~50B），SHA256 已用实测值刷新；Qoder 缓存基线保留为 `qoderCacheSha256` 字段以便溯源。\n\n2026-08-06 安装（迁移到引擎 skills/ 命名空间）：从 `skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/` 物理搬到 `skills/qoder-marketplace-2026-08/`，保留 plugin 容器整体结构。SHA256 不变（内容字节级一致）；只更新 `implementedFiles` 和 `sha256` 的路径键。旧路径将在 Stage 3 删除。",
       "qoderCacheSha256": {
         "skills/awkn-技能治理/absorbed-skills/qoder-marketplace-2026-08/wxz-cli/1.0.10/.qoder-plugin/plugin.json": "922e3161085dc22a2a3906330913485e7c9542ae64588402482375e664adf83a"
       },
@@ -868,5 +868,6 @@
       }
     }
   ],
-  "realignedAt": "2026-08-04"
+  "realignedAt": "2026-08-04",
+  "installedAt": "2026-08-06"
 }
