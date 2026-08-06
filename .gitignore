@@ -145,3 +145,12 @@ integrations/open-code-review/bin/
 /runtime/check-runs.cjs
 /runtime/check-stuck.cjs
 
+# ===== Python 缓存与 better-harness 临时数据根（不入库）=====
+scripts/__pycache__/
+scripts/**/__pycache__/
+packages/**/__pycache__/
+workflows/**/__pycache__/
+**/__pycache__/
+.qoder/better-harness/
+.better-harness/runs/
+

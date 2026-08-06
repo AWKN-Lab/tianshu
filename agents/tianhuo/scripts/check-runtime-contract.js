@@ -25,7 +25,16 @@ const warnings = [];
 const staleOrCorruptFiles = [];
 
 for (const entrypoint of entrypoints) {
-  if (!fs.existsSync(entrypoint)) blockingFindings.push(`missing entrypoint: ${entrypoint}`);
+  if (!fs.existsSync(entrypoint)) {
+    // /skills/ is a local skill-library root, deliberately gitignored (not
+    // part of the repo); its entrypoints are validated when present, but their
+    // absence on a clean checkout must not block CI.
+    if (entrypoint.includes(path.sep + 'skills' + path.sep)) {
+      warnings.push(`optional external entrypoint not present (local skill library): ${entrypoint}`);
+    } else {
+      blockingFindings.push(`missing entrypoint: ${entrypoint}`);
+    }
+  }
 }
 
 const configPath = path.resolve(agentRoot, 'config.json');
@@ -42,10 +51,16 @@ try {
 const handoffPath = path.resolve(engineRoot, 'skills', 'awkn-程序员天阶功法', 'hooks', 'handoff-schema.json');
 const expectedStages = ['discover', 'specify', 'plan', 'build', 'review', 'ship', 'evolve'];
 try {
-  const handoff = JSON.parse(fs.readFileSync(handoffPath, 'utf8'));
-  const stages = handoff.properties?.stage?.enum ?? [];
-  if (JSON.stringify(stages) !== JSON.stringify(expectedStages)) {
-    blockingFindings.push('handoff stage enum is ambiguous or incomplete');
+  if (!fs.existsSync(handoffPath)) {
+    // Same local-skill-library policy as entrypoints above: schema is
+    // validated when the external skill is present, absent on CI checkout.
+    warnings.push(`optional external handoff schema not present (local skill library): ${handoffPath}`);
+  } else {
+    const handoff = JSON.parse(fs.readFileSync(handoffPath, 'utf8'));
+    const stages = handoff.properties?.stage?.enum ?? [];
+    if (JSON.stringify(stages) !== JSON.stringify(expectedStages)) {
+      blockingFindings.push('handoff stage enum is ambiguous or incomplete');
+    }
   }
 } catch (error) {
   blockingFindings.push(`invalid handoff schema: ${error.message}`);
