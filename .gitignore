@@ -152,4 +152,5 @@ packages/**/__pycache__/
 workflows/**/__pycache__/
 **/__pycache__/
 .qoder/better-harness/
+.better-harness/runs/
 
