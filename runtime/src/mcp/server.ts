@@ -366,6 +366,72 @@ server.registerTool(
 );
 
 // ============================================================
+// Skill Platform 模块（2 tools）— 测评与治理
+// 转发到 workflows/skill-platform/ 的 Python 执行流
+// 薄 Skill（awkn-技能测评/awkn-技能治理）声明的 runtime_service 的真正实现
+// ============================================================
+
+const SKILL_PLATFORM_ENGINE_ROOT = process.env.AWKN_ENGINE_ROOT ?? resolve(__dirname, '..', '..', '..');
+
+server.registerTool(
+  'awkn_skill_evaluate',
+  {
+    description:
+      '执行 Skill 测评（E1-E6 流程）。转发到 workflows/skill-platform/evaluate.py，' +
+      '返回符合 assessment-result/1.0.0 schema 的 AssessmentResult。' +
+      '薄 Skill awkn-技能测评 声明的 runtime_service: skill-evaluator 的真正实现。',
+    inputSchema: {
+      skill_dir: z.string().describe('Skill 目录绝对路径（必须在引擎根内）'),
+      mode: z.enum(['quick', 'full', 'boost', 'batch']).optional().describe('测评模式，默认 full'),
+      context: z.record(z.string(), z.unknown()).optional().describe('测评上下文（JSON 对象）'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const { runEvaluator } = await import('../skill-platform/evaluator-adapter.js');
+      const result = await runEvaluator({
+        skillDir: args.skill_dir,
+        mode: args.mode,
+        context: args.context,
+        engineRoot: SKILL_PLATFORM_ENGINE_ROOT,
+      });
+      return { content: [toText(result)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+server.registerTool(
+  'awkn_skill_govern',
+  {
+    description:
+      '执行 Skill 治理（G1-G7 流程）。转发到 workflows/skill-platform/govern.py，返回 GovernanceDecision。' +
+      '薄 Skill awkn-技能治理 声明的 runtime_service: skill-governance 的真正实现。' +
+      'operation=inspect/plan 只读；operation=apply 是写操作（需授权）；operation=rollback 恢复前态。',
+    inputSchema: {
+      operation: z.enum(['inspect', 'plan', 'apply', 'rollback']).describe('治理操作'),
+      request: z
+        .record(z.string(), z.unknown())
+        .describe('治理请求体（JSON 对象，含 target/assessment_result 等）'),
+    },
+  },
+  async (args: any) => {
+    try {
+      const { runGovernance } = await import('../skill-platform/governance-adapter.js');
+      const result = await runGovernance({
+        command: args.operation,
+        request: args.request,
+        engineRoot: SKILL_PLATFORM_ENGINE_ROOT,
+      });
+      return { content: [toText(result)] };
+    } catch (e) {
+      return toError(e);
+    }
+  },
+);
+
+// ============================================================
 // Tianhuo 模块（3 tools）— 转发到 packages/awkn-engine-mcp 唯一路由实现
 //
 // 路由/推进的唯一实现源：packages/awkn-engine-mcp/runtime/src/capabilities/router.ts
