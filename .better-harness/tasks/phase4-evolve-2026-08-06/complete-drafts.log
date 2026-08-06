@@ -1,0 +1,8 @@
+(node:11816) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[2026-08-06T11:16:56.094Z] [INFO] [SkillsManager] Loaded 147 skill(s) from D:\awkn-lab\awkn寮曟搸\skills
+{
+  "scanned": 101,
+  "completed": 101,
+  "errors": []
+}

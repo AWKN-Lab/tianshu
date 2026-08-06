@@ -1,0 +1,614 @@
+(node:29320) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[2026-08-06T11:16:21.387Z] [INFO] [SkillsManager] Loaded 147 skill(s) from D:\awkn-lab\awkn寮曟搸\skills
+{
+  "pending": 101,
+  "drafts": [
+    {
+      "experienceId": "EXP-DRV-20260723-003",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260723-003.md",
+      "size": 6796,
+      "pendingMarkerCount": 9
+    },
+    {
+      "experienceId": "EXP-DRV-20260723-004",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260723-004.md",
+      "size": 5081,
+      "pendingMarkerCount": 1
+    },
+    {
+      "experienceId": "EXP-DRV-20260723-013",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260723-013.md",
+      "size": 4272,
+      "pendingMarkerCount": 5
+    },
+    {
+      "experienceId": "EXP-DRV-20260728-002",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260728-002.md",
+      "size": 1580,
+      "pendingMarkerCount": 1
+    },
+    {
+      "experienceId": "EXP-DRV-20260729-001",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260729-001.md",
+      "size": 1665,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260729-002",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260729-002.md",
+      "size": 1683,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260729-003",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260729-003.md",
+      "size": 1600,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260730-001",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260730-001.md",
+      "size": 1649,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260731-001",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260731-001.md",
+      "size": 1719,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-001",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-001.md",
+      "size": 1599,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-003",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-003.md",
+      "size": 1687,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-004",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-004.md",
+      "size": 1609,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-005",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-005.md",
+      "size": 1654,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-006",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-006.md",
+      "size": 1567,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-007",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-007.md",
+      "size": 1679,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-010",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-010.md",
+      "size": 1599,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-013",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-013.md",
+      "size": 1616,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-029",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-029.md",
+      "size": 1689,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-032",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-032.md",
+      "size": 1609,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-040",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-040.md",
+      "size": 1684,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-043",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-043.md",
+      "size": 1677,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-050",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-050.md",
+      "size": 1656,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-051",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-051.md",
+      "size": 1704,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-052",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-052.md",
+      "size": 1646,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-056",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-056.md",
+      "size": 1576,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-057",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-057.md",
+      "size": 1600,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-058",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-058.md",
+      "size": 1575,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260803-061",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260803-061.md",
+      "size": 1695,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-002",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-002.md",
+      "size": 1569,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-010",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-010.md",
+      "size": 1993,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-011",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-011.md",
+      "size": 1819,
+      "pendingMarkerCount": 1
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-012",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-012.md",
+      "size": 1780,
+      "pendingMarkerCount": 2
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-013",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-013.md",
+      "size": 1885,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-014",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-014.md",
+      "size": 1726,
+      "pendingMarkerCount": 2
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-015",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-015.md",
+      "size": 1910,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-016",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-016.md",
+      "size": 1879,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-017",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-017.md",
+      "size": 1685,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-018",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-018.md",
+      "size": 1668,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-019",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-019.md",
+      "size": 1706,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-020",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-020.md",
+      "size": 1570,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-021",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-021.md",
+      "size": 1646,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-022",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-022.md",
+      "size": 1569,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-023",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-023.md",
+      "size": 1569,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-024",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-024.md",
+      "size": 1569,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-025",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-025.md",
+      "size": 1694,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-026",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-026.md",
+      "size": 1694,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-027",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-027.md",
+      "size": 1694,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-028",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-028.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-029",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-029.md",
+      "size": 1702,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-030",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-030.md",
+      "size": 1733,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-031",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-031.md",
+      "size": 1702,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-032",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-032.md",
+      "size": 1702,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-033",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-033.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-034",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-034.md",
+      "size": 1702,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-035",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-035.md",
+      "size": 1702,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-036",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-036.md",
+      "size": 1702,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-037",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-037.md",
+      "size": 1702,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-038",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-038.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-039",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-039.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-040",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-040.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-041",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-041.md",
+      "size": 1702,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-042",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-042.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-043",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-043.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-044",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-044.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-045",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-045.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-046",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-046.md",
+      "size": 1574,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-047",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-047.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-048",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-048.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-049",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-049.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-050",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-050.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-051",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-051.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-052",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-052.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-053",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-053.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-054",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-054.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-055",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-055.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-056",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-056.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-057",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-057.md",
+      "size": 1530,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-058",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-058.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-059",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-059.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-060",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-060.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-061",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-061.md",
+      "size": 1654,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-062",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-062.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-063",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-063.md",
+      "size": 1702,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-064",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-064.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-065",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-065.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-066",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-066.md",
+      "size": 1683,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-067",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-067.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-068",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-068.md",
+      "size": 1691,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-069",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-069.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-070",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-070.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-071",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-071.md",
+      "size": 3555,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-072",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-072.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-073",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-073.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-074",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-074.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-075",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-075.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-076",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-076.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-077",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-077.md",
+      "size": 1663,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-078",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-078.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-079",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-079.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260804-080",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260804-080.md",
+      "size": 1624,
+      "pendingMarkerCount": 3
+    },
+    {
+      "experienceId": "EXP-DRV-20260805-004",
+      "filePath": "D:\\awkn-lab\\awkn寮曟搸\\agents\\tianhuo\\04-璁板繂涓庣煡璇哱\EXPERIENCE\\derived\\EXP-DRV-20260805-004.md",
+      "size": 2300,
+      "pendingMarkerCount": 1
+    }
+  ]
+}
