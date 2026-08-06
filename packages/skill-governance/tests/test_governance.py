@@ -8,7 +8,7 @@ from pathlib import Path
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 ENGINE_ROOT = PACKAGE_ROOT.parents[1]
 GOV_SRC = PACKAGE_ROOT / "src"
-EVAL_SRC = ENGINE_ROOT / "skill-evaluator" / "src"
+EVAL_SRC = ENGINE_ROOT / "packages" / "skill-evaluator" / "src"
 for path in (GOV_SRC, EVAL_SRC):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
