@@ -161,6 +161,9 @@ def compute_source_digest(skill_dir: Path) -> str:
 
 
 def git_commit(skill_dir: Path) -> str:
+    env_sha = os.environ.get("GIT_COMMIT") or os.environ.get("GITHUB_SHA")
+    if env_sha:
+        return env_sha
     try:
         proc = subprocess.run(
             ["git", "-C", str(skill_dir), "rev-parse", "HEAD"],
