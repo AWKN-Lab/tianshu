@@ -1,0 +1,95 @@
+{
+  "schema": "awkn-experience-candidate-manifest/v1",
+  "candidates": [
+    {
+      "experienceId": "EXP-DRV-20260806-001",
+      "contentPath": "agents/tianhuo/04-记忆与知识/EXPERIENCE/derived/EXP-DRV-20260806-001.md",
+      "title": "Windows binary transfer uses server-side archive and binary-safe transport",
+      "sourceFingerprint": "8be0cf6176b9027347bb2897109822afc481ccb0a1c03bec91ec61ebaef2c0b1",
+      "sourceKind": "manual_postmortem",
+      "sourceEvidence": ["PowerShell text-pipeline transfer produced an invalid binary artifact"],
+      "correctionIds": []
+    },
+    {
+      "experienceId": "EXP-DRV-20260806-002",
+      "contentPath": "agents/tianhuo/04-记忆与知识/EXPERIENCE/derived/EXP-DRV-20260806-002.md",
+      "title": "Fix artifact-producing rules before deleting accumulated files",
+      "sourceFingerprint": "ef49baef29322eec9862c72c076f1eabb56d61a129a96e92f44339d6cd0f3c27",
+      "sourceKind": "manual_postmortem",
+      "sourceEvidence": ["Deployment rules repeatedly generated backup artifacts"],
+      "correctionIds": []
+    },
+    {
+      "experienceId": "EXP-DRV-20260806-003",
+      "contentPath": "agents/tianhuo/04-记忆与知识/EXPERIENCE/derived/EXP-DRV-20260806-003.md",
+      "title": "Service value is defined by verified consumers",
+      "sourceFingerprint": "b4fbe5029c5d1868dff484ae1a147ab9dfd030a33ced3ae3fbce20d548cc9662",
+      "sourceKind": "manual_postmortem",
+      "sourceEvidence": ["A running service had no verified successful consumer"],
+      "correctionIds": []
+    },
+    {
+      "experienceId": "EXP-DRV-20260806-004",
+      "contentPath": "agents/tianhuo/04-记忆与知识/EXPERIENCE/derived/EXP-DRV-20260806-004.md",
+      "title": "Silent degradation must remain observable",
+      "sourceFingerprint": "e7f6bc546cf12c361f3f01d4faeb4afcc42da51706f79bd88a591b1fe93cf1c0",
+      "sourceKind": "manual_postmortem",
+      "sourceEvidence": ["Fallback behavior concealed a long-running integration failure"],
+      "correctionIds": []
+    },
+    {
+      "experienceId": "EXP-DRV-20260806-005",
+      "contentPath": "agents/tianhuo/04-记忆与知识/EXPERIENCE/derived/EXP-DRV-20260806-005.md",
+      "title": "Database backup credentials and restore validation boundaries",
+      "sourceFingerprint": "42deb63a827d4af73fe406bdebfce3ed65e0077f5ff4a2acd4acb42bc6d90e71",
+      "sourceKind": "manual_postmortem",
+      "sourceEvidence": ["Interactive credentials and user switching caused backup failures"],
+      "correctionIds": []
+    },
+    {
+      "experienceId": "EXP-DRV-20260806-006",
+      "contentPath": "agents/tianhuo/04-记忆与知识/EXPERIENCE/derived/EXP-DRV-20260806-006.md",
+      "title": "Ahead chains require a full combined gate before push",
+      "sourceFingerprint": "481254bfbfa544e01395ad717d21aa547fdfc10f647e3f48983b2dbd1f276aa2",
+      "sourceKind": "manual_postmortem",
+      "sourceEvidence": ["Combined commits exposed failures not found by per-commit light gates"],
+      "correctionIds": []
+    },
+    {
+      "experienceId": "EXP-DRV-20260806-007",
+      "contentPath": "agents/tianhuo/04-记忆与知识/EXPERIENCE/derived/EXP-DRV-20260806-007.md",
+      "title": "Diagnose Windows Node tool execution before changing PATH",
+      "sourceFingerprint": "fa54dbef2965ee219f07d3bcc859cdcbce4f68684621df15c61ef8772e3cdf0c",
+      "sourceKind": "runtime_correction",
+      "sourceEvidence": ["Runtime fingerprint 330711c8337233c7 reported spawn tsc ENOENT"],
+      "correctionIds": []
+    },
+    {
+      "experienceId": "EXP-DRV-20260806-008",
+      "contentPath": "agents/tianhuo/04-记忆与知识/EXPERIENCE/derived/EXP-DRV-20260806-008.md",
+      "title": "Dependency state must be proven from the current checkout",
+      "sourceFingerprint": "8d646ae30d8322e15540509917e1d62ddac52ea6cbe7e32859d219afb85b83ff",
+      "sourceKind": "runtime_correction",
+      "sourceEvidence": ["Lockfile presence did not guarantee a complete node_modules tree"],
+      "correctionIds": []
+    },
+    {
+      "experienceId": "EXP-DRV-20260806-009",
+      "contentPath": "agents/tianhuo/04-记忆与知识/EXPERIENCE/derived/EXP-DRV-20260806-009.md",
+      "title": "Gate commands must follow the target project's declared contract",
+      "sourceFingerprint": "236a0cd862fdf2cf951e3bd5e33bd898e82a07ab26a47c04e33511faf603abfc",
+      "sourceKind": "runtime_correction",
+      "sourceEvidence": ["A generic eslint command conflicted with the project's actual lint script"],
+      "correctionIds": []
+    },
+    {
+      "experienceId": "EXP-FIX-20260806-001",
+      "contentPath": "agents/tianhuo/04-记忆与知识/EXPERIENCE/fixes/EXP-FIX-20260806-001.md",
+      "title": "Verify tests require isolated temporary directories in chained execution",
+      "sourceFingerprint": "db2413c418ff759e9e73ec5f765b2b248743c860cc106965ea80687182f2802a",
+      "sourceKind": "verified_fix",
+      "sourceEvidence": ["A fixed temporary database path failed only during chained full-gate execution"],
+      "correctionIds": []
+    }
+  ]
+}
