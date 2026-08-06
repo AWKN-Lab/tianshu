@@ -1,0 +1,84 @@
+name: skill-platform-ci
+
+# AWKN-Lab/tianshu 仓 Skill Platform 测试门禁。
+# 覆盖：evaluator 单元测试 / governance 单元测试 / workflow smoke / Runtime adapter typecheck / MCP contract。
+# 与 runtime-ci.yml 互补：runtime-ci 跑全量 check/build，本工作流聚焦 skill-platform 边界。
+on:
+  push:
+    paths:
+      - 'packages/skill-evaluator/**'
+      - 'packages/skill-governance/**'
+      - 'workflows/skill-platform/**'
+      - 'runtime/src/skill-platform/**'
+      - 'runtime/src/mcp/server.ts'
+      - '.github/workflows/skill-platform-ci.yml'
+  pull_request:
+    paths:
+      - 'packages/skill-evaluator/**'
+      - 'packages/skill-governance/**'
+      - 'workflows/skill-platform/**'
+      - 'runtime/src/skill-platform/**'
+      - 'runtime/src/mcp/server.ts'
+      - '.github/workflows/skill-platform-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skill-platform-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 'Install pytest'
+        run: pip install pytest
+      - name: 'Evaluator unit tests'
+        run: python -m pytest packages/skill-evaluator/tests/ -v
+      - name: 'Governance unit tests'
+        run: python -m pytest packages/skill-governance/tests/ -v
+      - name: 'Workflow smoke (evaluate.py --help)'
+        run: python workflows/skill-platform/evaluate.py --help
+      - name: 'Workflow smoke (govern.py --help)'
+        run: python workflows/skill-platform/govern.py --help
+
+  runtime-adapter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+      - run: npm ci
+      - name: 'TypeScript typecheck (含 skill-platform adapter)'
+        run: npm run typecheck
+      - name: 'MCP contract: 验证 awkn_skill_evaluate / awkn_skill_govern 已注册'
+        shell: bash
+        run: |
+          set -e
+          node -e "
+            const fs = require('fs');
+            const src = fs.readFileSync('src/mcp/server.ts', 'utf-8');
+            const need = ['awkn_skill_evaluate', 'awkn_skill_govern', 'skill-platform/evaluator-adapter', 'skill-platform/governance-adapter'];
+            for (const t of need) {
+              if (!src.includes(t)) { console.error('MISSING: ' + t); process.exit(1); }
+            }
+            console.log('MCP contract OK: 2 tools registered');
+          "
