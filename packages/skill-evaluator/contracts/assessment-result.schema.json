@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://awkn.cn/schemas/skill-assessment-result/1.0.0",
+  "title": "AWKN Skill Assessment Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "assessment_id",
+    "skill",
+    "evaluator",
+    "evidence",
+    "scores",
+    "score_details",
+    "caps",
+    "calculation_trace",
+    "security",
+    "gate",
+    "findings",
+    "coverage",
+    "context_digest",
+    "generated_at"
+  ],
+  "properties": {
+    "contract_version": {"const": "1.0.0"},
+    "assessment_id": {"type": "string", "pattern": "^asmt_[a-f0-9]{20}$"},
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "version", "git_commit", "content_digest"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "git_commit": {"type": "string", "minLength": 7},
+        "content_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "evaluator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "policy_pack"],
+      "properties": {
+        "name": {"const": "awkn-技能测评"},
+        "version": {"type": "string", "minLength": 1},
+        "policy_pack": {"type": "string", "minLength": 1}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["material_level", "evidence_level", "risk_level"],
+      "properties": {
+        "material_level": {"enum": ["M0", "M1", "M2", "M3"]},
+        "evidence_level": {"enum": ["E0", "E1", "E2", "E3"]},
+        "risk_level": {"enum": ["R0", "R1", "R2", "R3"]}
+      }
+    },
+    "scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["official_simulation", "self_evolution", "quality", "fit"],
+      "properties": {
+        "official_simulation": {"type": "number", "minimum": 0, "maximum": 20},
+        "self_evolution": {"type": "number", "minimum": 0, "maximum": 5},
+        "quality": {"type": "number", "minimum": 0, "maximum": 100},
+        "fit": {"type": "number", "minimum": 0, "maximum": 100}
+      }
+    },
+    "score_details": {"type": "object"},
+    "caps": {"type": "array", "items": {"type": "object"}},
+    "calculation_trace": {"type": "array", "items": {"type": "object"}},
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["static_scan", "runtime_status", "scanner_version"],
+      "properties": {
+        "static_scan": {"enum": ["PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE"]},
+        "runtime_status": {"enum": ["PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE"]},
+        "scanner_version": {"type": ["string", "null"]}
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recommendation", "blocking_findings", "required_actions"],
+      "properties": {
+        "recommendation": {"enum": ["PASS", "CONDITIONAL", "FAIL"]},
+        "blocking_findings": {"type": "array", "items": {"type": "string"}},
+        "required_actions": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "findings": {"type": "array", "items": {"type": "object"}},
+    "coverage": {"type": "object"},
+    "context_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "generated_at": {"type": "string", "format": "date-time"}
+  }
+}
