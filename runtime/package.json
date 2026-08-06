@@ -27,6 +27,7 @@
     "approval": "tsx src/approval-cli.ts",
     "evolution": "tsx src/evolution-cli.ts",
     "memory": "tsx src/memory-cli.ts",
+    "evolve:ingest": "tsx scripts/ingest-candidate-manifest.ts",
     "postinstall": "npm rebuild better-sqlite3 --silent"
   },
   "dependencies": {
