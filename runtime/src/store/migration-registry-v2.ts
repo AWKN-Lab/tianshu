@@ -12,6 +12,32 @@ function hasColumn(db: Database.Database, table: string, column: string): boolea
     .some((row) => row.name === column);
 }
 
+/**
+ * Some migration/restore fixtures intentionally contain only the migration
+ * ledger. Version 22 depends on cron_jobs, so repair that single baseline
+ * table without replaying the whole base schema or touching malformed tables
+ * used by failure-recovery tests.
+ */
+function ensureCronJobsBaseline(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cron_jobs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      cron_expr TEXT NOT NULL,
+      action_type TEXT NOT NULL,
+      action_payload TEXT NOT NULL DEFAULT '{}',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      last_run_at TEXT,
+      next_run_at TEXT,
+      run_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_cron_jobs_enabled ON cron_jobs(enabled);
+    CREATE INDEX IF NOT EXISTS idx_cron_jobs_next_run ON cron_jobs(next_run_at);
+  `);
+}
+
 const MIGRATIONS_V8_TO_V10: readonly RegisteredMigration[] = [
   {
     version: 8,
@@ -171,6 +197,7 @@ export function runRegisteredMigrationsV8ToV10(
 }
 
 export function runAllMigrations(db: Database.Database): void {
+  ensureCronJobsBaseline(db);
   runLegacyMigrationsV1To7(db);
   runRegisteredMigrationsV8ToV10(db);
 }

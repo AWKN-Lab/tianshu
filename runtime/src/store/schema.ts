@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS cron_jobs (
   last_run_at TEXT,
   next_run_at TEXT,
   run_count INTEGER NOT NULL DEFAULT 0,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  last_attempt_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -155,6 +157,8 @@ export interface CronJobRow {
   last_run_at: string | null;
   next_run_at: string | null;
   run_count: number;
+  failed_count: number;
+  last_attempt_at: string | null;
   created_at: string;
   updated_at: string;
 }

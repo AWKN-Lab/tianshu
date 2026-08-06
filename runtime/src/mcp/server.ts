@@ -1267,12 +1267,17 @@ async function main(): Promise<void> {
 
   initEngine();
 
+  // D1: MCP 进程内拉起 CronEngine（start() 幂等单例；多实例靠 lease+idempotency 防重复）
+  const { startCronEngine, stopCronEngine } = await import('../cron/engine.js');
+  startCronEngine();
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
   // 优雅关闭
   const shutdown = async () => {
     await server.close();
+    stopCronEngine();
     closeDb();
     process.exit(0);
   };

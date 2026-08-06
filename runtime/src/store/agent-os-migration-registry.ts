@@ -663,6 +663,23 @@ const AGENT_OS_MIGRATIONS: readonly AgentOsMigration[] = [
       `);
     },
   },
+  {
+    version: 22,
+    name: 'cron-job-failure-metrics',
+    up(db) {
+      const columns = new Set(
+        (db.prepare("SELECT name FROM pragma_table_info('cron_jobs')").all() as { name: string }[])
+          .map((row) => row.name),
+      );
+      if (!columns.has('failed_count')) {
+        db.exec(`ALTER TABLE cron_jobs ADD COLUMN failed_count INTEGER NOT NULL DEFAULT 0`);
+      }
+      if (!columns.has('last_attempt_at')) {
+        db.exec(`ALTER TABLE cron_jobs ADD COLUMN last_attempt_at TEXT`);
+      }
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_cron_jobs_last_attempt ON cron_jobs(last_attempt_at)`);
+    },
+  },
 ] as const;
 
 /**

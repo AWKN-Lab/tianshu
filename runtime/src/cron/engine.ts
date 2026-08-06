@@ -62,6 +62,10 @@ export class CronEngine {
 
   start(): void {
     if (this.running) return;
+    if (process.env.AWKN_DISABLE_CRON === '1' || process.env.AWKN_DB_PATH === ':memory:') {
+      logger.info('CronEngine disabled for isolated/test runtime');
+      return;
+    }
     this.running = true;
     this.workStore.recoverExpired();
     this.scheduleAll();

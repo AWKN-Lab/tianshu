@@ -38,7 +38,7 @@ describe('Agent OS migration v12', () => {
   it('applies versions 1 through 13 and creates Claim Ledger tables', () => {
     withDatabase((db) => {
       runAgentOsMigrations(db);
-      assert.deepEqual(versions(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+      assert.deepEqual(versions(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
       const tables = tableNames(db);
       for (const table of [
         'claims',
@@ -60,7 +60,7 @@ describe('Agent OS migration v12', () => {
       assert.deepEqual(versions(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
       runAgentOsMigrations(db);
       runAgentOsMigrations(db);
-      assert.deepEqual(versions(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+      assert.deepEqual(versions(db), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
     });
   });
 

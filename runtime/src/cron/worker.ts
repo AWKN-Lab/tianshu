@@ -59,6 +59,7 @@ export class CronWorker {
       const message = err instanceof Error ? err.message : String(err);
       const updated = this.store.fail(item.id, this.workerId, message);
       this.finishLog(logId, updated.status === 'dead' ? 'dead' : 'retry', undefined, message);
+      this.markJobAttempt(item.job_id, updated.status === 'dead' ? 'failed' : 'retry');
       return { ok: false, error: message };
     } finally {
       clearInterval(heartbeat);
@@ -81,7 +82,21 @@ export class CronWorker {
   private markJobSuccess(jobId: string): void {
     const now = new Date().toISOString();
     this.db.prepare(
-      'UPDATE cron_jobs SET last_run_at = ?, run_count = run_count + 1, updated_at = ? WHERE id = ?',
-    ).run(now, now, jobId);
+      'UPDATE cron_jobs SET last_run_at = ?, run_count = run_count + 1, last_attempt_at = ?, updated_at = ? WHERE id = ?',
+    ).run(now, now, now, jobId);
+  }
+
+  /** 失败/重试路径也更新 last_attempt_at，并累计 failed_count（dead 记为失败） */
+  private markJobAttempt(jobId: string, outcome: 'failed' | 'retry'): void {
+    const now = new Date().toISOString();
+    if (outcome === 'failed') {
+      this.db.prepare(
+        'UPDATE cron_jobs SET failed_count = failed_count + 1, last_attempt_at = ?, updated_at = ? WHERE id = ?',
+      ).run(now, now, jobId);
+    } else {
+      this.db.prepare(
+        'UPDATE cron_jobs SET last_attempt_at = ?, updated_at = ? WHERE id = ?',
+      ).run(now, now, jobId);
+    }
   }
 }
